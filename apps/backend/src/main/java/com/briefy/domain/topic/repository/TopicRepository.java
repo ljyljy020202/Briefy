@@ -10,4 +10,6 @@ public interface TopicRepository extends JpaRepository<Topic, Long> {
   List<Topic> findAllByActiveTrueOrderByDisplayOrderAsc();
 
   Optional<Topic> findByIdAndActiveTrue(Long id);
+
+  Optional<Topic> findBySlug(String slug);
 }
