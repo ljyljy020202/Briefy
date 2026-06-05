@@ -1,0 +1,43 @@
+# Environment
+.env
+.env.local
+.env.*.local
+
+# ── Frontend (Next.js) ────────────────────────────────────────────────────────
+apps/frontend/node_modules/
+apps/frontend/.next/
+apps/frontend/out/
+apps/frontend/.vercel/
+apps/frontend/coverage/
+
+# ── Backend (Gradle / Kotlin) ─────────────────────────────────────────────────
+apps/backend/build/
+apps/backend/.gradle/
+apps/backend/.kotlin/
+apps/backend/*.jar
+
+# ── Agent (Python) ────────────────────────────────────────────────────────────
+apps/agent/__pycache__/
+apps/agent/**/__pycache__/
+apps/agent/.venv/
+apps/agent/.ruff_cache/
+apps/agent/.pytest_cache/
+apps/agent/htmlcov/
+apps/agent/.coverage
+*.pyc
+*.pyo
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.iml
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Docker ────────────────────────────────────────────────────────────────────
+docker-compose.prod.yml
+
+# ── Misc ──────────────────────────────────────────────────────────────────────
+*.log
