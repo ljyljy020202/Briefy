@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import {
   ArrowRight,
   CalendarClock,
@@ -17,19 +16,16 @@ import { cn } from '@/lib/utils'
 import { buttonVariants } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
-import { dashboard, briefings } from '@/lib/api'
+import { dashboard } from '@/lib/api'
 import type { DashboardSummary } from '@/types/api'
 import { useAuthContext } from '@/contexts/AuthContext'
 import { ReportCard } from '@/components/briefy/ReportCard'
 import { MOCK_REPORTS, MOCK_STATS } from '@/lib/mock-data'
 
 export default function DashboardPage() {
-  const router = useRouter()
   const { user, loading: authLoading } = useAuthContext()
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [dataLoading, setDataLoading] = useState(true)
-  const [generating, setGenerating] = useState(false)
-  const [generateError, setGenerateError] = useState<string | null>(null)
 
   useEffect(() => {
     if (authLoading) return
@@ -55,20 +51,6 @@ export default function DashboardPage() {
       })
       .finally(() => setDataLoading(false))
   }, [authLoading, user])
-
-  const handleGenerate = async () => {
-    setGenerating(true)
-    setGenerateError(null)
-    try {
-      const result = await briefings.generate()
-      router.push(`/reports/${result.briefingReportId}`)
-    } catch (err) {
-      setGenerateError(
-        err instanceof Error ? err.message : '생성에 실패했습니다. 다시 시도해 주세요.',
-      )
-      setGenerating(false)
-    }
-  }
 
   const loading = authLoading || dataLoading
 
@@ -120,10 +102,6 @@ export default function DashboardPage() {
           주제 설정
         </Link>
       </div>
-
-      {generateError && (
-        <p className="mt-4 text-sm text-destructive">{generateError}</p>
-      )}
 
       {/* Stats */}
       <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

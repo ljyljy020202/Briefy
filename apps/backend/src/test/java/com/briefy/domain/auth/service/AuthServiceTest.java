@@ -128,6 +128,6 @@ class AuthServiceTest {
   @Test
   void getErrorRedirectUrl_returnsLoginPageWithErrorParam() {
     assertThat(authService.getErrorRedirectUrl())
-        .isEqualTo("http://localhost:3000/login?error=oauth_failed");
+        .isEqualTo("http://localhost:3000/?error=oauth_failed");
   }
 }

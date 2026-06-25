@@ -6,7 +6,6 @@ import { Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import { briefings } from '@/lib/api'
-import type { BriefingListItem } from '@/types/api'
 import { ReportCard } from '@/components/briefy/ReportCard'
 import { MOCK_REPORTS } from '@/lib/mock-data'
 
@@ -21,18 +20,16 @@ type FilterId = (typeof FILTERS)[number]['id']
 export default function ReportsPage() {
   const [filter, setFilter] = useState<FilterId>('all')
   const [query, setQuery] = useState('')
-  const [_realReports, setRealReports] = useState<BriefingListItem[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [useMock, setUseMock] = useState(false)
 
   useEffect(() => {
     briefings
       .list(0, 50)
-      .then((data) => {
-        setRealReports(data.content)
+      .then(() => {
+        // TODO: Replace mock fallback with real data when GET /api/briefings is implemented (Backend step 8)
       })
       .catch(() => {
-        // TODO: Remove mock fallback when GET /api/briefings is implemented (Backend step 8)
         setUseMock(true)
       })
       .finally(() => setLoading(false))
