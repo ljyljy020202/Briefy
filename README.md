@@ -1,125 +1,119 @@
 # Briefy
 
-A personalized AI daily briefing service that generates custom email reports based on user interests and preferences.
+관심 주제와 키워드를 기반으로 매일 아침 AI가 정리한 맞춤형 브리핑을 이메일로 받아보는 서비스입니다.
 
-## 🎯 Features
+## 주요 기능
 
-- **Personalized Briefings**: Users select topics and keywords of interest
-- **AI-Generated Content**: LangGraph workflows with OpenAI integration
-- **Daily Email Reports**: Automated briefings delivered to inbox
-- **Multi-Source Aggregation**: News, market data, weather, and more
-- **Responsive Web App**: Real-time briefing viewing and preference management
+- **맞춤형 브리핑**: 관심 주제와 키워드를 직접 선택해 나만의 브리핑 구성
+- **AI 콘텐츠 생성**: LangGraph 워크플로우와 OpenAI 연동으로 핵심만 요약
+- **매일 아침 이메일 발송**: 지정한 시간에 받은편지함으로 자동 전달
+- **다중 출처 수집**: 뉴스, 기술 블로그, 금융 데이터 등 다양한 소스 통합
+- **웹 앱 지원**: 브리핑 열람 및 구독 설정을 웹에서 관리
 
-## 🏗️ Architecture
+## 아키텍처
 
-Briefy is built as a three-tier microservices architecture:
+3개의 독립 서비스로 구성된 모노레포입니다.
 
 ```
-Frontend (Next.js)
+프론트엔드 (Next.js)
     ↓ REST API
-Backend (Spring Boot)
+백엔드 (Spring Boot)
     ↓ REST API
-Agent (FastAPI + LangGraph)
+에이전트 (FastAPI + LangGraph)
     ↓
 OpenAI LLM
 ```
 
-**Services:**
+| 서비스 | 기술 스택 | 역할 |
+|--------|-----------|------|
+| **Frontend** | Next.js 15, TypeScript, Tailwind, shadcn/ui | UI 및 사용자 세션 관리 |
+| **Backend** | Spring Boot 3.4, Java 21, MySQL, Redis | API, 사용자 관리, 캐싱 |
+| **Agent** | Python 3.11, FastAPI, LangGraph | AI 워크플로우 오케스트레이션, 콘텐츠 생성 |
 
-| Service | Stack | Purpose |
-|---------|-------|---------|
-| **Frontend** | Next.js 15, TypeScript, Tailwind, shadcn/ui | User interface & session management |
-| **Backend** | Spring Boot 3.4, Java 21, MySQL, Redis | API, user management, caching |
-| **Agent** | Python 3.11, FastAPI, LangGraph | AI workflow orchestration, content generation |
+**데이터 저장소:**
 
-**Data Storage:**
+- MySQL: 사용자 정보, 구독 설정, 브리핑 이력
+- Redis: 세션 관리, 캐싱, 요청 속도 제한
 
-- MySQL: User data, preferences, briefing history
-- Redis: Session management, caching, rate limiting
+## 빠른 시작
 
-## 🚀 Quick Start
-
-### Prerequisites
+### 사전 요구사항
 
 - Docker & Docker Compose
 - Node.js 20+, Java 21+, Python 3.11+
 - Make
 
-### Development
+### 개발 환경 실행
 
 ```bash
-# 1. Clone and setup
+# 1. 클론 및 초기 설정
 git clone <repo>
 cd briefy
 cp .env.example .env
+# .env 파일에 필요한 값 입력
 
-# 2. Install dependencies
+# 2. 의존성 설치
 make setup
 
-# 3. Start services
+# 3. 인프라 + 백엔드 + 에이전트 시작
 make dev
 
-# 4. In another terminal, start frontend
+# 4. 별도 터미널에서 프론트엔드 시작
 cd apps/frontend
 npm run dev
 ```
 
-**Services will be available at:**
+**각 서비스 접속 주소:**
 
-- Frontend: http://localhost:3000
-- Backend: http://localhost:8080
-- Agent: http://localhost:8000
-- MySQL: localhost:3306
-- Redis: localhost:6379
+| 서비스 | 주소 |
+|--------|------|
+| 프론트엔드 | http://localhost:3000 |
+| 백엔드 | http://localhost:8080 |
+| 에이전트 | http://localhost:8000 |
+| MySQL | localhost:3306 |
+| Redis | localhost:6379 |
 
-### Running Individual Services
-
-```bash
-# Frontend
-make frontend
-
-# Backend (requires MySQL + Redis running)
-make backend
-
-# Agent
-make agent
-
-# Database only
-make db
-```
-
-## 📚 Documentation
-
-- [Architecture](docs/architecture.md) — System design & data flow
-- [API Reference](docs/api.md) — Backend endpoints
-- [Agent Workflows](docs/agent-workflow.md) — LangGraph & LLM workflows
-- [Deployment Guide](docs/deployment.md) — Production deployment to AWS
-
-## 🛠️ Development Commands
+### 서비스별 개별 실행
 
 ```bash
-make help          # Show all available commands
-make dev           # Start all services (Docker Compose)
-make dev-build     # Rebuild and start services
-make test          # Run all test suites
-make lint          # Lint all services
-make down          # Stop all services
-make logs-<svc>    # Follow logs for a service
+make frontend        # 프론트엔드
+make backend         # 백엔드 (MySQL + Redis 먼저 실행 필요)
+make agent           # 에이전트
+make db              # DB만 실행 (MySQL + Redis)
 ```
 
-## 📝 Project Structure
+## 문서
+
+- [아키텍처](docs/architecture.md) — 시스템 설계 및 데이터 흐름
+- [API 레퍼런스](docs/api.md) — 백엔드 엔드포인트 목록
+- [에이전트 워크플로우](docs/agent-workflow.md) — LangGraph 및 LLM 워크플로우
+- [배포 가이드](docs/deployment.md) — AWS 프로덕션 배포
+
+## 개발 명령어
+
+```bash
+make help            # 전체 명령어 목록
+make dev             # 전체 서비스 시작 (Docker Compose)
+make dev-build       # 이미지 재빌드 후 시작
+make test            # 전체 테스트 실행
+make lint            # 전체 린트 실행
+make down            # 전체 서비스 종료
+make logs-<서비스명>  # 특정 서비스 로그 스트리밍
+```
+
+## 프로젝트 구조
 
 ```
 briefy/
 ├── apps/
-│   ├── frontend/       # Next.js web app
-│   ├── backend/        # Spring Boot API
+│   ├── frontend/       # Next.js 웹 앱
+│   ├── backend/        # Spring Boot API 서버
 │   └── agent/          # Python FastAPI + LangGraph
 │
 ├── infra/
-│   ├── nginx/          # Nginx reverse proxy config
-│   ├── docker/         # Docker-related configs
-│   └── aws/            # AWS infrastructure as code
+│   ├── nginx/          # Nginx 리버스 프록시 설정
+│   ├── docker/         # Docker 관련 설정
+│   └── aws/            # AWS 인프라 코드
 │
 ├── docs/
 │   ├── architecture.md
@@ -128,80 +122,72 @@ briefy/
 │   └── deployment.md
 │
 ├── scripts/
-│   ├── dev-up.sh       # Start development environment
-│   ├── dev-down.sh     # Stop development environment
-│   └── deploy.sh       # Production deployment
+│   ├── dev-up.sh       # 개발 환경 시작
+│   ├── dev-down.sh     # 개발 환경 종료
+│   └── deploy.sh       # 프로덕션 배포
 │
 ├── docker-compose.yml
-├── docker-compose.dev.yml
 ├── Makefile
 ├── .env.example
-└── CLAUDE.md           # AI assistant guidelines
+└── CLAUDE.md           # AI 어시스턴트 가이드
 ```
 
-## 🧪 Testing
+## 테스트
 
 ```bash
-# Run all tests
+# 전체 테스트
 make test
 
-# Frontend tests
+# 프론트엔드
 cd apps/frontend && npm test
 
-# Backend tests
+# 백엔드
 cd apps/backend && ./gradlew test
 
-# Agent tests
+# 에이전트
 cd apps/agent && poetry run pytest
 ```
 
-## 🔒 Environment Variables
+## 환경 변수
 
-Copy `.env.example` to `.env` and configure:
+`.env.example`을 `.env`로 복사한 뒤 값을 채워주세요.
 
 ```bash
 cp .env.example .env
-# Edit .env with your values
 ```
 
-**Required variables:**
+**필수 설정 항목:**
 
-- `MYSQL_USER`, `MYSQL_PASSWORD` — Database credentials
-- `REDIS_HOST`, `REDIS_PORT` — Redis connection
-- `OPENAI_API_KEY` — OpenAI API key
-- `JWT_SECRET` — JWT signing secret
+| 변수 | 설명 |
+|------|------|
+| `MYSQL_USER`, `MYSQL_PASSWORD` | 데이터베이스 접속 정보 |
+| `REDIS_HOST`, `REDIS_PORT` | Redis 연결 정보 |
+| `OPENAI_API_KEY` | OpenAI API 키 |
+| `JWT_SECRET` | JWT 서명 시크릿 |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google OAuth 앱 정보 |
+| `FRONTEND_BASE_URL` | 프론트엔드 주소 (기본값: http://localhost:3000) |
 
-## 📦 Deployment
+## 배포
 
-### Frontend
+### 프론트엔드
 
-Frontend is deployed automatically to Vercel on push to `main`.
+`main` 브랜치에 push하면 Vercel에 자동 배포됩니다.
 
-### Backend & Agent
+### 백엔드 & 에이전트
 
-Deploy to AWS EC2 using:
+AWS EC2에 아래 명령어로 배포합니다.
 
 ```bash
 ./scripts/deploy.sh all prod
 ```
 
-See [Deployment Guide](docs/deployment.md) for detailed instructions.
+자세한 내용은 [배포 가이드](docs/deployment.md)를 참고하세요.
 
-## 👥 Team & Support
+## 기여
 
-- **Issues**: Report bugs via GitHub Issues
-- **Documentation**: See `/docs` directory
-- **Local Development Help**: See [CLAUDE.md](CLAUDE.md)
+1. 기능 브랜치 생성 (`git checkout -b feature/기능명`)
+2. 변경사항 커밋 (`git commit -m 'feat: 기능 설명'`)
+3. 브랜치 푸시 (`git push origin feature/기능명`)
+4. Pull Request 생성
 
-## 📄 License
-
-[Add your license here]
-
-## 🤝 Contributing
-
-1. Create a feature branch (`git checkout -b feature/your-feature`)
-2. Commit changes (`git commit -am 'Add feature'`)
-3. Push to branch (`git push origin feature/your-feature`)
-4. Open a Pull Request
-
-Please follow the development guidelines in [CLAUDE.md](CLAUDE.md).
+개발 가이드라인은 [CLAUDE.md](CLAUDE.md)를 참고하세요.
