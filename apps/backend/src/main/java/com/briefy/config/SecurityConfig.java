@@ -6,6 +6,7 @@ import com.briefy.global.exception.ErrorCode;
 import com.briefy.global.response.ApiResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletResponse;
+import java.util.List;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -15,15 +16,20 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
 
   private final ObjectMapper objectMapper;
+  private final AppProperties appProperties;
 
-  public SecurityConfig(ObjectMapper objectMapper) {
+  public SecurityConfig(ObjectMapper objectMapper, AppProperties appProperties) {
     this.objectMapper = objectMapper;
+    this.appProperties = appProperties;
   }
 
   @Bean
@@ -33,7 +39,8 @@ public class SecurityConfig {
     JwtAuthenticationFilter jwtFilter =
         new JwtAuthenticationFilter(jwtTokenProvider, jwtProperties);
 
-    http.csrf(csrf -> csrf.disable())
+    http.cors(cors -> cors.configurationSource(corsConfigurationSource()))
+        .csrf(csrf -> csrf.disable())
         .sessionManagement(
             session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         .formLogin(form -> form.disable())
@@ -64,6 +71,20 @@ public class SecurityConfig {
                             writeError(
                                 response, HttpServletResponse.SC_FORBIDDEN, ErrorCode.FORBIDDEN)));
     return http.build();
+  }
+
+  @Bean
+  public CorsConfigurationSource corsConfigurationSource() {
+    CorsConfiguration config = new CorsConfiguration();
+    config.setAllowedOrigins(List.of(appProperties.frontendBaseUrl()));
+    config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+    config.setAllowedHeaders(List.of("*"));
+    config.setAllowCredentials(true);
+    config.setMaxAge(3600L);
+
+    UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+    source.registerCorsConfiguration("/api/**", config);
+    return source;
   }
 
   private void writeError(HttpServletResponse response, int status, ErrorCode errorCode)

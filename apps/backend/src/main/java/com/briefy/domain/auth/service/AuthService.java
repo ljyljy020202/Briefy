@@ -66,7 +66,7 @@ public class AuthService {
   }
 
   public String getErrorRedirectUrl() {
-    return appProperties.frontendBaseUrl() + "/login?error=oauth_failed";
+    return appProperties.frontendBaseUrl() + "/?error=oauth_failed";
   }
 
   private ResponseCookie buildJwtCookie(String value, long maxAgeSeconds) {
