@@ -116,9 +116,9 @@ export default function ReportDetailPage() {
 
             {/* TL;DR */}
             {mockReport.highlights.length > 0 && (
-              <Card className="mt-8 border-primary/20 bg-accent/50">
+              <Card className="mt-8 border-border bg-secondary/40">
                 <CardContent className="p-6">
-                  <div className="flex items-center gap-2 text-sm font-semibold text-accent-foreground">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
                     <Sparkles className="size-4" />
                     3줄 요약
                   </div>

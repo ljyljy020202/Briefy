@@ -64,7 +64,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        <div className="mt-auto rounded-2xl border border-border bg-card p-4">
+        <div className="mt-auto rounded-xl border border-border bg-card p-4">
           <div className="flex items-center gap-2 text-sm font-medium text-foreground">
             <Sparkles className="size-4 text-primary" />
             Pro 업그레이드
@@ -90,7 +90,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Mobile top bar */}
-      <header className="sticky top-0 z-30 flex items-center justify-between border-b border-border bg-background/80 px-4 py-3 backdrop-blur lg:hidden">
+      <header className="sticky top-0 z-30 flex items-center justify-between border-b border-border bg-background px-4 py-3 lg:hidden">
         <Link href="/">
           <BriefyLogo size="sm" />
         </Link>

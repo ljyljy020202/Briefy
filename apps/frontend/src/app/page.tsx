@@ -67,12 +67,8 @@ export default function LandingPage() {
       <MarketingNav />
 
       {/* Hero */}
-      <section className="relative overflow-hidden">
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 -top-40 mx-auto h-[480px] max-w-4xl rounded-full bg-primary/10 blur-3xl"
-        />
-        <div className="relative mx-auto max-w-6xl px-4 pb-20 pt-16 sm:px-6 lg:px-8 lg:pt-24">
+      <section className="relative">
+        <div className="mx-auto max-w-6xl px-4 pb-20 pt-16 sm:px-6 lg:px-8 lg:pt-24">
           <div className="grid items-center gap-12 lg:grid-cols-2">
             <div>
               <Badge variant="outline" className="mb-6 bg-card">
@@ -183,7 +179,7 @@ export default function LandingPage() {
         </div>
         <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {FEATURES.map((f) => (
-            <Card key={f.title} className="transition-shadow hover:shadow-md">
+            <Card key={f.title}>
               <CardContent className="p-6">
                 <span className="flex size-11 items-center justify-center rounded-xl bg-accent text-accent-foreground">
                   <f.icon className="size-5" />
@@ -248,7 +244,7 @@ export default function LandingPage() {
               섹션별 요약과 핵심 불릿, 출처까지. 길게 읽지 않아도 흐름을 놓치지
               않습니다. 더 깊이 보고 싶을 땐 원문 링크로 바로 이동하세요.
             </p>
-            <figure className="mt-8 rounded-2xl border border-border bg-card p-6">
+            <figure className="mt-8 rounded-xl border border-border bg-card p-6">
               <Quote className="size-5 text-primary" />
               <blockquote className="mt-3 text-pretty text-sm leading-relaxed text-foreground">
                 &ldquo;아침에 뉴스레터 다섯 개를 보던 걸 Briefy 하나로 줄였어요.
@@ -296,7 +292,7 @@ export default function LandingPage() {
         id="pricing"
         className="mx-auto max-w-6xl px-4 pb-24 sm:px-6 lg:px-8"
       >
-        <Card className="overflow-hidden border-primary/20 bg-primary text-primary-foreground">
+        <Card className="overflow-hidden bg-primary text-primary-foreground border-0">
           <CardContent className="grid items-center gap-8 p-8 sm:p-12 lg:grid-cols-2">
             <div>
               <h2 className="text-balance text-3xl font-bold tracking-tight sm:text-4xl">
@@ -317,7 +313,7 @@ export default function LandingPage() {
                 )}
               </ul>
             </div>
-            <div className="rounded-2xl bg-card p-6 text-foreground">
+            <div className="rounded-xl bg-card p-6 text-foreground">
               <p className="text-sm font-medium text-foreground">
                 지금 무료로 시작
               </p>

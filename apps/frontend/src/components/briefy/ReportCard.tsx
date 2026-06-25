@@ -21,7 +21,7 @@ export function ReportCard({ report }: { report: MockReport }) {
   const isScheduled = report.status === 'scheduled'
 
   const inner = (
-    <Card className="group h-full p-5 transition-shadow hover:shadow-md">
+    <Card className="group h-full p-5 transition-colors hover:bg-muted/30">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           {isScheduled ? (
