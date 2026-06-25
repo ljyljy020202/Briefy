@@ -3,6 +3,8 @@ package com.briefy.domain.auth.controller;
 import com.briefy.domain.auth.dto.AuthCallbackResult;
 import com.briefy.domain.auth.service.AuthService;
 import com.briefy.global.response.ApiResponse;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
@@ -13,6 +15,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+@Tag(name = "인증", description = "Google OAuth 로그인 및 로그아웃")
 @RestController
 public class AuthController {
 
@@ -24,6 +27,7 @@ public class AuthController {
     this.authService = authService;
   }
 
+  @Operation(summary = "Google OAuth 인증 시작", description = "Google 로그인 페이지로 리다이렉트합니다.")
   @GetMapping("/api/oauth2/authorize/google")
   public ResponseEntity<Void> authorize() {
     return ResponseEntity.status(HttpStatus.FOUND)
@@ -31,6 +35,7 @@ public class AuthController {
         .build();
   }
 
+  @Operation(summary = "Google OAuth 콜백", description = "Google 인증 완료 후 code를 교환하고 JWT 쿠키를 발급합니다.")
   @GetMapping("/api/oauth2/callback/google")
   public ResponseEntity<Void> callback(
       @RequestParam(required = false) String code, @RequestParam(required = false) String error) {
@@ -54,6 +59,7 @@ public class AuthController {
     }
   }
 
+  @Operation(summary = "로그아웃", description = "JWT 쿠키를 만료시켜 로그아웃합니다.")
   @PostMapping("/api/auth/logout")
   public ResponseEntity<ApiResponse<Void>> logout() {
     return ResponseEntity.ok()
