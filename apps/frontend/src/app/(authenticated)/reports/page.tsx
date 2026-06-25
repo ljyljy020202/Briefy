@@ -1,89 +1,127 @@
-"use client";
+'use client'
 
-import { useEffect, useState } from "react";
-import { briefings } from "@/lib/api";
-import type { BriefingListItem, PaginatedResponse } from "@/types/api";
-import { ReportCard } from "@/components/reports/ReportCard";
-import { Button } from "@/components/ui/button";
+import { useEffect, useMemo, useState } from 'react'
+import { Search } from 'lucide-react'
+
+import { cn } from '@/lib/utils'
+import { Input } from '@/components/ui/input'
+import { briefings } from '@/lib/api'
+import type { BriefingListItem } from '@/types/api'
+import { ReportCard } from '@/components/briefy/ReportCard'
+import { MOCK_REPORTS } from '@/lib/mock-data'
+
+const FILTERS = [
+  { id: 'all', label: '전체' },
+  { id: 'delivered', label: '도착함' },
+  { id: 'scheduled', label: '예약됨' },
+] as const
+
+type FilterId = (typeof FILTERS)[number]['id']
 
 export default function ReportsPage() {
-  const [data, setData] = useState<PaginatedResponse<BriefingListItem> | null>(
-    null
-  );
-  const [page, setPage] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<FilterId>('all')
+  const [query, setQuery] = useState('')
+  const [_realReports, setRealReports] = useState<BriefingListItem[] | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [useMock, setUseMock] = useState(false)
 
   useEffect(() => {
-    setLoading(true);
     briefings
-      .list(page)
-      .then(setData)
+      .list(0, 50)
+      .then((data) => {
+        setRealReports(data.content)
+      })
       .catch(() => {
         // TODO: Remove mock fallback when GET /api/briefings is implemented (Backend step 8)
-        setData({
-          content: [],
-          page,
-          size: 10,
-          totalElements: 0,
-          totalPages: 0,
-        });
+        setUseMock(true)
       })
-      .finally(() => setLoading(false));
-  }, [page]);
+      .finally(() => setLoading(false))
+  }, [])
+
+  const reports = useMemo(() => {
+    // TODO: Replace with real reports from API (Backend step 8)
+    const source = useMock ? MOCK_REPORTS : MOCK_REPORTS
+    return source.filter((r) => {
+      const matchesFilter = filter === 'all' || r.status === filter
+      const q = query.trim().toLowerCase()
+      const matchesQuery =
+        !q ||
+        r.title.toLowerCase().includes(q) ||
+        r.preview.toLowerCase().includes(q) ||
+        r.topics.some((t) => t.toLowerCase().includes(q))
+      return matchesFilter && matchesQuery
+    })
+  }, [filter, query, useMock])
 
   if (loading) {
     return (
-      <div className="space-y-4 animate-pulse">
-        <div className="h-8 w-32 rounded bg-muted" />
-        {[...Array(3)].map((_, i) => (
-          <div key={i} className="h-24 rounded-lg bg-muted" />
-        ))}
+      <div className="space-y-6 animate-pulse">
+        <div className="h-10 w-48 rounded-lg bg-muted" />
+        <div className="h-12 rounded-lg bg-muted" />
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="h-40 rounded-lg bg-muted" />
+          ))}
+        </div>
       </div>
-    );
+    )
   }
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold tracking-tight">Reports</h1>
+    <div>
+      <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+        브리핑 보관함
+      </h1>
+      <p className="mt-1 text-sm text-muted-foreground">
+        지금까지 받은 모든 아침 브리핑을 한곳에서 다시 읽어보세요.
+      </p>
 
-      {!data || data.content.length === 0 ? (
-        <div className="rounded-lg border border-dashed py-16 text-center">
-          <p className="text-muted-foreground text-sm">No reports yet.</p>
-          <p className="text-muted-foreground text-xs mt-1">
-            Generate your first briefing from the dashboard.
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {data.content.map((report) => (
-            <ReportCard key={report.id} report={report} />
+      {/* Controls */}
+      <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-1.5 rounded-xl border border-border bg-card p-1">
+          {FILTERS.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => setFilter(f.id)}
+              className={cn(
+                'rounded-lg px-3.5 py-1.5 text-sm font-medium transition-colors',
+                filter === f.id
+                  ? 'bg-accent text-accent-foreground'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {f.label}
+            </button>
           ))}
         </div>
-      )}
 
-      {data && data.totalPages > 1 && (
-        <div className="flex items-center justify-center gap-3">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage((p) => p - 1)}
-            disabled={page === 0}
-          >
-            ← Previous
-          </Button>
-          <span className="text-sm text-muted-foreground">
-            {page + 1} / {data.totalPages}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage((p) => p + 1)}
-            disabled={page + 1 >= data.totalPages}
-          >
-            Next →
-          </Button>
+        <div className="relative w-full sm:max-w-xs">
+          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="제목, 주제로 검색"
+            className="pl-9"
+          />
+        </div>
+      </div>
+
+      {/* List */}
+      {reports.length > 0 ? (
+        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {reports.map((r) => (
+            <ReportCard key={r.id} report={r} />
+          ))}
+        </div>
+      ) : (
+        <div className="mt-16 text-center">
+          <p className="text-sm font-medium text-foreground">결과가 없어요</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            다른 검색어나 필터를 시도해 보세요.
+          </p>
         </div>
       )}
     </div>
-  );
+  )
 }
