@@ -4,7 +4,6 @@ import {
   Clock,
   Filter,
   Mail,
-  Quote,
   Sparkles,
   Check,
 } from 'lucide-react'
@@ -68,98 +67,46 @@ export default function LandingPage() {
 
       {/* Hero */}
       <section className="relative">
-        <div className="mx-auto max-w-6xl px-4 pb-20 pt-16 sm:px-6 lg:px-8 lg:pt-24">
-          <div className="grid items-center gap-12 lg:grid-cols-2">
-            <div>
-              <Badge variant="outline" className="mb-6 bg-card">
-                <Sparkles className="size-3.5 text-primary" />
-                매일 아침, AI 맞춤 브리핑
-              </Badge>
-              <h1 className="text-balance text-4xl font-bold leading-[1.1] tracking-tight text-foreground sm:text-5xl lg:text-6xl">
-                중요한 소식만,
-                <br />
-                <span className="text-primary">아침 한 통의 메일</span>로.
-              </h1>
-              <p className="mt-6 max-w-md text-pretty text-base leading-relaxed text-muted-foreground sm:text-lg">
-                Briefy는 당신이 고른 주제와 키워드를 바탕으로, AI가 정리한 하루치
-                브리핑을 매일 아침 이메일로 보내드립니다.
-              </p>
-              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-                <Link
-                  href="/onboarding"
-                  className={cn(
-                    buttonVariants({ size: 'lg' }),
-                    'h-11 px-6 text-sm inline-flex items-center gap-2',
-                  )}
-                >
-                  무료로 시작하기
-                  <ArrowRight className="size-4" />
-                </Link>
-                <a
-                  href="#sample"
-                  className={cn(
-                    buttonVariants({ variant: 'outline', size: 'lg' }),
-                    'h-11 px-6 text-sm',
-                  )}
-                >
-                  브리핑 예시 보기
-                </a>
-              </div>
-              <p className="mt-4 text-xs text-muted-foreground">
-                신용카드 불필요 · 1분이면 설정 완료 · 언제든 해지
-              </p>
+        <div className="mx-auto max-w-4xl px-4 pb-20 pt-16 sm:px-6 lg:px-8 lg:pt-24">
+          <div className="text-center">
+            <Badge variant="outline" className="mb-6 bg-card">
+              <Sparkles className="size-3.5 text-primary" />
+              매일 아침, AI 맞춤 브리핑
+            </Badge>
+            <h1 className="text-balance text-3xl font-bold leading-[1.15] tracking-tight text-foreground sm:text-4xl lg:text-5xl">
+              관심 주제만 골라,
+              <br />
+              <span className="text-primary">매일 아침 AI 브리핑</span>으로
+              받아보세요.
+            </h1>
+            <p className="mx-auto mt-6 max-w-md text-pretty text-base leading-relaxed text-muted-foreground sm:text-lg">
+              Briefy는 당신이 고른 주제와 키워드를 바탕으로, AI가 정리한 하루치
+              브리핑을 매일 아침 이메일로 보내드립니다.
+            </p>
+            <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+              <Link
+                href="/onboarding"
+                className={cn(
+                  buttonVariants({ size: 'lg' }),
+                  'h-11 px-6 text-sm inline-flex items-center gap-2',
+                )}
+              >
+                무료로 시작하기
+                <ArrowRight className="size-4" />
+              </Link>
+              <a
+                href="#sample"
+                className={cn(
+                  buttonVariants({ variant: 'outline', size: 'lg' }),
+                  'h-11 px-6 text-sm',
+                )}
+              >
+                브리핑 예시 보기
+              </a>
             </div>
-
-            {/* Email preview card */}
-            <div className="relative">
-              <Card className="overflow-hidden">
-                <div className="flex items-center justify-between border-b border-border bg-secondary/50 px-5 py-3">
-                  <div className="flex items-center gap-2">
-                    <BriefyLogo size="sm" showWordmark={false} />
-                    <div className="leading-tight">
-                      <p className="text-sm font-medium text-foreground">
-                        오늘의 Briefy
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        오전 8:00 · 4분 분량
-                      </p>
-                    </div>
-                  </div>
-                  <Badge variant="success">도착함</Badge>
-                </div>
-                <CardContent className="space-y-4 p-5">
-                  <p className="text-sm leading-relaxed text-muted-foreground">
-                    {sample.preview}
-                  </p>
-                  <ul className="space-y-2.5">
-                    {sample.highlights.map((h) => (
-                      <li key={h} className="flex items-start gap-2.5 text-sm">
-                        <span className="mt-1 flex size-4 shrink-0 items-center justify-center rounded-full bg-primary/10">
-                          <Check className="size-2.5 text-primary" />
-                        </span>
-                        <span className="text-foreground">{h}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <div className="flex flex-wrap gap-1.5 pt-1">
-                    {sample.topics.map((t) => (
-                      <Badge key={t} variant="muted">
-                        {t}
-                      </Badge>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-
-          {/* trust row */}
-          <div className="mt-16 flex flex-wrap items-center justify-center gap-x-10 gap-y-3 text-sm text-muted-foreground">
-            <span>매일 12,000+ 개발자가 읽는 아침 브리핑</span>
-            <span className="hidden h-4 w-px bg-border sm:block" />
-            <span>평균 읽기 시간 3.8분</span>
-            <span className="hidden h-4 w-px bg-border sm:block" />
-            <span>구독 만족도 4.8 / 5</span>
+            <p className="mt-4 text-xs text-muted-foreground">
+              신용카드 불필요 · 1분이면 설정 완료 · 언제든 해지
+            </p>
           </div>
         </div>
       </section>
@@ -244,16 +191,7 @@ export default function LandingPage() {
               섹션별 요약과 핵심 불릿, 출처까지. 길게 읽지 않아도 흐름을 놓치지
               않습니다. 더 깊이 보고 싶을 땐 원문 링크로 바로 이동하세요.
             </p>
-            <figure className="mt-8 rounded-xl border border-border bg-card p-6">
-              <Quote className="size-5 text-primary" />
-              <blockquote className="mt-3 text-pretty text-sm leading-relaxed text-foreground">
-                &ldquo;아침에 뉴스레터 다섯 개를 보던 걸 Briefy 하나로 줄였어요.
-                백엔드 직군에 딱 맞는 큐레이션이라 출근길에 다 읽힙니다.&rdquo;
-              </blockquote>
-              <figcaption className="mt-4 text-sm text-muted-foreground">
-                — 9년 차 백엔드 엔지니어
-              </figcaption>
-            </figure>
+            {/* testimonial hidden — not real user data yet */}
           </div>
 
           <Card className="overflow-hidden">
