@@ -53,12 +53,9 @@ export interface DashboardSummary {
   };
   subscribedTopics: SubscribedTopicGroup[];
   nextDeliveryTime: string | null;
-  latestBriefing: {
-    id: number;
-    title: string;
-    reportDate: string;
-  } | null;
+  latestBriefing: BriefingListItem | null;
   latestDeliveryStatus: "SENT" | "PENDING" | "FAILED" | null;
+  recentReports: BriefingListItem[];
 }
 
 export interface BriefingListItem {

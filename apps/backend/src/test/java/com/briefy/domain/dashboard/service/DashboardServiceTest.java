@@ -1,0 +1,181 @@
+package com.briefy.domain.dashboard.service;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+import com.briefy.domain.briefing.entity.BriefingReport;
+import com.briefy.domain.briefing.repository.BriefingReportRepository;
+import com.briefy.domain.dashboard.dto.DashboardResponse;
+import com.briefy.domain.topic.entity.Topic;
+import com.briefy.domain.topic.entity.UserTopic;
+import com.briefy.domain.topic.repository.UserTopicRepository;
+import com.briefy.domain.user.entity.User;
+import com.briefy.domain.user.repository.UserRepository;
+import com.briefy.global.exception.BusinessException;
+import com.briefy.global.exception.ErrorCode;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+
+@ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
+class DashboardServiceTest {
+
+  @Mock private UserRepository userRepository;
+  @Mock private UserTopicRepository userTopicRepository;
+  @Mock private BriefingReportRepository briefingReportRepository;
+
+  @InjectMocks private DashboardService dashboardService;
+
+  private User mockUser;
+
+  @BeforeEach
+  void setUp() {
+    mockUser = mock(User.class);
+    when(mockUser.getNickname()).thenReturn("테스터");
+    when(mockUser.getEmail()).thenReturn("test@example.com");
+    when(mockUser.isOnboardingCompleted()).thenReturn(true);
+  }
+
+  @Test
+  void getDashboard_success_returnsUserAndTopicsAndRecentReports() {
+    when(userRepository.findById(1L)).thenReturn(Optional.of(mockUser));
+
+    Topic topic = mock(Topic.class);
+    when(topic.getName()).thenReturn("Target Role");
+    UserTopic userTopic = mock(UserTopic.class);
+    when(userTopic.getTopic()).thenReturn(topic);
+    when(userTopic.getKeyword()).thenReturn("백엔드 개발자");
+    when(userTopicRepository.findAllByUserIdAndActiveTrue(1L)).thenReturn(List.of(userTopic));
+
+    BriefingReport report = mock(BriefingReport.class);
+    when(report.getId()).thenReturn(1L);
+    when(report.getTitle()).thenReturn("오늘의 채용 브리핑");
+    when(report.getSummary()).thenReturn("요약");
+    when(report.getReportDate()).thenReturn(LocalDate.of(2026, 6, 26));
+    when(report.getArticleCount()).thenReturn(5);
+    when(report.getCreatedAt()).thenReturn(null);
+    Page<BriefingReport> page = new PageImpl<>(List.of(report));
+    when(briefingReportRepository.findAllByUserIdOrderByReportDateDesc(eq(1L), any(Pageable.class)))
+        .thenReturn(page);
+
+    DashboardResponse response = dashboardService.getDashboard(1L);
+
+    assertThat(response.user().nickname()).isEqualTo("테스터");
+    assertThat(response.user().email()).isEqualTo("test@example.com");
+    assertThat(response.user().onboardingCompleted()).isTrue();
+    assertThat(response.subscribedTopics()).hasSize(1);
+    assertThat(response.subscribedTopics().get(0).topicName()).isEqualTo("Target Role");
+    assertThat(response.subscribedTopics().get(0).keywords()).containsExactly("백엔드 개발자");
+    assertThat(response.recentReports()).hasSize(1);
+    assertThat(response.recentReports().get(0).title()).isEqualTo("오늘의 채용 브리핑");
+    assertThat(response.latestBriefing()).isNotNull();
+    assertThat(response.latestBriefing().id()).isEqualTo(1L);
+    assertThat(response.nextDeliveryTime()).isNull();
+    assertThat(response.latestDeliveryStatus()).isNull();
+  }
+
+  @Test
+  void getDashboard_noReports_latestBriefingIsNull() {
+    when(userRepository.findById(1L)).thenReturn(Optional.of(mockUser));
+    when(userTopicRepository.findAllByUserIdAndActiveTrue(1L)).thenReturn(List.of());
+    when(briefingReportRepository.findAllByUserIdOrderByReportDateDesc(eq(1L), any(Pageable.class)))
+        .thenReturn(new PageImpl<>(List.of()));
+
+    DashboardResponse response = dashboardService.getDashboard(1L);
+
+    assertThat(response.recentReports()).isEmpty();
+    assertThat(response.latestBriefing()).isNull();
+  }
+
+  @Test
+  void getDashboard_userNotFound_throwsUserNotFound() {
+    when(userRepository.findById(99L)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> dashboardService.getDashboard(99L))
+        .isInstanceOf(BusinessException.class)
+        .satisfies(
+            e ->
+                assertThat(((BusinessException) e).getErrorCode())
+                    .isEqualTo(ErrorCode.USER_NOT_FOUND));
+  }
+
+  @Test
+  void getDashboard_multipleKeywordsGroupedByTopicName() {
+    when(userRepository.findById(1L)).thenReturn(Optional.of(mockUser));
+
+    Topic roleT = mock(Topic.class);
+    when(roleT.getName()).thenReturn("Target Role");
+    Topic compT = mock(Topic.class);
+    when(compT.getName()).thenReturn("Target Companies");
+
+    UserTopic ut1 = mock(UserTopic.class);
+    when(ut1.getTopic()).thenReturn(roleT);
+    when(ut1.getKeyword()).thenReturn("백엔드 개발자");
+    UserTopic ut2 = mock(UserTopic.class);
+    when(ut2.getTopic()).thenReturn(roleT);
+    when(ut2.getKeyword()).thenReturn("풀스택 개발자");
+    UserTopic ut3 = mock(UserTopic.class);
+    when(ut3.getTopic()).thenReturn(compT);
+    when(ut3.getKeyword()).thenReturn("네이버");
+
+    when(userTopicRepository.findAllByUserIdAndActiveTrue(1L)).thenReturn(List.of(ut1, ut2, ut3));
+    when(briefingReportRepository.findAllByUserIdOrderByReportDateDesc(eq(1L), any(Pageable.class)))
+        .thenReturn(new PageImpl<>(List.of()));
+
+    DashboardResponse response = dashboardService.getDashboard(1L);
+
+    assertThat(response.subscribedTopics()).hasSize(2);
+    DashboardResponse.SubscribedTopicGroup roleGroup =
+        response.subscribedTopics().stream()
+            .filter(g -> g.topicName().equals("Target Role"))
+            .findFirst()
+            .orElseThrow();
+    assertThat(roleGroup.keywords()).containsExactlyInAnyOrder("백엔드 개발자", "풀스택 개발자");
+  }
+
+  @Test
+  void getDashboard_latestBriefingIsFirstOfRecentReports() {
+    when(userRepository.findById(1L)).thenReturn(Optional.of(mockUser));
+    when(userTopicRepository.findAllByUserIdAndActiveTrue(1L)).thenReturn(List.of());
+
+    BriefingReport r1 = mock(BriefingReport.class);
+    when(r1.getId()).thenReturn(3L);
+    when(r1.getTitle()).thenReturn("최신 브리핑");
+    when(r1.getSummary()).thenReturn(null);
+    when(r1.getReportDate()).thenReturn(LocalDate.of(2026, 6, 26));
+    when(r1.getArticleCount()).thenReturn(5);
+    when(r1.getCreatedAt()).thenReturn(null);
+
+    BriefingReport r2 = mock(BriefingReport.class);
+    when(r2.getId()).thenReturn(2L);
+    when(r2.getTitle()).thenReturn("이전 브리핑");
+    when(r2.getSummary()).thenReturn(null);
+    when(r2.getReportDate()).thenReturn(LocalDate.of(2026, 6, 25));
+    when(r2.getArticleCount()).thenReturn(3);
+    when(r2.getCreatedAt()).thenReturn(null);
+
+    when(briefingReportRepository.findAllByUserIdOrderByReportDateDesc(eq(1L), any(Pageable.class)))
+        .thenReturn(new PageImpl<>(List.of(r1, r2)));
+
+    DashboardResponse response = dashboardService.getDashboard(1L);
+
+    assertThat(response.latestBriefing().id()).isEqualTo(3L);
+    assertThat(response.recentReports()).hasSize(2);
+  }
+}

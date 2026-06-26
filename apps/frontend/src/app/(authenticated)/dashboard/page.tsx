@@ -17,10 +17,25 @@ import { buttonVariants } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { dashboard } from '@/lib/api'
-import type { DashboardSummary } from '@/types/api'
+import type { BriefingListItem, DashboardSummary } from '@/types/api'
 import { useAuthContext } from '@/contexts/AuthContext'
 import { ReportCard } from '@/components/briefy/ReportCard'
 import { MOCK_REPORTS, MOCK_STATS } from '@/lib/mock-data'
+import type { MockReport } from '@/lib/mock-data'
+
+function briefingItemToCard(item: BriefingListItem): MockReport {
+  return {
+    id: String(item.id),
+    title: item.title,
+    date: item.reportDate,
+    readTime: item.articleCount > 0 ? `${item.articleCount}건` : '',
+    status: 'delivered',
+    topics: [],
+    preview: item.summary ?? '',
+    highlights: [],
+    sections: [],
+  }
+}
 
 export default function DashboardPage() {
   const { user, loading: authLoading } = useAuthContext()
@@ -34,7 +49,6 @@ export default function DashboardPage() {
       .getSummary()
       .then(setSummary)
       .catch(() => {
-        // TODO: Remove mock fallback when GET /api/dashboard is implemented (Backend step 12)
         if (user) {
           setSummary({
             user: {
@@ -46,6 +60,7 @@ export default function DashboardPage() {
             nextDeliveryTime: null,
             latestBriefing: null,
             latestDeliveryStatus: null,
+            recentReports: [],
           })
         }
       })
@@ -68,11 +83,18 @@ export default function DashboardPage() {
     )
   }
 
-  // Use mock data for the visual parts while real API is not yet implemented
-  // TODO: Replace mock data with real API data when Backend steps 8 and 12 are complete
-  const latest = MOCK_REPORTS.find((r) => r.status === 'delivered')
-  const scheduled = MOCK_REPORTS.find((r) => r.status === 'scheduled')
-  const recent = MOCK_REPORTS.filter((r) => r.status === 'delivered').slice(0, 3)
+  const hasRealReports = (summary?.recentReports?.length ?? 0) > 0
+  const realLatest = hasRealReports ? (summary?.latestBriefing ?? null) : null
+  const realRecent = summary?.recentReports ?? []
+
+  // Mock fallbacks — used only when no real reports exist yet
+  const mockLatest = !hasRealReports
+    ? MOCK_REPORTS.find((r) => r.status === 'delivered')
+    : null
+  const mockScheduled = MOCK_REPORTS.find((r) => r.status === 'scheduled')
+  const mockRecent = !hasRealReports
+    ? MOCK_REPORTS.filter((r) => r.status === 'delivered').slice(0, 3)
+    : []
 
   const displayName =
     summary?.user?.nickname ??
@@ -121,8 +143,71 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* Latest briefing highlight */}
-      {latest && (
+      {/* Latest briefing — real data when available, mock otherwise */}
+      {realLatest ? (
+        <Card className="mt-6 overflow-hidden">
+          <div className="grid gap-0 lg:grid-cols-[1.4fr_1fr]">
+            <CardContent className="p-6 sm:p-8">
+              <div className="flex items-center gap-2">
+                <Badge>
+                  <Sparkles className="size-3.5" />
+                  최신 브리핑
+                </Badge>
+                <span className="text-xs text-muted-foreground">
+                  {realLatest.reportDate}
+                </span>
+              </div>
+              <h2 className="mt-4 text-xl font-bold tracking-tight text-foreground">
+                {realLatest.title}
+              </h2>
+              {realLatest.summary && (
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                  {realLatest.summary}
+                </p>
+              )}
+              <p className="mt-3 text-sm text-muted-foreground">
+                신규·마감 공고{' '}
+                <span className="font-semibold text-foreground">
+                  {realLatest.articleCount}건
+                </span>
+              </p>
+              <Link
+                href={`/reports/${realLatest.id}`}
+                className={cn(
+                  buttonVariants(),
+                  'mt-6 inline-flex items-center gap-2',
+                )}
+              >
+                전체 브리핑 읽기
+                <ArrowRight className="size-4" />
+              </Link>
+            </CardContent>
+
+            <div className="border-t border-border bg-secondary/40 p-6 sm:p-8 lg:border-l lg:border-t-0">
+              <p className="text-sm font-medium text-foreground">구독 중인 키워드</p>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {(summary?.subscribedTopics ?? [])
+                  .flatMap((t) => t.keywords)
+                  .slice(0, 8)
+                  .map((k) => (
+                    <Badge key={k} variant="muted">
+                      {k}
+                    </Badge>
+                  ))}
+              </div>
+              <div className="mt-6 flex items-center gap-3 rounded-xl border border-border bg-card p-4">
+                <span className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <Mail className="size-4" />
+                </span>
+                <div className="text-sm">
+                  <p className="font-medium text-foreground">{displayEmail}</p>
+                  <p className="text-xs text-muted-foreground">매일 오전 8시 발송</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Card>
+      ) : mockLatest ? (
         <Card className="mt-6 overflow-hidden">
           <div className="grid gap-0 lg:grid-cols-[1.4fr_1fr]">
             <CardContent className="p-6 sm:p-8">
@@ -132,17 +217,17 @@ export default function DashboardPage() {
                   오늘의 브리핑
                 </Badge>
                 <span className="text-xs text-muted-foreground">
-                  {latest.date} · {latest.readTime}
+                  {mockLatest.date} · {mockLatest.readTime}
                 </span>
               </div>
               <h2 className="mt-4 text-xl font-bold tracking-tight text-foreground">
-                {latest.title}
+                {mockLatest.title}
               </h2>
               <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                {latest.preview}
+                {mockLatest.preview}
               </p>
               <ul className="mt-5 space-y-2.5">
-                {latest.highlights.map((h) => (
+                {mockLatest.highlights.map((h) => (
                   <li key={h} className="flex items-start gap-2.5 text-sm">
                     <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-primary" />
                     <span className="text-foreground">{h}</span>
@@ -150,7 +235,7 @@ export default function DashboardPage() {
                 ))}
               </ul>
               <Link
-                href={`/reports/${latest.id}`}
+                href={`/reports/${mockLatest.id}`}
                 className={cn(
                   buttonVariants(),
                   'mt-6 inline-flex items-center gap-2',
@@ -164,7 +249,7 @@ export default function DashboardPage() {
             <div className="border-t border-border bg-secondary/40 p-6 sm:p-8 lg:border-l lg:border-t-0">
               <p className="text-sm font-medium text-foreground">담은 주제</p>
               <div className="mt-3 flex flex-wrap gap-1.5">
-                {latest.topics.map((t) => (
+                {mockLatest.topics.map((t) => (
                   <Badge key={t} variant="muted">
                     {t}
                   </Badge>
@@ -182,11 +267,11 @@ export default function DashboardPage() {
             </div>
           </div>
         </Card>
-      )}
+      ) : null}
 
       {/* Next + keywords row */}
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
-        {scheduled && (
+        {mockScheduled && (
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center gap-2 text-sm font-medium text-foreground">
@@ -194,13 +279,13 @@ export default function DashboardPage() {
                 다음 브리핑
               </div>
               <p className="mt-3 text-lg font-semibold text-foreground">
-                {scheduled.date}
+                {mockScheduled.date}
               </p>
               <p className="mt-1 text-sm text-muted-foreground">
-                {scheduled.preview}
+                {mockScheduled.preview}
               </p>
               <div className="mt-4 flex flex-wrap gap-1.5">
-                {scheduled.topics.map((t) => (
+                {mockScheduled.topics.map((t) => (
                   <Badge key={t} variant="muted">
                     {t}
                   </Badge>
@@ -239,7 +324,7 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* Recent reports */}
+      {/* Recent reports — real data when available, mock otherwise */}
       <div className="mt-8 flex items-center justify-between">
         <h2 className="text-lg font-semibold text-foreground">최근 브리핑</h2>
         <Link
@@ -254,9 +339,11 @@ export default function DashboardPage() {
         </Link>
       </div>
       <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {recent.map((r) => (
-          <ReportCard key={r.id} report={r} />
-        ))}
+        {hasRealReports
+          ? realRecent.map((r) => (
+              <ReportCard key={r.id} report={briefingItemToCard(r)} />
+            ))
+          : mockRecent.map((r) => <ReportCard key={r.id} report={r} />)}
       </div>
     </div>
   )
