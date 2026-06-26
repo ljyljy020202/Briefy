@@ -534,13 +534,26 @@ GET /api/dashboard
         "keywords": ["Spring Boot", "Java", "Kotlin"]
       }
     ],
-    "nextDeliveryTime": "2026-06-06T08:00:00",
+    "nextDeliveryTime": null,
     "latestBriefing": {
       "id": 100,
-      "title": "오늘의 채용 브리핑",
-      "reportDate": "2026-06-05"
+      "title": "오늘의 채용 브리핑 — 백엔드 개발자 (2026-06-05)",
+      "summary": "네이버·카카오에서 신규 공고 3건, 마감 임박 공고 2건이 확인됐습니다.",
+      "reportDate": "2026-06-05",
+      "articleCount": 5,
+      "createdAt": "2026-06-05T08:00:00"
     },
-    "latestDeliveryStatus": "SENT"
+    "latestDeliveryStatus": null,
+    "recentReports": [
+      {
+        "id": 100,
+        "title": "오늘의 채용 브리핑 — 백엔드 개발자 (2026-06-05)",
+        "summary": "네이버·카카오에서 신규 공고 3건, 마감 임박 공고 2건이 확인됐습니다.",
+        "reportDate": "2026-06-05",
+        "articleCount": 5,
+        "createdAt": "2026-06-05T08:00:00"
+      }
+    ]
   },
   "error": null
 }
@@ -549,9 +562,10 @@ GET /api/dashboard
 | Field | Notes |
 |---|---|
 | `subscribedTopics` | Active subscriptions only, grouped by topic name |
-| `nextDeliveryTime` | Derived from `notification_settings.delivery_time` + `timezone`; `null` if not configured |
-| `latestBriefing` | The most recent `briefing_reports` row for this user; `null` if none |
-| `latestDeliveryStatus` | `SENT`, `PENDING`, `FAILED`, or `null` if no delivery attempt yet |
+| `nextDeliveryTime` | `null` — scheduler not yet implemented; will be derived from `notification_settings.delivery_time` + `timezone` |
+| `latestBriefing` | Full `BriefingListItem` for the most recent report; `null` if no reports exist |
+| `latestDeliveryStatus` | `null` — email delivery not yet implemented; will be `SENT`, `PENDING`, or `FAILED` when delivery is wired |
+| `recentReports` | Up to 3 most recent `BriefingListItem` records, ordered by date descending; empty array if no reports exist |
 
 **Possible errors:** `UNAUTHORIZED`
 
@@ -683,17 +697,17 @@ GET /api/briefings/{id}
   "success": true,
   "data": {
     "id": 100,
-    "title": "오늘의 AI/백엔드 브리핑",
-    "summary": "오늘은 OpenAI, Claude Code, Spring 관련 업데이트가 주요 이슈였습니다.",
-    "content": "## 오늘의 핵심 요약\n\n...",
+    "title": "오늘의 채용 브리핑 — 백엔드 개발자 (2026-06-05)",
+    "summary": "네이버·카카오에서 신규 공고 3건, 마감 임박 공고 2건이 확인됐습니다.",
+    "content": "## 📌 신규 공고\n\n...\n\n## ⏰ 마감 임박 공고\n\n...\n\n## 💡 오늘의 추천 액션\n\n...",
     "reportDate": "2026-06-05",
     "articles": [
       {
-        "title": "Example Article",
-        "source": "OpenAI Blog",
-        "url": "https://example.com",
-        "summary": "One-paragraph summary of the article.",
-        "whyItMatters": "Explanation of relevance to the user's topics.",
+        "title": "네이버 — 백엔드 개발자 (Spring Boot) 채용",
+        "source": "채용 플랫폼",
+        "url": "https://example.com/job/123",
+        "summary": "네이버 서치 플랫폼팀에서 Spring Boot · Java 경력 3년 이상 백엔드 개발자를 모집합니다.",
+        "whyItMatters": "목표 회사(네이버)이며 핵심 스킬(Spring Boot, Java)과 정확히 매칭됩니다.",
         "publishedAt": "2026-06-05T00:00:00"
       }
     ]
@@ -729,7 +743,7 @@ POST /api/briefings/{id}/feedback
 ```json
 {
   "feedbackType": "USEFUL",
-  "comment": "AI 뉴스가 특히 좋았어요."
+  "comment": "오늘 공고 매칭이 정확했어요."
 }
 ```
 
@@ -755,7 +769,7 @@ POST /api/briefings/{id}/feedback
   "data": {
     "id": 1,
     "feedbackType": "USEFUL",
-    "comment": "AI 뉴스가 특히 좋았어요."
+    "comment": "오늘 공고 매칭이 정확했어요."
   },
   "error": null
 }

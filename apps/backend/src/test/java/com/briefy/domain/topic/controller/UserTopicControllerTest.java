@@ -56,7 +56,7 @@ class UserTopicControllerTest {
   void getMyTopics_returnsSubscriptionList() throws Exception {
     when(currentUserProvider.getCurrentUser()).thenReturn(new AuthenticatedUser(1L));
     when(userTopicService.getMyTopics(1L))
-        .thenReturn(List.of(new UserTopicResponse(10L, 1L, "AI/LLM", "OpenAI", 1, true)));
+        .thenReturn(List.of(new UserTopicResponse(10L, 1L, "Target Role", "백엔드 개발자", 1, true)));
 
     mockMvc
         .perform(get("/api/me/topics"))
@@ -64,8 +64,8 @@ class UserTopicControllerTest {
         .andExpect(jsonPath("$.success").value(true))
         .andExpect(jsonPath("$.data.length()").value(1))
         .andExpect(jsonPath("$.data[0].id").value(10))
-        .andExpect(jsonPath("$.data[0].topicName").value("AI/LLM"))
-        .andExpect(jsonPath("$.data[0].keyword").value("OpenAI"))
+        .andExpect(jsonPath("$.data[0].topicName").value("Target Role"))
+        .andExpect(jsonPath("$.data[0].keyword").value("백엔드 개발자"))
         .andExpect(jsonPath("$.data[0].isActive").value(true));
   }
 
@@ -73,16 +73,16 @@ class UserTopicControllerTest {
   void addTopic_returns201_withCreatedSubscription() throws Exception {
     when(currentUserProvider.getCurrentUser()).thenReturn(new AuthenticatedUser(1L));
     when(userTopicService.addTopic(eq(1L), any(CreateUserTopicRequest.class)))
-        .thenReturn(new UserTopicResponse(10L, 1L, "AI/LLM", "OpenAI", 1, true));
+        .thenReturn(new UserTopicResponse(10L, 1L, "Target Role", "백엔드 개발자", 1, true));
 
     mockMvc
         .perform(
             post("/api/me/topics")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"topicId\":1,\"keyword\":\"OpenAI\",\"priority\":1}"))
+                .content("{\"topicId\":1,\"keyword\":\"백엔드 개발자\",\"priority\":1}"))
         .andExpect(status().isCreated())
         .andExpect(jsonPath("$.data.id").value(10))
-        .andExpect(jsonPath("$.data.keyword").value("OpenAI"));
+        .andExpect(jsonPath("$.data.keyword").value("백엔드 개발자"));
   }
 
   @Test
@@ -95,7 +95,7 @@ class UserTopicControllerTest {
         .perform(
             post("/api/me/topics")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"topicId\":1,\"keyword\":\"OpenAI\"}"))
+                .content("{\"topicId\":1,\"keyword\":\"백엔드 개발자\"}"))
         .andExpect(status().isConflict())
         .andExpect(jsonPath("$.error.code").value("DUPLICATE_USER_TOPIC"));
   }
