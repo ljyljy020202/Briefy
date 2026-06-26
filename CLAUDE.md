@@ -12,6 +12,24 @@ Briefy is a personalized AI daily briefing service. Three independent services s
 | `apps/backend/` | Spring Boot 3.4, Java 21, JPA, Redis | 8080 |
 | `apps/agent/` | Python 3.11, FastAPI, LangGraph | 8000 |
 
+## Current MVP Focus
+
+The current **1st MVP** is a job-seeker daily briefing for developer and general job seekers.
+
+| Phase | Scope |
+|-------|-------|
+| **1st MVP** | **Job Briefing** — user sets target role, companies, skills/competencies, location, experience level, employment type; briefing delivers new postings, deadline-near postings, matching reasons, and recommended actions |
+| 1.5 MVP | **Interested Company Briefing** — company news, hiring changes, business/service issues, earnings/investment summaries from a job-seeker perspective |
+| 2nd MVP | **Industry / Market Briefing** — IT/AI, semiconductor, platform, finance, content, and other industries; information-only, no buy/sell recommendations |
+
+### Coding rules for MVP phases
+
+- **Do not treat old tech-news categories as active MVP data.** The seed topics `AI/LLM`, `Backend/Spring`, `Cloud/AWS`, `Startup/Developer Trend`, `Stock/Economy`, `Company/Industry` are from the original product concept and must be replaced. All new seed data, onboarding UI, agent workflows, and mock data must reflect job-seeker preferences (role, company, skill, location, experience level, employment type).
+- **Prioritise job briefing for all 1st MVP work.** When in doubt about scope, default to what serves a developer job seeker discovering relevant postings today.
+- **Treat interested company briefing as 1.5 MVP scope** and industry/market briefing as 2nd MVP scope. Do not implement or scaffold these unless explicitly requested.
+- **Investment-related content must be information-only.** Never generate or suggest buy/sell recommendations anywhere in the codebase (prompts, copy, mock data, or docs).
+- **Landing page copy must stay broad.** The product identity is a personalized AI daily briefing service; mention job briefing only as the current MVP use case, not as the permanent product identity.
+
 ## Commands
 
 ### Root (Makefile)

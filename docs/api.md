@@ -287,26 +287,38 @@ GET /api/topics
   "data": [
     {
       "id": 1,
-      "name": "AI/LLM",
-      "slug": "ai-llm",
-      "category": "TECH",
-      "description": "AI, LLM, Agent, generative AI news",
+      "name": "Target Role",
+      "slug": "target-role",
+      "category": "JOB_PREFERENCE",
+      "description": "목표 직무 (예: 백엔드 개발자, 풀스택 개발자)",
       "displayOrder": 1
     },
     {
       "id": 2,
-      "name": "Backend/Spring",
-      "slug": "backend-spring",
-      "category": "TECH",
-      "description": "Spring Boot, JPA, Redis, Kafka",
+      "name": "Target Companies",
+      "slug": "target-companies",
+      "category": "JOB_PREFERENCE",
+      "description": "관심 회사 (예: 네이버, 카카오, 라인)",
       "displayOrder": 2
+    },
+    {
+      "id": 3,
+      "name": "Skills / Competencies",
+      "slug": "skills",
+      "category": "JOB_PREFERENCE",
+      "description": "핵심 스킬 (예: Spring Boot, Java, Kotlin)",
+      "displayOrder": 3
     }
   ],
   "error": null
 }
 ```
 
-**MVP topics:** AI/LLM · Backend/Spring · Cloud/AWS · Startup/Developer Trend · Stock/Economy · Company/Industry
+**1st MVP preference categories (Job Briefing):** Target Role · Target Companies · Skills / Competencies · Location · Experience Level · Employment Type
+
+**Later phases:** Interested Company Briefing (1.5 MVP) · Industry / Market Briefing (2nd MVP)
+
+> The `Topic` + `UserTopic` tables are a generic preference subscription system. The seed rows and category labels change per MVP phase, but the API contract stays the same.
 
 **Possible errors:** `UNAUTHORIZED`
 
@@ -335,16 +347,16 @@ GET /api/me/topics
     {
       "id": 10,
       "topicId": 1,
-      "topicName": "AI/LLM",
-      "keyword": "OpenAI",
+      "topicName": "Target Role",
+      "keyword": "백엔드 개발자",
       "priority": 1,
       "isActive": true
     },
     {
       "id": 11,
-      "topicId": 1,
-      "topicName": "AI/LLM",
-      "keyword": "Claude",
+      "topicId": 3,
+      "topicName": "Skills / Competencies",
+      "keyword": "Spring Boot",
       "priority": 1,
       "isActive": true
     }
@@ -370,7 +382,7 @@ POST /api/me/topics
 ```json
 {
   "topicId": 1,
-  "keyword": "OpenAI",
+  "keyword": "백엔드 개발자",
   "priority": 1
 }
 ```
@@ -389,8 +401,8 @@ POST /api/me/topics
   "data": {
     "id": 10,
     "topicId": 1,
-    "topicName": "AI/LLM",
-    "keyword": "OpenAI",
+    "topicName": "Target Role",
+    "keyword": "백엔드 개발자",
     "priority": 1,
     "isActive": true
   },
@@ -421,11 +433,15 @@ POST /api/me/topics/bulk
   "topics": [
     {
       "topicId": 1,
-      "keywords": ["OpenAI", "Claude", "LangGraph"]
+      "keywords": ["백엔드 개발자", "풀스택 개발자"]
     },
     {
       "topicId": 2,
-      "keywords": ["Spring Boot", "Redis"]
+      "keywords": ["네이버", "카카오", "라인"]
+    },
+    {
+      "topicId": 3,
+      "keywords": ["Spring Boot", "Java", "Kotlin"]
     }
   ]
 }
@@ -506,18 +522,22 @@ GET /api/dashboard
     },
     "subscribedTopics": [
       {
-        "topicName": "AI/LLM",
-        "keywords": ["OpenAI", "Claude", "LangGraph"]
+        "topicName": "Target Role",
+        "keywords": ["백엔드 개발자", "풀스택 개발자"]
       },
       {
-        "topicName": "Backend/Spring",
-        "keywords": ["Spring Boot", "Redis"]
+        "topicName": "Target Companies",
+        "keywords": ["네이버", "카카오", "라인"]
+      },
+      {
+        "topicName": "Skills / Competencies",
+        "keywords": ["Spring Boot", "Java", "Kotlin"]
       }
     ],
     "nextDeliveryTime": "2026-06-06T08:00:00",
     "latestBriefing": {
       "id": 100,
-      "title": "오늘의 AI/백엔드 브리핑",
+      "title": "오늘의 채용 브리핑",
       "reportDate": "2026-06-05"
     },
     "latestDeliveryStatus": "SENT"
@@ -624,8 +644,8 @@ GET /api/briefings?page=0&size=10
     "content": [
       {
         "id": 100,
-        "title": "오늘의 AI/백엔드 브리핑",
-        "summary": "오늘은 OpenAI, Claude Code, Spring 관련 업데이트가 주요 이슈였습니다.",
+        "title": "오늘의 채용 브리핑 — 백엔드 개발자",
+        "summary": "오늘 신규 공고 3건, 마감 임박 공고 2건이 선호도와 매칭됐습니다.",
         "reportDate": "2026-06-05",
         "articleCount": 5,
         "createdAt": "2026-06-05T08:00:00"
@@ -893,12 +913,24 @@ POST /briefings/generate
   "userId": 1,
   "topics": [
     {
-      "name": "AI/LLM",
-      "keywords": ["OpenAI", "Claude", "LangGraph"]
+      "name": "Target Role",
+      "keywords": ["백엔드 개발자", "풀스택 개발자"]
     },
     {
-      "name": "Backend/Spring",
-      "keywords": ["Spring Boot", "Redis"]
+      "name": "Target Companies",
+      "keywords": ["네이버", "카카오", "라인"]
+    },
+    {
+      "name": "Skills / Competencies",
+      "keywords": ["Spring Boot", "Java", "Kotlin"]
+    },
+    {
+      "name": "Location",
+      "keywords": ["서울", "판교"]
+    },
+    {
+      "name": "Experience Level",
+      "keywords": ["신입", "3년 이상"]
     }
   ],
   "date": "2026-06-05",
@@ -919,16 +951,16 @@ POST /briefings/generate
 
 ```json
 {
-  "title": "오늘의 AI/백엔드 브리핑",
-  "summary": "오늘은 OpenAI, Claude Code, Spring 관련 업데이트가 주요 이슈였습니다.",
+  "title": "오늘의 채용 브리핑 — 백엔드 개발자",
+  "summary": "오늘 네이버·카카오·라인에서 백엔드 포지션 3건이 신규 등록됐고, 마감 임박 공고 2건이 있습니다.",
   "content": "## 오늘의 핵심 요약\n\n...",
   "articles": [
     {
-      "title": "Example Article",
-      "source": "OpenAI Blog",
-      "url": "https://example.com",
-      "summary": "One-paragraph agent-generated summary.",
-      "whyItMatters": "Relevance explanation for the user's topics.",
+      "title": "네이버 — 백엔드 개발자 (Spring Boot) 채용",
+      "source": "채용 플랫폼",
+      "url": "https://example.com/job/123",
+      "summary": "네이버 서치 플랫폼팀에서 Spring Boot · Java 경력 3년 이상 백엔드 개발자를 모집합니다.",
+      "whyItMatters": "목표 회사(네이버)이며 핵심 스킬(Spring Boot, Java)과 정확히 매칭됩니다.",
       "publishedAt": "2026-06-05T00:00:00"
     }
   ],

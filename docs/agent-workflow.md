@@ -2,71 +2,95 @@
 
 ## Overview
 
-The Agent service orchestrates LangGraph workflows to generate personalized briefings. It receives requests from the Backend, processes data asynchronously, and returns AI-generated content.
+The Agent service orchestrates LangGraph workflows to generate personalized briefings. It receives requests from the Backend, processes data, and returns AI-generated content.
+
+**Current 1st MVP focus:** Job briefing for developer and general job seekers. The workflow collects job postings matching the user's preferences, deduplicates and ranks them, generates matching reasons, and formats a Markdown briefing.
+
+**Later phases:** Company news briefing (1.5 MVP) and industry/market briefing (2nd MVP) will be implemented as separate graphs in `app/graph/`. Do not mix them into the job briefing graph.
 
 ## LangGraph Architecture
 
 The agent uses LangGraph's `StateGraph` to define multi-step AI workflows. Each graph handles a specific workflow (e.g., briefing generation).
 
-### State Definition
+### State Definition (1st MVP — Job Briefing)
 
 ```python
 from typing import TypedDict
 
-class BriefingState(TypedDict):
+class JobBriefingState(TypedDict):
     user_id: int
-    topics: list[dict]   # [{"name": "AI/LLM", "keywords": ["OpenAI", ...]}, ...]
-    date: str            # YYYY-MM-DD
+    topics: list[dict]            # [{"name": "Target Role", "keywords": ["백엔드 개발자"]}, ...]
+    date: str                     # YYYY-MM-DD
     tone: str
-    raw_news: list[dict]       # fetched news items
-    processed_data: list[dict] # filtered & categorized articles
-    briefing_content: str      # final LLM output (Markdown)
+    raw_postings: list[dict]      # collected job postings from sources
+    deduplicated: list[dict]      # postings after URL/title deduplication
+    ranked_postings: list[dict]   # postings ranked by user preference match score
+    matching_reasons: list[dict]  # LLM-generated match explanation per posting
+    briefing_content: str         # final Markdown briefing
 ```
 
-### Graph Structure
+### Graph Structure (1st MVP — Job Briefing)
 
 ```
-fetch_news_node
+collect_postings_node       ← fetches from job boards based on user preferences
       ↓
-categorize_node
+deduplicate_node            ← removes duplicate URLs / very similar titles
       ↓
-generate_briefing_node
+rank_by_preference_node     ← scores postings against role / company / skill / location
       ↓
-format_output_node
+summarize_postings_node     ← LLM summarises each selected posting
+      ↓
+generate_matching_reasons_node  ← LLM explains why each posting matches the user
+      ↓
+format_briefing_node        ← assembles Markdown output with new postings + deadline-near section
 ```
+
+**Planned later graphs (not for 1st MVP):**
+
+| Graph file | Phase |
+|---|---|
+| `company_briefing_graph.py` | 1.5 MVP — company news, hiring changes, earnings summaries |
+| `industry_briefing_graph.py` | 2nd MVP — IT/AI, semiconductor, platform, finance, content |
 
 ## Tools
 
 Tools are functions decorated with `@tool` that the LLM can call. They enable the agent to fetch external data or perform computations.
 
-### Available Tools
+### 1st MVP Tools — Job Briefing
 
-#### news_fetcher
-Fetch news articles from configured sources.
-
-```python
-@tool
-def news_fetcher(categories: list[str], language: str) -> list[dict]:
-    """Fetch relevant news articles."""
-```
-
-#### weather_fetcher
-Fetch weather information for user's location.
+#### job_posting_fetcher
+Collect job postings from configured sources (e.g. Wanted, JobKorea, LinkedIn) filtered by user preferences.
 
 ```python
 @tool
-def weather_fetcher(location: str) -> dict:
-    """Fetch weather forecast."""
+def job_posting_fetcher(
+    roles: list[str],
+    companies: list[str],
+    skills: list[str],
+    locations: list[str],
+    experience_levels: list[str],
+    employment_types: list[str],
+) -> list[dict]:
+    """Fetch job postings matching the user's preference profile."""
 ```
 
-#### market_data_fetcher
-Fetch stock market & cryptocurrency data.
+#### deadline_checker
+Flag postings whose application deadline falls within the next N days.
 
 ```python
 @tool
-def market_data_fetcher(symbols: list[str]) -> list[dict]:
-    """Fetch market data."""
+def deadline_checker(postings: list[dict], days_threshold: int = 3) -> list[dict]:
+    """Return postings that are closing soon."""
 ```
+
+### Later Phase Tools (not for 1st MVP)
+
+| Tool | Phase | Purpose |
+|---|---|---|
+| `company_news_fetcher` | 1.5 MVP | Fetch news and hiring signals for target companies |
+| `industry_news_fetcher` | 2nd MVP | Fetch industry/market news (IT/AI, semiconductor, platform, finance, content) |
+
+> **Investment content rule:** Industry/market briefing content must be information-only summaries. Never generate or suggest buy/sell recommendations in any prompt, output, or tool response.
 
 ## Request/Response Flow
 
@@ -74,7 +98,7 @@ The Agent server is called **only by the Spring Boot backend** (`AgentClient`).
 The frontend never calls the Agent directly.  
 Agent endpoints do **not** use the `/api` prefix.
 
-### Request from Backend
+### Request from Backend (1st MVP — Job Briefing)
 
 ```http
 POST /briefings/generate
@@ -84,12 +108,24 @@ Content-Type: application/json
   "userId": 1,
   "topics": [
     {
-      "name": "AI/LLM",
-      "keywords": ["OpenAI", "Claude", "LangGraph"]
+      "name": "Target Role",
+      "keywords": ["백엔드 개발자", "풀스택 개발자"]
     },
     {
-      "name": "Backend/Spring",
-      "keywords": ["Spring Boot", "Redis"]
+      "name": "Target Companies",
+      "keywords": ["네이버", "카카오", "라인"]
+    },
+    {
+      "name": "Skills / Competencies",
+      "keywords": ["Spring Boot", "Java", "Kotlin"]
+    },
+    {
+      "name": "Location",
+      "keywords": ["서울", "판교"]
+    },
+    {
+      "name": "Experience Level",
+      "keywords": ["신입", "3년 이상"]
     }
   ],
   "date": "2026-06-05",
@@ -100,24 +136,24 @@ Content-Type: application/json
 | Field | Notes |
 |---|---|
 | `userId` | For logging/tracing only; Agent does not persist it |
-| `topics` | Active `user_topics` records for this user, grouped by topic name |
+| `topics` | Active `user_topics` records for this user, grouped by preference category name |
 | `date` | ISO-8601 date the briefing covers (`YYYY-MM-DD`) |
 | `tone` | Forwarded from the frontend or scheduler (e.g. `"easy"`, `"professional"`) |
 
-### Response
+### Response (1st MVP — Job Briefing)
 
 ```json
 {
-  "title": "오늘의 AI/백엔드 브리핑",
-  "summary": "오늘은 OpenAI, Claude Code, Spring 관련 업데이트가 주요 이슈였습니다.",
-  "content": "## 오늘의 핵심 요약\n\n...",
+  "title": "오늘의 채용 브리핑 — 백엔드 개발자",
+  "summary": "오늘 네이버·카카오·라인에서 신규 백엔드 공고 3건, 마감 임박 공고 2건이 있습니다.",
+  "content": "## 오늘의 채용 요약\n\n### 신규 공고\n...\n\n### 마감 임박 공고\n...\n\n### 추천 액션\n...",
   "articles": [
     {
-      "title": "Example Article",
-      "source": "OpenAI Blog",
-      "url": "https://example.com",
-      "summary": "One-paragraph agent-generated summary.",
-      "whyItMatters": "Relevance explanation for the user's topics.",
+      "title": "네이버 — 백엔드 개발자 (Spring Boot) 채용",
+      "source": "채용 플랫폼",
+      "url": "https://example.com/job/123",
+      "summary": "네이버 서치 플랫폼팀에서 Spring Boot · Java 경력 3년 이상 백엔드 개발자를 모집합니다.",
+      "whyItMatters": "목표 회사(네이버)이며 핵심 스킬(Spring Boot, Java)과 정확히 매칭됩니다.",
       "publishedAt": "2026-06-05T00:00:00"
     }
   ],
@@ -130,8 +166,8 @@ Content-Type: application/json
 
 | Field | Notes |
 |---|---|
-| `content` | Full briefing in **Markdown** |
-| `articles` | May be an empty array if no articles were found |
+| `content` | Full briefing in **Markdown**; must include sections for new postings, deadline-near postings, and recommended actions |
+| `articles` | Each element is one job posting. May be empty if no postings matched. |
 | `tokenUsage` | Stored in `briefing_reports.token_input` / `token_output` for cost tracking |
 
 ## Development

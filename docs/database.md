@@ -58,30 +58,39 @@ INDEX        idx_users_status           (status)
 
 ### `topics`
 
-Predefined topic categories that users can subscribe to. Seeded at application startup; not user-generated.
+Predefined preference categories that users can subscribe to. Seeded at application startup; not user-generated.
+
+The `topics` table is a **generic preference subscription system** — the seed rows and category labels change per MVP phase, but the schema and API contract remain the same.
 
 | Column | Type | Constraints | Notes |
 |---|---|---|---|
 | `id` | BIGINT | PK, AUTO_INCREMENT | |
 | `name` | VARCHAR(100) | NOT NULL | Human-readable label |
-| `slug` | VARCHAR(100) | UNIQUE NOT NULL | URL-safe identifier (e.g. `ai-llm`) |
+| `slug` | VARCHAR(100) | UNIQUE NOT NULL | URL-safe identifier (e.g. `target-role`) |
 | `category` | VARCHAR(50) | NOT NULL | Broad grouping |
-| `description` | VARCHAR(500) | | Shown on topic selection UI |
+| `description` | VARCHAR(500) | | Shown on preference selection UI |
 | `display_order` | INT | | Controls ordering on UI |
-| `is_active` | BOOLEAN | NOT NULL DEFAULT TRUE | Inactive topics are hidden from UI |
+| `is_active` | BOOLEAN | NOT NULL DEFAULT TRUE | Inactive rows are hidden from UI |
 | `created_at` | DATETIME | | |
 | `updated_at` | DATETIME | | |
 
-**MVP seed data**
+**1st MVP seed data — Job Briefing**
 
-| name | slug | category |
-|---|---|---|
-| AI/LLM | `ai-llm` | Technology |
-| Backend/Spring | `backend-spring` | Technology |
-| Cloud/AWS | `cloud-aws` | Technology |
-| Startup/Developer Trend | `startup-dev-trend` | Business |
-| Stock/Economy | `stock-economy` | Finance |
-| Company/Industry | `company-industry` | Business |
+| name | slug | category | description |
+|---|---|---|---|
+| Target Role | `target-role` | JOB_PREFERENCE | 목표 직무 (예: 백엔드 개발자, 풀스택 개발자) |
+| Target Companies | `target-companies` | JOB_PREFERENCE | 관심 회사 (예: 네이버, 카카오, 라인) |
+| Skills / Competencies | `skills` | JOB_PREFERENCE | 핵심 스킬 (예: Spring Boot, Java, Kotlin) |
+| Location | `location` | JOB_PREFERENCE | 희망 근무지 (예: 서울, 판교) |
+| Experience Level | `experience-level` | JOB_PREFERENCE | 경력 수준 (예: 신입, 3년 이상) |
+| Employment Type | `employment-type` | JOB_PREFERENCE | 고용 형태 (예: 정규직, 계약직) |
+
+**Later phases (not seeded in 1st MVP)**
+
+| Phase | Examples |
+|---|---|
+| 1.5 MVP — Interested Company Briefing | Target companies for news tracking, hiring trend signals |
+| 2nd MVP — Industry / Market Briefing | IT/AI, Semiconductor, Platform, Finance, Content |
 
 **Indexes**
 

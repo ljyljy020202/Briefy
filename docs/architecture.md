@@ -2,7 +2,7 @@
 
 ## System Overview
 
-Briefy is a distributed AI daily briefing service composed of three independent microservices:
+Briefy is a personalized AI daily briefing service composed of three independent microservices. The **current 1st MVP** focuses on job briefing for developer and general job seekers; later phases add interested company briefing (1.5 MVP) and industry/market briefing (2nd MVP).
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -29,7 +29,7 @@ Briefy is a distributed AI daily briefing service composed of three independent 
 ┌─────────────────────────────────────────────────────────────────┐
 │  Agent (FastAPI + LangGraph / AWS EC2)                          │
 │  - LLM workflow orchestration                                    │
-│  - News/data aggregation                                        │
+│  - Job posting collection & matching (1st MVP)                  │
 │  - Briefing generation via LangGraph                            │
 └─────────────────┬───────────────────────────────────────────────┘
                   │
@@ -67,10 +67,11 @@ Triggered either by a scheduler (daily) or a user manually via `POST /api/briefi
 2. Backend loads the user's active topic subscriptions (`user_topics`) from MySQL
 3. Backend creates a `briefing_jobs` record (status: `PENDING → PROCESSING`)
 4. Backend calls Agent: `POST /briefings/generate` with topic + keyword list
-5. Agent uses LangGraph to orchestrate multi-step workflow:
-   - Fetch relevant news/data from external sources
-   - Process & categorize information
-   - Generate personalized briefing with LLM (Markdown output)
+5. Agent uses LangGraph to orchestrate multi-step workflow (1st MVP — job briefing):
+   - Collect job postings from sources, filtered by user's role / company / skill / location preferences
+   - Deduplicate postings; rank by preference match score
+   - Generate matching reasons and recommended actions with LLM
+   - Format final Markdown briefing (new postings · deadline-near postings · recommended actions)
 6. Agent returns `{ title, summary, content, articles, tokenUsage }` to Backend
 7. Backend saves `briefing_reports` + `briefing_articles` to MySQL, marks job `COMPLETED`
 8. Backend sends email and records result in `delivery_logs`
