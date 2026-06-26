@@ -106,7 +106,7 @@ The frontend calls the backend for all user, auth, and data operations. The back
 - `domain/` — JPA entities and DTOs (keep entities and DTOs separate)
 - `config/` — Security, Redis, CORS, WebClient configuration
 
-Spring profile `local` (activated via `--spring.profiles.active=local`) uses `ddl-auto: create-drop` and verbose SQL logging. Production uses `validate`.
+Spring profile `local` (activated via `--spring.profiles.active=local`) uses `ddl-auto: update` and verbose SQL logging. Production uses `validate`.
 
 ### Agent module layout (`apps/agent/app/`)
 

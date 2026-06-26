@@ -408,7 +408,7 @@ users ────────────────────────�
 
 | Profile | `ddl-auto` | Use |
 |---|---|---|
-| `local` | `create-drop` | Schema is recreated on each boot. Safe for development. |
+| `local` | `update` | Schema is updated in place on each boot. Safe for local development; data persists across restarts. |
 | `dev` | `update` | Schema is migrated in place. Use for shared dev environment. |
 | `prod` | `validate` | Hibernate validates schema against entities but makes no changes. Use Flyway or Liquibase for migrations. |
 
