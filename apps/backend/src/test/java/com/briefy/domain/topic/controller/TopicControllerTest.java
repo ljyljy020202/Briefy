@@ -37,19 +37,19 @@ class TopicControllerTest {
     when(topicService.getActiveTopics())
         .thenReturn(
             List.of(
-                new TopicResponse(1L, "AI/LLM", "ai-llm", "TECH", "AI news", 1),
+                new TopicResponse(1L, "Target Role", "target-role", "JOB_PREFERENCE", "목표 직무", 1),
                 new TopicResponse(
-                    2L, "Backend/Spring", "backend-spring", "TECH", "Spring news", 2)));
+                    2L, "Target Companies", "target-companies", "JOB_PREFERENCE", "관심 회사", 2)));
 
     mockMvc
         .perform(get("/api/topics"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.success").value(true))
         .andExpect(jsonPath("$.data.length()").value(2))
-        .andExpect(jsonPath("$.data[0].name").value("AI/LLM"))
-        .andExpect(jsonPath("$.data[0].category").value("TECH"))
-        .andExpect(jsonPath("$.data[0].slug").value("ai-llm"))
-        .andExpect(jsonPath("$.data[1].name").value("Backend/Spring"));
+        .andExpect(jsonPath("$.data[0].name").value("Target Role"))
+        .andExpect(jsonPath("$.data[0].category").value("JOB_PREFERENCE"))
+        .andExpect(jsonPath("$.data[0].slug").value("target-role"))
+        .andExpect(jsonPath("$.data[1].name").value("Target Companies"));
   }
 
   @Test

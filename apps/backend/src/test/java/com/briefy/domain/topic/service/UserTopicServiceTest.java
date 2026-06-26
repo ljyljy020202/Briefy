@@ -45,8 +45,8 @@ class UserTopicServiceTest {
   void setUp() {
     mockTopic = mock(Topic.class);
     when(mockTopic.getId()).thenReturn(1L);
-    when(mockTopic.getName()).thenReturn("AI/LLM");
-    when(mockTopic.getCategory()).thenReturn(TopicCategory.TECH);
+    when(mockTopic.getName()).thenReturn("Target Role");
+    when(mockTopic.getCategory()).thenReturn(TopicCategory.JOB_PREFERENCE);
     when(mockTopic.isActive()).thenReturn(true);
   }
 

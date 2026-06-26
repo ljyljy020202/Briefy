@@ -21,36 +21,36 @@ public class TopicSeeder implements ApplicationRunner {
   private static final List<TopicSeedEntry> SEED_DATA =
       List.of(
           new TopicSeedEntry(
-              "AI/LLM", "ai-llm", TopicCategory.TECH, "AI, LLM, Agent, generative AI news", 1),
+              "Target Role",
+              "target-role",
+              TopicCategory.JOB_PREFERENCE,
+              "목표 직무 (예: 백엔드 개발자, 풀스택 개발자)",
+              1),
           new TopicSeedEntry(
-              "Backend/Spring",
-              "backend-spring",
-              TopicCategory.TECH,
-              "Backend development, Spring Boot, Java, API, database, and server architecture",
+              "Target Companies",
+              "target-companies",
+              TopicCategory.JOB_PREFERENCE,
+              "관심 회사 (예: 네이버, 카카오, 라인)",
               2),
           new TopicSeedEntry(
-              "Cloud/AWS",
-              "cloud-aws",
-              TopicCategory.TECH,
-              "Cloud infrastructure, AWS, deployment, DevOps, and scalability",
+              "Skills / Competencies",
+              "skills",
+              TopicCategory.JOB_PREFERENCE,
+              "핵심 스킬 (예: Spring Boot, Java, Kotlin)",
               3),
           new TopicSeedEntry(
-              "Startup/Developer Trend",
-              "startup-developer-trend",
-              TopicCategory.BUSINESS,
-              "Startup, developer productivity, engineering culture, and tech industry trends",
-              4),
+              "Location", "location", TopicCategory.JOB_PREFERENCE, "희망 근무지 (예: 서울, 판교)", 4),
           new TopicSeedEntry(
-              "Stock/Economy",
-              "stock-economy",
-              TopicCategory.FINANCE,
-              "Stock market, economy, macro trends, and major business issues",
+              "Experience Level",
+              "experience-level",
+              TopicCategory.JOB_PREFERENCE,
+              "경력 수준 (예: 신입, 3년 이상)",
               5),
           new TopicSeedEntry(
-              "Company/Industry",
-              "company-industry",
-              TopicCategory.BUSINESS,
-              "Company updates, industry trends, product launches, and market movements",
+              "Employment Type",
+              "employment-type",
+              TopicCategory.JOB_PREFERENCE,
+              "고용 형태 (예: 정규직, 계약직)",
               6));
 
   private final TopicRepository topicRepository;

@@ -39,7 +39,7 @@ class TopicSeederTest {
   @Test
   void seed_skipsExistingSlug_insertsOnlyMissingTopics() {
     when(topicRepository.findBySlug(anyString())).thenReturn(Optional.empty());
-    when(topicRepository.findBySlug("ai-llm")).thenReturn(Optional.of(mock(Topic.class)));
+    when(topicRepository.findBySlug("target-role")).thenReturn(Optional.of(mock(Topic.class)));
     when(topicRepository.save(any(Topic.class))).thenAnswer(inv -> inv.getArgument(0));
 
     topicSeeder.seed();
@@ -65,8 +65,8 @@ class TopicSeederTest {
     topicSeeder.seed();
 
     Topic first = captor.getAllValues().get(0);
-    assertThat(first.getSlug()).isEqualTo("ai-llm");
-    assertThat(first.getName()).isEqualTo("AI/LLM");
+    assertThat(first.getSlug()).isEqualTo("target-role");
+    assertThat(first.getName()).isEqualTo("Target Role");
     assertThat(first.getDisplayOrder()).isEqualTo(1);
     assertThat(first.isActive()).isTrue();
   }
