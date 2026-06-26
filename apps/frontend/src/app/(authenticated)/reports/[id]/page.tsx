@@ -245,6 +245,14 @@ export default function ReportDetailPage() {
   // Render real API report
   if (!report) return null
 
+  const newPostings = report.articles.slice(0, 3)
+  const deadlinePostings = report.articles.slice(3)
+  const recommendedActions = report.content
+    .split('\n')
+    .filter((line) => /^\d+\.\s/.test(line.trim()))
+    .map((line) => line.replace(/^\d+\.\s/, '').trim())
+    .filter(Boolean)
+
   return (
     <div>
       <Link
@@ -274,30 +282,124 @@ export default function ReportDetailPage() {
             </p>
           )}
 
-          <div className="mt-8 prose prose-sm max-w-none">
-            <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-foreground">
-              {report.content}
-            </pre>
-          </div>
+          {/* New postings */}
+          {newPostings.length > 0 && (
+            <section className="mt-8">
+              <h2 className="flex items-center gap-2 text-base font-semibold text-foreground">
+                📌 신규 공고
+                <Badge variant="muted">{newPostings.length}건</Badge>
+              </h2>
+              <div className="mt-4 space-y-4">
+                {newPostings.map((article, i) => (
+                  <Card key={i} className="overflow-hidden">
+                    <CardContent className="p-5">
+                      <a
+                        href={article.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 font-medium text-foreground hover:text-primary"
+                      >
+                        {article.title}
+                        <ExternalLink className="size-3.5 shrink-0 text-muted-foreground" />
+                      </a>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {article.source}
+                        {article.publishedAt
+                          ? ` · ${article.publishedAt.slice(0, 10)}`
+                          : ''}
+                      </p>
+                      {article.summary && (
+                        <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+                          {article.summary}
+                        </p>
+                      )}
+                      {article.whyItMatters && (
+                        <div className="mt-3 rounded-lg bg-primary/5 px-3 py-2">
+                          <p className="text-xs font-medium text-primary">
+                            매칭 이유
+                          </p>
+                          <p className="mt-0.5 text-xs text-foreground">
+                            {article.whyItMatters}
+                          </p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </section>
+          )}
 
-          {report.articles.length > 0 && (
-            <div className="mt-10 border-t pt-8 space-y-4">
-              <h2 className="text-base font-semibold">출처</h2>
-              {report.articles.map((article, i) => (
-                <div key={i} className="space-y-1">
-                  <a
-                    href={article.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+          {/* Deadline-near postings */}
+          {deadlinePostings.length > 0 && (
+            <section className="mt-8">
+              <h2 className="flex items-center gap-2 text-base font-semibold text-foreground">
+                ⏰ 마감 임박 공고
+                <Badge variant="muted">{deadlinePostings.length}건</Badge>
+              </h2>
+              <div className="mt-4 space-y-4">
+                {deadlinePostings.map((article, i) => (
+                  <Card
+                    key={i}
+                    className="overflow-hidden border-amber-200/60 dark:border-amber-900/40"
                   >
-                    {article.title}
-                    <ExternalLink className="size-3.5" />
-                  </a>
-                  <p className="text-xs text-muted-foreground">{article.source}</p>
-                </div>
-              ))}
-            </div>
+                    <CardContent className="p-5">
+                      <a
+                        href={article.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 font-medium text-foreground hover:text-primary"
+                      >
+                        {article.title}
+                        <ExternalLink className="size-3.5 shrink-0 text-muted-foreground" />
+                      </a>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {article.source}
+                        {article.publishedAt
+                          ? ` · ${article.publishedAt.slice(0, 10)}`
+                          : ''}
+                      </p>
+                      {article.summary && (
+                        <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+                          {article.summary}
+                        </p>
+                      )}
+                      {article.whyItMatters && (
+                        <div className="mt-3 rounded-lg bg-primary/5 px-3 py-2">
+                          <p className="text-xs font-medium text-primary">
+                            매칭 이유
+                          </p>
+                          <p className="mt-0.5 text-xs text-foreground">
+                            {article.whyItMatters}
+                          </p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Recommended actions extracted from content */}
+          {recommendedActions.length > 0 && (
+            <section className="mt-8">
+              <h2 className="text-base font-semibold text-foreground">
+                💡 오늘의 추천 액션
+              </h2>
+              <Card className="mt-4 border-border bg-secondary/40">
+                <CardContent className="p-5">
+                  <ul className="space-y-2.5">
+                    {recommendedActions.map((action, i) => (
+                      <li key={i} className="flex items-start gap-2.5 text-sm">
+                        <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-primary" />
+                        <span className="text-foreground">{action}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+            </section>
           )}
 
           <div className="mt-10 border-t pt-8">
@@ -310,6 +412,12 @@ export default function ReportDetailPage() {
           <Card>
             <CardContent className="p-5">
               <p className="text-sm font-medium text-foreground">이 브리핑</p>
+              {report.articles.length > 0 && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  신규 공고 {newPostings.length}건 · 마감 임박{' '}
+                  {deadlinePostings.length}건
+                </p>
+              )}
               <div className="mt-4 space-y-2">
                 <button
                   type="button"
@@ -341,13 +449,13 @@ export default function ReportDetailPage() {
                 내일도 받아보세요
               </p>
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                주제를 더 추가하면 브리핑이 더 풍부해집니다.
+                선호 기업·스킬을 추가하면 브리핑이 더 정확해집니다.
               </p>
               <Link
                 href="/onboarding"
                 className={cn(buttonVariants({ size: 'sm' }), 'mt-3 w-full')}
               >
-                주제 편집
+                선호도 편집
               </Link>
             </CardContent>
           </Card>

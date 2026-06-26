@@ -221,7 +221,7 @@ export default function DashboardPage() {
                 ? summary.subscribedTopics.flatMap((t) => t.keywords ?? []).map((k) => (
                     <Badge key={k}>{k}</Badge>
                   ))
-                : ['Next.js', 'PostgreSQL', 'LLM'].map((k) => (
+                : ['백엔드 개발자', '네이버', 'Spring Boot'].map((k) => (
                     <Badge key={k}>{k}</Badge>
                   ))}
             </div>

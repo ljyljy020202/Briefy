@@ -1,12 +1,6 @@
 // TODO: Remove this file when all backend endpoints are fully implemented.
 // Used by landing page for sample display and as dev fallback in authenticated pages.
 
-export type MockTopic = {
-  id: string
-  label: string
-  description: string
-}
-
 export type MockReportStatus = 'delivered' | 'scheduled' | 'draft'
 
 export type MockReportSection = {
@@ -28,29 +22,42 @@ export type MockReport = {
   sections: MockReportSection[]
 }
 
-export const MOCK_TOPICS: MockTopic[] = [
-  { id: 'ai', label: 'AI / 머신러닝', description: '최신 모델, 논문, 릴리즈' },
-  { id: 'dev', label: '백엔드 개발', description: '아키텍처, 인프라, DevOps' },
-  { id: 'startup', label: '스타트업', description: '투자, 채용, 시장 동향' },
-  { id: 'finance', label: '경제 / 금융', description: '시장, 금리, 환율' },
-  { id: 'product', label: '프로덕트', description: '디자인, 그로스, PM' },
-  { id: 'security', label: '보안', description: 'CVE, 침해 사고, 대응' },
-  { id: 'cloud', label: '클라우드', description: 'AWS, GCP, Azure 소식' },
-  { id: 'opensource', label: '오픈소스', description: '주요 릴리즈와 PR' },
-]
-
-export const SUGGESTED_KEYWORDS = [
-  'Next.js',
-  'PostgreSQL',
-  'Kubernetes',
-  'LLM',
-  'Rust',
-  'gRPC',
-  'Vercel',
-  'Kafka',
-  '금리 인하',
-  'Series A',
-]
+// Per-topic suggested values for the onboarding keyword step.
+// Keys match Topic.name values seeded in the backend.
+export const JOB_KEYWORD_SUGGESTIONS: Record<string, string[]> = {
+  'Target Role': [
+    '백엔드 개발자',
+    '풀스택 개발자',
+    '데이터 엔지니어',
+    'DevOps 엔지니어',
+    'iOS 개발자',
+    'Android 개발자',
+  ],
+  'Target Companies': [
+    '네이버',
+    '카카오',
+    '라인',
+    '쿠팡',
+    '토스',
+    '당근마켓',
+    '배달의민족',
+    '크래프톤',
+  ],
+  'Skills / Competencies': [
+    'Spring Boot',
+    'Python',
+    'Kotlin',
+    'Java',
+    'React',
+    'TypeScript',
+    'AWS',
+    'Docker',
+    'Kubernetes',
+  ],
+  Location: ['서울', '판교', '부산', '재택 가능'],
+  'Experience Level': ['신입', '1~3년', '3~5년', '5년 이상', '경력 무관'],
+  'Employment Type': ['정규직', '계약직', '인턴'],
+}
 
 export const DELIVERY_TIMES = [
   { id: 'early', label: '오전 6시', hint: '출근 전 미리' },
@@ -61,141 +68,145 @@ export const DELIVERY_TIMES = [
 
 export const MOCK_REPORTS: MockReport[] = [
   {
-    id: 'r-2026-06-25',
-    title: '6월 25일 아침 브리핑',
-    date: '2026년 6월 25일 (목)',
-    readTime: '4분 분량',
+    id: 'r-2026-06-26',
+    title: '6월 26일 채용 브리핑 — 백엔드 개발자',
+    date: '2026년 6월 26일 (금)',
+    readTime: '3분 분량',
     status: 'delivered',
-    topics: ['AI / 머신러닝', '백엔드 개발', '클라우드'],
+    topics: ['목표 직무', '관심 기업', '핵심 스킬'],
     preview:
-      '오픈소스 LLM 추론 비용이 다시 한 번 절반으로 줄었고, 주요 클라우드 3사가 동시에 서버리스 GPU를 발표했습니다.',
+      '네이버·카카오·라인에서 신규 공고 3건, 마감 임박 공고 2건이 확인됐습니다. Spring Boot 스킬과 직접 매칭되는 포지션이 포함돼 있습니다.',
     highlights: [
-      '신규 오픈 가중치 모델, 추론 비용 52% 절감',
-      'AWS·GCP·Azure, 서버리스 GPU 동시 공개',
-      'PostgreSQL 18 RC1 — 비동기 I/O 정식 지원',
+      '네이버 — 백엔드 개발자 신규 공고 (Spring Boot 스킬 매칭)',
+      '카카오 — 풀스택 개발자, 마감 D-2',
+      '관심 기업 3곳 신규 공고 3건 · 마감 임박 2건',
     ],
     sections: [
       {
-        heading: 'AI / 머신러닝',
+        heading: '📌 신규 공고',
         summary:
-          '새 오픈 가중치 모델이 동급 성능을 유지하면서 추론 비용을 절반 가까이 낮췄습니다. 양자화 친화적 구조가 핵심입니다.',
+          '오늘 관심 기업에서 새로 올라온 채용 공고입니다. 설정하신 직무·스킬 기준으로 매칭 이유를 함께 정리했습니다.',
         bullets: [
-          '7B 규모로 70B급 추론 정확도에 근접',
-          'MoE 라우팅 최적화로 토큰당 비용 52% 감소',
-          'Apache 2.0 라이선스로 상업적 사용 가능',
+          '네이버 — 백엔드 개발자 | Spring Boot, Java | 신입·경력 무관 | 원티드',
+          '카카오 — 풀스택 개발자 | Python, React | 경력 3년 이상 | 잡코리아',
+          '라인 — 서버 엔지니어 | Kotlin, gRPC | 경력 5년 이상 | LinkedIn',
         ],
-        source: 'arXiv · HuggingFace',
+        source: '원티드 · 잡코리아 · LinkedIn',
       },
       {
-        heading: '클라우드 인프라',
+        heading: '⏰ 마감 임박 공고 (3일 이내)',
         summary:
-          '세 개 주요 클라우드 사업자가 같은 주에 서버리스 GPU 제품을 발표하며 콜드 스타트 경쟁이 본격화됐습니다.',
+          '지원 마감이 3일 이내로 다가온 공고입니다. 서류를 미리 준비해 두었다면 지금 바로 지원하세요.',
         bullets: [
-          '초당 과금, 콜드 스타트 2초 이내 목표',
-          'Inference 전용 인스턴스 프리뷰 시작',
-          '컨테이너 이미지 그대로 배포 가능',
+          '쿠팡 — 백엔드 개발자 | D-1 | Java, Spring | 사람인',
+          '토스 — 서버 개발자 | D-2 | Kotlin, AWS | 원티드',
         ],
-        source: 'AWS Blog · GCP Release Notes',
+        source: '사람인 · 원티드',
       },
       {
-        heading: '백엔드 개발',
-        summary:
-          'PostgreSQL 18 RC1이 비동기 I/O를 정식 지원하며, 고동시성 워크로드에서 의미 있는 처리량 향상을 보였습니다.',
+        heading: '💡 오늘의 추천 액션',
+        summary: 'Briefy가 오늘의 브리핑을 바탕으로 제안하는 행동 목록입니다.',
         bullets: [
-          'io_uring 기반 비동기 I/O 정식 도입',
-          '읽기 집약 워크로드에서 처리량 최대 2.8배',
-          'pg_upgrade 호환성 유지',
+          '네이버·카카오의 신규 공고를 원문 링크로 확인하고 지원 여부를 결정하세요.',
+          '포트폴리오에 Spring Boot 프로젝트 비중을 높이면 서류 통과율이 높아집니다.',
+          '쿠팡 공고는 D-1 마감 — 오늘 중 지원하지 않으면 기회를 놓칩니다.',
+          'GitHub 최근 커밋 이력을 지원 전 한 번 더 확인하세요.',
         ],
-        source: 'PostgreSQL Weekly',
+      },
+    ],
+  },
+  {
+    id: 'r-2026-06-25',
+    title: '6월 25일 채용 브리핑 — 백엔드 개발자',
+    date: '2026년 6월 25일 (목)',
+    readTime: '3분 분량',
+    status: 'delivered',
+    topics: ['목표 직무', '관심 기업', '선호 지역'],
+    preview:
+      '당근마켓·배달의민족에서 신규 공고 2건이 올라왔습니다. 판교 근무와 재택 가능 조건이 포함된 포지션이 있습니다.',
+    highlights: [
+      '당근마켓 — 백엔드 개발자 신규 공고 (판교 근무)',
+      '배달의민족 — 풀스택 개발자, AWS·Docker 스킬 매칭',
+      '네이버 서버 엔지니어 마감 D-1',
+    ],
+    sections: [
+      {
+        heading: '📌 신규 공고',
+        summary:
+          '어제 기준으로 새로 등록된 공고입니다. 관심 기업 키워드와 선호 지역 기준으로 필터링했습니다.',
+        bullets: [
+          '당근마켓 — 백엔드 개발자 | Java, Spring | 판교 | 원티드',
+          '배달의민족 — 풀스택 개발자 | React, AWS, Docker | 서울 | 잡코리아',
+        ],
+        source: '원티드 · 잡코리아',
+      },
+      {
+        heading: '⏰ 마감 임박 공고 (3일 이내)',
+        summary: '관심 목록에서 마감이 임박한 공고입니다.',
+        bullets: ['네이버 — 서버 엔지니어 | D-1 | Kotlin | 채용 홈페이지'],
+        source: '채용 홈페이지',
+      },
+      {
+        heading: '💡 오늘의 추천 액션',
+        summary: 'Briefy의 오늘 제안입니다.',
+        bullets: [
+          '당근마켓 공고는 판교 근무 — 출퇴근 조건이 맞는다면 빠르게 지원하세요.',
+          '네이버 서버 엔지니어 공고 D-1 — 오늘 지원이 최선입니다.',
+          'Docker·AWS 경험이 있다면 배달의민족 공고 매칭 점수가 높습니다.',
+        ],
       },
     ],
   },
   {
     id: 'r-2026-06-24',
-    title: '6월 24일 아침 브리핑',
+    title: '6월 24일 채용 브리핑 — 백엔드 개발자',
     date: '2026년 6월 24일 (수)',
-    readTime: '3분 분량',
-    status: 'delivered',
-    topics: ['스타트업', '경제 / 금융'],
-    preview:
-      '국내 AI 인프라 스타트업이 시리즈 B를 마감했고, 미국 연준은 금리 동결을 시사했습니다.',
-    highlights: [
-      'AI 인프라 스타트업, 시리즈 B 4,200만 달러',
-      '연준 의장, 추가 인상 가능성 낮춰',
-      '개발자 채용 시장, 인프라 직군 중심 회복세',
-    ],
-    sections: [
-      {
-        heading: '스타트업 / 투자',
-        summary:
-          'GPU 스케줄링을 자동화하는 인프라 스타트업이 시리즈 B를 마감하며 기업 가치를 두 배로 끌어올렸습니다.',
-        bullets: [
-          '시리즈 B 4,200만 달러 유치',
-          '주요 고객사 분기 매출 3배 성장',
-          '플랫폼·SRE 직군 집중 채용 예정',
-        ],
-        source: 'TechCrunch',
-      },
-      {
-        heading: '경제 / 금융',
-        summary:
-          '연준은 인플레이션 둔화를 근거로 금리 동결 기조를 재확인했고, 시장은 연내 인하 가능성에 무게를 뒀습니다.',
-        bullets: [
-          '기준금리 동결, 추가 인상 가능성 축소',
-          '기술주 중심으로 위험 선호 회복',
-          '환율 변동성 완화 흐름',
-        ],
-        source: 'Bloomberg',
-      },
-    ],
-  },
-  {
-    id: 'r-2026-06-23',
-    title: '6월 23일 아침 브리핑',
-    date: '2026년 6월 23일 (화)',
     readTime: '4분 분량',
     status: 'delivered',
-    topics: ['보안', '오픈소스', '백엔드 개발'],
+    topics: ['목표 직무', '고용 형태', '선호 지역'],
     preview:
-      '널리 쓰이는 직렬화 라이브러리에서 원격 코드 실행 취약점이 공개되어 즉시 패치가 권고됩니다.',
+      '쿠팡·토스·카카오에서 정규직 백엔드 개발자 공고 3건이 확인됐습니다. 서울 및 재택 가능 포지션 위주로 정리했습니다.',
     highlights: [
-      '인기 직렬화 라이브러리에서 RCE 취약점 공개',
-      '주요 런타임, 보안 패치 릴리즈',
-      '컨테이너 런타임 메모리 사용량 30% 절감 업데이트',
+      '토스 — 서버 개발자 신규 공고 (재택 가능, Kotlin 매칭)',
+      '카카오 — 정규직 백엔드, 경력 3년 이상 우대',
+      '신규 공고 3건 모두 정규직 · 서울/재택 근무',
     ],
     sections: [
       {
-        heading: '보안',
-        summary:
-          '광범위하게 사용되는 직렬화 라이브러리에서 신뢰할 수 없는 입력으로 RCE가 가능한 취약점이 보고됐습니다.',
+        heading: '📌 신규 공고',
+        summary: '서울·재택 조건과 정규직 필터를 적용한 결과입니다.',
         bullets: [
-          'CVSS 9.1, 즉시 업그레이드 권고',
-          '임시 완화책으로 입력 검증 강화 제시',
-          '주요 배포판에 패치 백포트 진행 중',
+          '토스 — 서버 개발자 | Kotlin, AWS | 재택 가능 | 원티드',
+          '카카오 — 백엔드 개발자 | Java, Kafka | 서울 | LinkedIn',
+          '쿠팡 — 백엔드 엔지니어 | Spring Boot | 서울 | 채용 홈페이지',
         ],
-        source: 'NVD · GitHub Advisory',
+        source: '원티드 · LinkedIn · 채용 홈페이지',
       },
       {
-        heading: '오픈소스',
-        summary:
-          '대표 컨테이너 런타임의 새 마이너 릴리즈가 메모리 사용량을 크게 줄이며 엣지 환경에 적합해졌습니다.',
+        heading: '⏰ 마감 임박 공고 (3일 이내)',
+        summary: '이번 주 내로 마감되는 공고가 없습니다.',
+        bullets: ['오늘 기준 3일 이내 마감 임박 공고 없음'],
+      },
+      {
+        heading: '💡 오늘의 추천 액션',
+        summary: '오늘의 추천 액션입니다.',
         bullets: [
-          '런타임 메모리 사용량 약 30% 감소',
-          '시작 시간 단축으로 콜드 스타트 개선',
-          'cgroup v2 기본 활성화',
+          '토스 공고는 재택 가능 — 거주지 무관하게 지원할 수 있습니다.',
+          'Kotlin 경험이 있다면 토스 우선 지원을 고려해 보세요.',
+          '카카오·쿠팡 공고는 마감 여유가 있으니 서류를 충분히 다듬은 뒤 제출하세요.',
         ],
-        source: 'CNCF Blog',
       },
     ],
   },
   {
-    id: 'r-2026-06-26',
-    title: '6월 26일 아침 브리핑',
-    date: '2026년 6월 26일 (금)',
+    id: 'r-2026-06-27',
+    title: '6월 27일 채용 브리핑 — 백엔드 개발자',
+    date: '2026년 6월 27일 (토)',
     readTime: '예약됨',
     status: 'scheduled',
-    topics: ['AI / 머신러닝', '프로덕트'],
-    preview: '내일 오전 8시에 전송될 예정입니다. 주제와 키워드는 언제든 수정할 수 있습니다.',
+    topics: ['목표 직무', '관심 기업', '핵심 스킬'],
+    preview:
+      '내일 오전 8시에 전송될 예정입니다. 선호도는 언제든 수정할 수 있습니다.',
     highlights: [],
     sections: [],
   },
@@ -203,9 +214,9 @@ export const MOCK_REPORTS: MockReport[] = [
 
 export const MOCK_STATS = [
   { label: '연속 수신', value: '23일', hint: '꾸준히 읽고 있어요' },
-  { label: '이번 주 절약 시간', value: '2.5시간', hint: '직접 검색 대비' },
-  { label: '구독 주제', value: '5개', hint: '맞춤 큐레이션' },
-  { label: '평균 읽기 시간', value: '3.8분', hint: '핵심만 요약' },
+  { label: '오늘 신규 공고', value: '3건', hint: '관심 기업 기준' },
+  { label: '설정 선호도', value: '6개', hint: '직무·기업·스킬 등' },
+  { label: '마감 임박', value: '2건', hint: '3일 이내 마감' },
 ]
 
 export function getMockReport(id: string): MockReport | undefined {

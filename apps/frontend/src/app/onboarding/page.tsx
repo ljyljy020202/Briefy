@@ -22,9 +22,9 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { BriefyLogo } from '@/components/briefy/BriefyLogo'
 import { GoogleLoginButton } from '@/components/auth/GoogleLoginButton'
-import { SUGGESTED_KEYWORDS, DELIVERY_TIMES } from '@/lib/mock-data'
+import { JOB_KEYWORD_SUGGESTIONS, DELIVERY_TIMES } from '@/lib/mock-data'
 
-const STEPS = ['계정', '주제', '키워드', '발송 시간']
+const STEPS = ['계정', '선호도 항목', '세부 값', '발송 시간']
 
 export default function OnboardingPage() {
   const router = useRouter()
@@ -37,9 +37,9 @@ export default function OnboardingPage() {
   const [availableTopics, setAvailableTopics] = useState<Topic[]>([])
   const [selectedTopicIds, setSelectedTopicIds] = useState<Set<number>>(new Set())
 
-  // Step 2 — global keywords
-  const [keywords, setKeywords] = useState<string[]>([])
-  const [keywordInput, setKeywordInput] = useState('')
+  // Step 2 — per-topic keywords
+  const [keywordsByTopic, setKeywordsByTopic] = useState<Map<number, string[]>>(new Map())
+  const [keywordInputByTopic, setKeywordInputByTopic] = useState<Map<number, string>>(new Map())
 
   // Step 3 — delivery time (display only; no backend field yet)
   const [deliveryTime, setDeliveryTime] = useState('morning')
@@ -76,20 +76,35 @@ export default function OnboardingPage() {
       return next
     })
 
-  const addKeyword = (value: string) => {
+  const addKeywordForTopic = (topicId: number, value: string) => {
     const v = value.trim()
-    if (v && !keywords.includes(v) && keywords.length < 20) {
-      setKeywords((prev) => [...prev, v])
-    }
-    setKeywordInput('')
+    if (!v) return
+    setKeywordsByTopic((prev) => {
+      const next = new Map(prev)
+      const existing = next.get(topicId) ?? []
+      if (!existing.includes(v) && existing.length < 20) {
+        next.set(topicId, [...existing, v])
+      }
+      return next
+    })
+    setKeywordInputByTopic((prev) => {
+      const next = new Map(prev)
+      next.set(topicId, '')
+      return next
+    })
   }
 
-  const removeKeyword = (value: string) =>
-    setKeywords((prev) => prev.filter((k) => k !== value))
+  const removeKeywordForTopic = (topicId: number, value: string) => {
+    setKeywordsByTopic((prev) => {
+      const next = new Map(prev)
+      next.set(topicId, (next.get(topicId) ?? []).filter((k) => k !== value))
+      return next
+    })
+  }
 
   const handleSubmit = async () => {
     if (selectedTopicIds.size === 0) {
-      setError('주제를 1개 이상 선택해 주세요.')
+      setError('항목을 1개 이상 선택해 주세요.')
       return
     }
     setSubmitting(true)
@@ -98,7 +113,9 @@ export default function OnboardingPage() {
     try {
       const bulkTopics = Array.from(selectedTopicIds).map((topicId) => ({
         topicId,
-        keywords: keywords.length > 0 ? keywords : ['general'],
+        keywords: (keywordsByTopic.get(topicId) ?? []).length > 0
+          ? keywordsByTopic.get(topicId)!
+          : ['general'],
       }))
 
       await topicsApi.subscribeBulk({ topics: bulkTopics })
@@ -195,14 +212,14 @@ export default function OnboardingPage() {
               </div>
             )}
 
-            {/* Step 1 — topics */}
+            {/* Step 1 — preference categories */}
             {step === 1 && (
               <div>
                 <h1 className="text-2xl font-bold tracking-tight text-foreground">
-                  어떤 주제가 궁금하세요?
+                  채용 선호도 항목을 선택하세요
                 </h1>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  최소 1개 이상 선택하세요. 나중에 언제든 바꿀 수 있습니다.
+                  관리하고 싶은 항목을 고르세요. 다음 단계에서 세부 값을 입력합니다.
                 </p>
                 <div className="mt-6 grid gap-3 sm:grid-cols-2">
                   {availableTopics.map((topic) => {
@@ -247,78 +264,124 @@ export default function OnboardingPage() {
               </div>
             )}
 
-            {/* Step 2 — keywords */}
+            {/* Step 2 — per-topic keyword input */}
             {step === 2 && (
               <div>
                 <h1 className="text-2xl font-bold tracking-tight text-foreground">
-                  키워드를 추가하세요
+                  선호도를 입력해 주세요
                 </h1>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  특정 기술이나 회사 이름을 넣으면 더 정교하게 큐레이션됩니다.
+                  각 항목에 해당하는 값을 입력하면 브리핑이 더 정확해집니다.
+                  건너뛰어도 됩니다.
                 </p>
 
-                <form
-                  className="mt-6 flex gap-2"
-                  onSubmit={(e) => {
-                    e.preventDefault()
-                    addKeyword(keywordInput)
-                  }}
-                >
-                  <div className="relative flex-1">
-                    <Hash className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      value={keywordInput}
-                      onChange={(e) => setKeywordInput(e.target.value)}
-                      placeholder="예: Kubernetes, LLM, 금리"
-                      className="pl-9"
-                    />
-                  </div>
-                  <Button type="submit" size="lg" className="h-10 px-4">
-                    <Plus className="size-4" />
-                    추가
-                  </Button>
-                </form>
+                <div className="mt-6 space-y-5">
+                  {availableTopics
+                    .filter((t) => selectedTopicIds.has(t.id))
+                    .map((topic) => {
+                      const topicKeywords = keywordsByTopic.get(topic.id) ?? []
+                      const topicInput = keywordInputByTopic.get(topic.id) ?? ''
+                      const suggestions = JOB_KEYWORD_SUGGESTIONS[topic.name] ?? []
+                      const unusedSuggestions = suggestions.filter(
+                        (s) => !topicKeywords.includes(s),
+                      )
 
-                {keywords.length > 0 && (
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {keywords.map((k) => (
-                      <span
-                        key={k}
-                        className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 py-1 pl-3 pr-1.5 text-sm font-medium text-primary"
-                      >
-                        {k}
-                        <button
-                          type="button"
-                          aria-label={`${k} 삭제`}
-                          onClick={() => removeKeyword(k)}
-                          className="flex size-5 items-center justify-center rounded-full hover:bg-primary/20"
+                      return (
+                        <div
+                          key={topic.id}
+                          className="rounded-xl border border-border p-4"
                         >
-                          <X className="size-3" />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
+                          <p className="text-sm font-medium text-foreground">
+                            {topic.name}
+                          </p>
+                          <p className="mt-0.5 text-xs text-muted-foreground">
+                            {topic.description}
+                          </p>
 
-                <div className="mt-6">
-                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    추천 키워드
-                  </p>
-                  <div className="mt-2.5 flex flex-wrap gap-2">
-                    {SUGGESTED_KEYWORDS.filter(
-                      (k) => !keywords.includes(k),
-                    ).map((k) => (
-                      <button
-                        key={k}
-                        type="button"
-                        onClick={() => addKeyword(k)}
-                        className="inline-flex items-center gap-1 rounded-full border border-border bg-card px-3 py-1 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
-                      >
-                        <Plus className="size-3" />
-                        {k}
-                      </button>
-                    ))}
-                  </div>
+                          <form
+                            className="mt-3 flex gap-2"
+                            onSubmit={(e) => {
+                              e.preventDefault()
+                              addKeywordForTopic(topic.id, topicInput)
+                            }}
+                          >
+                            <div className="relative flex-1">
+                              <Hash className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                              <Input
+                                value={topicInput}
+                                onChange={(e) =>
+                                  setKeywordInputByTopic((prev) => {
+                                    const next = new Map(prev)
+                                    next.set(topic.id, e.target.value)
+                                    return next
+                                  })
+                                }
+                                placeholder={
+                                  suggestions[0]
+                                    ? `예: ${suggestions[0]}`
+                                    : '직접 입력…'
+                                }
+                                className="pl-9"
+                              />
+                            </div>
+                            <Button
+                              type="submit"
+                              size="sm"
+                              className="h-10 px-3"
+                            >
+                              <Plus className="size-4" />
+                              추가
+                            </Button>
+                          </form>
+
+                          {topicKeywords.length > 0 && (
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {topicKeywords.map((k) => (
+                                <span
+                                  key={k}
+                                  className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 py-1 pl-3 pr-1.5 text-sm font-medium text-primary"
+                                >
+                                  {k}
+                                  <button
+                                    type="button"
+                                    aria-label={`${k} 삭제`}
+                                    onClick={() =>
+                                      removeKeywordForTopic(topic.id, k)
+                                    }
+                                    className="flex size-5 items-center justify-center rounded-full hover:bg-primary/20"
+                                  >
+                                    <X className="size-3" />
+                                  </button>
+                                </span>
+                              ))}
+                            </div>
+                          )}
+
+                          {unusedSuggestions.length > 0 && (
+                            <div className="mt-3">
+                              <p className="text-xs text-muted-foreground">
+                                추천
+                              </p>
+                              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                                {unusedSuggestions.slice(0, 6).map((s) => (
+                                  <button
+                                    key={s}
+                                    type="button"
+                                    onClick={() =>
+                                      addKeywordForTopic(topic.id, s)
+                                    }
+                                    className="inline-flex items-center gap-1 rounded-full border border-border bg-card px-2.5 py-0.5 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+                                  >
+                                    <Plus className="size-2.5" />
+                                    {s}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
                 </div>
               </div>
             )}
@@ -372,17 +435,20 @@ export default function OnboardingPage() {
 
                 <div className="mt-6 rounded-xl border border-border bg-secondary/40 p-4">
                   <p className="text-sm font-medium text-foreground">설정 요약</p>
-                  <div className="mt-3 flex flex-wrap gap-1.5">
+                  <div className="mt-3 space-y-2">
                     {availableTopics
                       .filter((t) => selectedTopicIds.has(t.id))
-                      .map((t) => (
-                        <Badge key={t.id} variant="muted">
-                          {t.name}
-                        </Badge>
-                      ))}
-                    {keywords.map((k) => (
-                      <Badge key={k}>{k}</Badge>
-                    ))}
+                      .map((t) => {
+                        const kws = keywordsByTopic.get(t.id) ?? []
+                        return (
+                          <div key={t.id} className="flex flex-wrap gap-1.5">
+                            <Badge variant="muted">{t.name}</Badge>
+                            {kws.map((k) => (
+                              <Badge key={k}>{k}</Badge>
+                            ))}
+                          </div>
+                        )
+                      })}
                   </div>
                 </div>
               </div>

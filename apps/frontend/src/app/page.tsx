@@ -20,8 +20,8 @@ import { MOCK_REPORTS } from '@/lib/mock-data'
 const FEATURES = [
   {
     icon: Filter,
-    title: '주제와 키워드로 큐레이션',
-    desc: '관심 주제와 키워드를 선택하면, 노이즈를 걷어내고 정말 중요한 소식만 모읍니다.',
+    title: '선호도 기반 큐레이션',
+    desc: '목표 직무·기업·스킬을 설정하면, 노이즈를 걷어내고 정말 관련 있는 정보만 모읍니다.',
   },
   {
     icon: Sparkles,
@@ -43,8 +43,8 @@ const FEATURES = [
 const STEPS = [
   {
     step: '01',
-    title: '주제를 고르세요',
-    desc: 'AI, 백엔드, 스타트업 등 관심 분야와 키워드를 선택합니다.',
+    title: '선호도를 설정하세요',
+    desc: '희망 직무, 관심 기업, 핵심 스킬 등 채용 선호도를 항목별로 입력합니다.',
   },
   {
     step: '02',
@@ -82,6 +82,11 @@ export default function LandingPage() {
             <p className="mx-auto mt-6 max-w-md text-pretty text-base leading-relaxed text-muted-foreground sm:text-lg">
               Briefy는 당신이 고른 주제와 키워드를 바탕으로, AI가 정리한 하루치
               브리핑을 매일 아침 이메일로 보내드립니다.
+            </p>
+            <p className="mx-auto mt-3 max-w-sm text-sm text-muted-foreground/80">
+              지금은{' '}
+              <span className="font-medium text-foreground">개발자 채용 브리핑</span>을
+              제공합니다 — 신규 공고·마감 임박·매칭 이유를 매일 아침 한눈에.
             </p>
             <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
               <Link
@@ -185,11 +190,11 @@ export default function LandingPage() {
             <h2 className="text-balance text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
               읽기 좋게 정리된
               <br />
-              하루치 인사이트
+              하루치 채용 브리핑
             </h2>
             <p className="mt-4 text-pretty leading-relaxed text-muted-foreground">
-              섹션별 요약과 핵심 불릿, 출처까지. 길게 읽지 않아도 흐름을 놓치지
-              않습니다. 더 깊이 보고 싶을 땐 원문 링크로 바로 이동하세요.
+              신규 공고·마감 임박·매칭 이유·추천 액션까지. 오늘 지원할 공고를
+              결정하는 데 필요한 정보만 골라 드립니다.
             </p>
             {/* testimonial hidden — not real user data yet */}
           </div>
@@ -241,7 +246,7 @@ export default function LandingPage() {
                 1분이면 끝납니다.
               </p>
               <ul className="mt-6 space-y-2 text-sm text-primary-foreground/90">
-                {['주제 5개까지 선택', '매일 아침 1회 발송', '언제든 해지 가능'].map(
+                {['채용 선호도 설정 (직무·기업·스킬)', '매일 아침 1회 발송', '언제든 해지 가능'].map(
                   (item) => (
                     <li key={item} className="flex items-center gap-2">
                       <Check className="size-4" />
