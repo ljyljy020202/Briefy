@@ -130,9 +130,7 @@ class UserControllerTest {
   @Test
   void deleteAccount_returns404_whenUserNotFound() throws Exception {
     when(currentUserProvider.getCurrentUser()).thenReturn(new AuthenticatedUser(99L));
-    doThrow(new BusinessException(ErrorCode.USER_NOT_FOUND))
-        .when(userService)
-        .deleteAccount(99L);
+    doThrow(new BusinessException(ErrorCode.USER_NOT_FOUND)).when(userService).deleteAccount(99L);
 
     mockMvc
         .perform(delete("/api/users/me"))

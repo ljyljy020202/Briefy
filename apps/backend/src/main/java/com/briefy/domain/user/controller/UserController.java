@@ -30,9 +30,7 @@ public class UserController {
   private final AuthService authService;
 
   public UserController(
-      UserService userService,
-      CurrentUserProvider currentUserProvider,
-      AuthService authService) {
+      UserService userService, CurrentUserProvider currentUserProvider, AuthService authService) {
     this.userService = userService;
     this.currentUserProvider = currentUserProvider;
     this.authService = authService;
