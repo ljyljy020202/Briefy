@@ -1,18 +1,20 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
+import { useState } from 'react'
 import {
   LayoutDashboard,
+  LogOut,
   Newspaper,
   Settings,
-  Sparkles,
   type LucideIcon,
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { BriefyLogo } from '@/components/briefy/BriefyLogo'
 import { useAuthContext } from '@/contexts/AuthContext'
+import { auth, users } from '@/lib/api'
 
 type NavItem = {
   href: string
@@ -28,11 +30,33 @@ const NAV: NavItem[] = [
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
+  const router = useRouter()
   const { user } = useAuthContext()
+  const [loggingOut, setLoggingOut] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const displayName = user?.nickname ?? user?.email?.split('@')[0] ?? '사용자'
   const displayEmail = user?.email ?? ''
   const initial = displayName.slice(0, 1).toUpperCase()
+
+  async function handleLogout() {
+    setLoggingOut(true)
+    try {
+      await auth.logout()
+    } finally {
+      router.replace('/')
+    }
+  }
+
+  async function handleDeleteAccount() {
+    setDeleting(true)
+    try {
+      await users.deleteAccount()
+    } finally {
+      router.replace('/')
+    }
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -64,28 +88,60 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        <div className="mt-auto rounded-xl border border-border bg-card p-4">
-          <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-            <Sparkles className="size-4 text-primary" />
-            Pro 업그레이드
+        <div className="mt-auto space-y-3 px-2">
+          {/* User info + logout */}
+          <div className="flex items-center gap-3">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+              {initial}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-foreground">
+                {displayName}
+              </p>
+              <p className="truncate text-xs text-muted-foreground">
+                {displayEmail}
+              </p>
+            </div>
+            <button
+              onClick={handleLogout}
+              disabled={loggingOut}
+              title="로그아웃"
+              className="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+            >
+              <LogOut className="size-4" />
+            </button>
           </div>
-          <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-            무제한 주제와 하루 두 번 브리핑을 받아보세요.
-          </p>
-        </div>
 
-        <div className="mt-4 flex items-center gap-3 px-2">
-          <span className="flex size-9 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
-            {initial}
-          </span>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-foreground">
-              {displayName}
-            </p>
-            <p className="truncate text-xs text-muted-foreground">
-              {displayEmail}
-            </p>
-          </div>
+          {/* Delete account */}
+          {!showDeleteConfirm ? (
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="w-full text-left text-xs text-muted-foreground transition-colors hover:text-destructive"
+            >
+              회원탈퇴
+            </button>
+          ) : (
+            <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-xs">
+              <p className="font-medium text-foreground">정말 탈퇴하시겠어요?</p>
+              <p className="mt-0.5 text-muted-foreground">모든 데이터가 삭제되며 복구할 수 없습니다.</p>
+              <div className="mt-3 flex gap-2">
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  disabled={deleting}
+                  className="flex-1 rounded-lg border border-border bg-card py-1.5 text-foreground transition-colors hover:bg-muted disabled:opacity-50"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={handleDeleteAccount}
+                  disabled={deleting}
+                  className="flex-1 rounded-lg bg-destructive py-1.5 text-destructive-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+                >
+                  {deleting ? '처리 중...' : '탈퇴하기'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </aside>
 
@@ -114,6 +170,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </Link>
             )
           })}
+          <button
+            onClick={handleLogout}
+            disabled={loggingOut}
+            aria-label="로그아웃"
+            className="flex size-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted disabled:opacity-50"
+          >
+            <LogOut className="size-[18px]" />
+          </button>
         </nav>
       </header>
 

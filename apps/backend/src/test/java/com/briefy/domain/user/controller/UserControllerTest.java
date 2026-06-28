@@ -2,12 +2,16 @@ package com.briefy.domain.user.controller;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.briefy.domain.auth.service.AuthService;
 import com.briefy.domain.user.dto.UpdateOnboardingRequest;
 import com.briefy.domain.user.dto.UpdateOnboardingResponse;
 import com.briefy.domain.user.dto.UserMeResponse;
@@ -23,6 +27,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseCookie;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
@@ -32,6 +37,7 @@ class UserControllerTest {
 
   @Mock private UserService userService;
   @Mock private CurrentUserProvider currentUserProvider;
+  @Mock private AuthService authService;
 
   private MockMvc mockMvc;
 
@@ -41,7 +47,8 @@ class UserControllerTest {
     validator.afterPropertiesSet();
 
     mockMvc =
-        MockMvcBuilders.standaloneSetup(new UserController(userService, currentUserProvider))
+        MockMvcBuilders.standaloneSetup(
+                new UserController(userService, currentUserProvider, authService))
             .setControllerAdvice(new GlobalExceptionHandler())
             .setValidator(validator)
             .build();
@@ -105,6 +112,32 @@ class UserControllerTest {
             patch("/api/users/me/onboarding").contentType(MediaType.APPLICATION_JSON).content("{}"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.onboardingCompleted").value(true));
+  }
+
+  @Test
+  void deleteAccount_returns200_andClearsCookie() throws Exception {
+    when(currentUserProvider.getCurrentUser()).thenReturn(new AuthenticatedUser(1L));
+    doNothing().when(userService).deleteAccount(1L);
+    when(authService.buildExpiredJwtCookie())
+        .thenReturn(ResponseCookie.from("jwt", "").maxAge(0).build());
+
+    mockMvc
+        .perform(delete("/api/users/me"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true));
+  }
+
+  @Test
+  void deleteAccount_returns404_whenUserNotFound() throws Exception {
+    when(currentUserProvider.getCurrentUser()).thenReturn(new AuthenticatedUser(99L));
+    doThrow(new BusinessException(ErrorCode.USER_NOT_FOUND))
+        .when(userService)
+        .deleteAccount(99L);
+
+    mockMvc
+        .perform(delete("/api/users/me"))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.error.code").value("USER_NOT_FOUND"));
   }
 
   @Test

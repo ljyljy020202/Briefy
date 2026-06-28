@@ -1,5 +1,9 @@
 package com.briefy.domain.user.service;
 
+import com.briefy.domain.briefing.entity.BriefingReport;
+import com.briefy.domain.briefing.repository.BriefingJobRepository;
+import com.briefy.domain.briefing.repository.BriefingReportRepository;
+import com.briefy.domain.topic.repository.UserTopicRepository;
 import com.briefy.domain.user.dto.UpdateOnboardingRequest;
 import com.briefy.domain.user.dto.UpdateOnboardingResponse;
 import com.briefy.domain.user.dto.UserMeResponse;
@@ -8,6 +12,7 @@ import com.briefy.domain.user.entity.User;
 import com.briefy.domain.user.repository.UserRepository;
 import com.briefy.global.exception.BusinessException;
 import com.briefy.global.exception.ErrorCode;
+import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,9 +21,19 @@ import org.springframework.transaction.annotation.Transactional;
 public class UserService {
 
   private final UserRepository userRepository;
+  private final UserTopicRepository userTopicRepository;
+  private final BriefingReportRepository briefingReportRepository;
+  private final BriefingJobRepository briefingJobRepository;
 
-  public UserService(UserRepository userRepository) {
+  public UserService(
+      UserRepository userRepository,
+      UserTopicRepository userTopicRepository,
+      BriefingReportRepository briefingReportRepository,
+      BriefingJobRepository briefingJobRepository) {
     this.userRepository = userRepository;
+    this.userTopicRepository = userTopicRepository;
+    this.briefingReportRepository = briefingReportRepository;
+    this.briefingJobRepository = briefingJobRepository;
   }
 
   public UserMeResponse getMe(Long userId) {
@@ -40,6 +55,18 @@ public class UserService {
             .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
     user.completeOnboarding(request.nickname());
     return new UpdateOnboardingResponse(user.isOnboardingCompleted());
+  }
+
+  @Transactional
+  public void deleteAccount(Long userId) {
+    if (!userRepository.existsById(userId)) {
+      throw new BusinessException(ErrorCode.USER_NOT_FOUND);
+    }
+    userTopicRepository.deleteAllByUserId(userId);
+    List<BriefingReport> reports = briefingReportRepository.findAllByUserId(userId);
+    briefingReportRepository.deleteAll(reports);
+    briefingJobRepository.deleteAllByUserId(userId);
+    userRepository.deleteById(userId);
   }
 
   @Transactional

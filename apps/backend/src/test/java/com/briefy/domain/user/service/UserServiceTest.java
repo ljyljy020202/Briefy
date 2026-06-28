@@ -7,6 +7,9 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.briefy.domain.briefing.repository.BriefingJobRepository;
+import com.briefy.domain.briefing.repository.BriefingReportRepository;
+import com.briefy.domain.topic.repository.UserTopicRepository;
 import com.briefy.domain.user.dto.UpdateOnboardingRequest;
 import com.briefy.domain.user.dto.UpdateOnboardingResponse;
 import com.briefy.domain.user.dto.UserMeResponse;
@@ -15,6 +18,7 @@ import com.briefy.domain.user.entity.User;
 import com.briefy.domain.user.repository.UserRepository;
 import com.briefy.global.exception.BusinessException;
 import com.briefy.global.exception.ErrorCode;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -26,6 +30,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class UserServiceTest {
 
   @Mock private UserRepository userRepository;
+  @Mock private UserTopicRepository userTopicRepository;
+  @Mock private BriefingReportRepository briefingReportRepository;
+  @Mock private BriefingJobRepository briefingJobRepository;
 
   @InjectMocks private UserService userService;
 
@@ -111,6 +118,33 @@ class UserServiceTest {
             ex ->
                 assertThat(((BusinessException) ex).getErrorCode())
                     .isEqualTo(ErrorCode.USER_NOT_FOUND));
+  }
+
+  @Test
+  void deleteAccount_deletesAllUserDataAndUser() {
+    when(userRepository.existsById(1L)).thenReturn(true);
+    when(briefingReportRepository.findAllByUserId(1L)).thenReturn(List.of());
+
+    userService.deleteAccount(1L);
+
+    verify(userTopicRepository).deleteAllByUserId(1L);
+    verify(briefingReportRepository).deleteAll(List.of());
+    verify(briefingJobRepository).deleteAllByUserId(1L);
+    verify(userRepository).deleteById(1L);
+  }
+
+  @Test
+  void deleteAccount_throwsUserNotFound_whenUserMissing() {
+    when(userRepository.existsById(99L)).thenReturn(false);
+
+    assertThatThrownBy(() -> userService.deleteAccount(99L))
+        .isInstanceOf(BusinessException.class)
+        .satisfies(
+            ex ->
+                assertThat(((BusinessException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.USER_NOT_FOUND));
+
+    verify(userRepository, never()).deleteById(any());
   }
 
   @Test

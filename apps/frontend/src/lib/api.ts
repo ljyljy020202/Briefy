@@ -58,6 +58,8 @@ export const users = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ nickname }),
     }),
+  deleteAccount: (): Promise<null> =>
+    apiFetch<null>("/users/me", { method: "DELETE" }),
 };
 
 export const topics = {

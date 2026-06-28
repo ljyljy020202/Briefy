@@ -10,4 +10,6 @@ public interface UserTopicRepository extends JpaRepository<UserTopic, Long> {
   List<UserTopic> findAllByUserIdAndActiveTrue(Long userId);
 
   Optional<UserTopic> findByUserIdAndTopicIdAndKeyword(Long userId, Long topicId, String keyword);
+
+  void deleteAllByUserId(Long userId);
 }
