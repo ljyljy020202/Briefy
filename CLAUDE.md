@@ -111,7 +111,7 @@ Spring profile `local` (activated via `--spring.profiles.active=local`) uses `dd
 ### Agent module layout (`apps/agent/app/`)
 
 - `api/` — FastAPI routers, one file per domain
-- `graph/` — LangGraph `StateGraph` definitions; one graph per major workflow (e.g., `briefing_graph.py`)
+- `graph/` — LangGraph `StateGraph` definitions; one graph per major workflow (`daily_collect_graph.py` for collection, `user_briefing_graph.py` for per-user generation)
 - `tools/` — LangGraph tool functions decorated with `@tool`
 - `core/config.py` — `pydantic-settings` `Settings` class; all env vars declared here
 
@@ -147,8 +147,9 @@ Spring profile `local` (activated via `--spring.profiles.active=local`) uses `dd
 ### Agent
 
 - Keep LangGraph nodes small and single-responsibility.
-- Separate workflows into distinct steps: fetch → deduplicate → categorize → summarize → format.
-- Do not call LLM for deterministic operations; use simple code instead.
+- Split workflows into two phases: `DailyCollectWorkflow` (collect → deduplicate → store candidate pool) and `UserBriefingWorkflow` (load pool → filter → rank → summarize → format).
+- Do not call external sources during `UserBriefingWorkflow`; read from the pre-collected candidate pool in DB instead.
+- Do not call LLM for deterministic operations such as URL deduplication, keyword matching, or preference-based score ranking; use simple code instead.
 - Log token usage and processing time when possible.
 - Test graph workflows independently before integration.
 

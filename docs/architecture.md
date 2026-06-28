@@ -28,9 +28,9 @@ Briefy is a personalized AI daily briefing service composed of three independent
                   ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  Agent (FastAPI + LangGraph / AWS EC2)                          │
-│  - LLM workflow orchestration                                    │
-│  - Job posting collection & matching (1st MVP)                  │
-│  - Briefing generation via LangGraph                            │
+│  - DailyCollectWorkflow: collect & store job postings           │
+│  - UserBriefingWorkflow: filter, rank & generate per user       │
+│  - LangGraph for multi-step AI orchestration                    │
 └─────────────────┬───────────────────────────────────────────────┘
                   │
                   ▼
@@ -59,18 +59,33 @@ Briefy is a personalized AI daily briefing service composed of three independent
 - Generative AI integration (OpenAI)
 - Async request handling
 
+## Data Flow for Daily Collection
+
+Triggered once per day by the Spring Boot scheduler, before per-user briefing jobs run.
+
+1. Backend daily scheduler calls Agent: `POST /collections/daily` for today's date
+2. Agent runs `DailyCollectWorkflow` via LangGraph:
+   - Aggregate seed keywords from all active `user_briefing_preferences` across all users
+   - Fetch job postings from external sources (job boards, company career pages) using seed keywords
+   - Deduplicate by URL and content hash; skip already-stored postings
+   - Save new postings to `job_postings` table
+3. Agent returns `{ savedCounts, durationMs }` to Backend
+4. Backend logs the collection result; user briefing generation for the day reads from the stored pool
+
 ## Data Flow for Briefing Generation
 
-Triggered either by a scheduler (daily) or a user manually via `POST /api/briefings/generate`.
+Triggered either by a scheduler (daily) or a user manually via `POST /api/briefings/generate`.  
+Requires that the daily candidate pool has already been collected for the target date (see above).
 
 1. Backend receives briefing request (scheduled or manual)
-2. Backend loads the user's active topic subscriptions (`user_topics`) from MySQL
+2. Backend loads the user's active `user_briefing_preferences` from MySQL
 3. Backend creates a `briefing_jobs` record (status: `PENDING → PROCESSING`)
-4. Backend calls Agent: `POST /briefings/generate` with topic + keyword list
-5. Agent uses LangGraph to orchestrate multi-step workflow (1st MVP — job briefing):
-   - Collect job postings from sources, filtered by user's role / company / skill / location preferences
-   - Deduplicate postings; rank by preference match score
-   - Generate matching reasons and recommended actions with LLM
+4. Backend calls Agent: `POST /briefings/generate` with user preference JSON
+5. Agent runs `UserBriefingWorkflow` via LangGraph (1st MVP — job briefing):
+   - Load `job_postings` candidate pool for the target date from MySQL (no external calls)
+   - Filter postings by user's role / company / skill / location preferences (deterministic)
+   - Rank filtered postings by preference match score (deterministic)
+   - Summarize selected postings and generate matching reasons with LLM
    - Format final Markdown briefing (new postings · deadline-near postings · recommended actions)
 6. Agent returns `{ title, summary, content, articles, tokenUsage }` to Backend
 7. Backend saves `briefing_reports` + `briefing_articles` to MySQL, marks job `COMPLETED`

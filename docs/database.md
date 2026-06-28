@@ -25,7 +25,7 @@ Stores Google OAuth users. Briefy supports only Google sign-in for MVP — there
 | `provider_id` | VARCHAR(255) | NOT NULL | Provider's user ID |
 | `role` | VARCHAR(30) | NOT NULL | See `UserRole` |
 | `status` | VARCHAR(30) | NOT NULL | See `UserStatus` |
-| `onboarding_completed` | BOOLEAN | NOT NULL DEFAULT FALSE | True after first topic selection |
+| `onboarding_completed` | BOOLEAN | NOT NULL DEFAULT FALSE | True after first preference setup |
 | `created_at` | DATETIME | | |
 | `updated_at` | DATETIME | | |
 
@@ -47,7 +47,7 @@ INDEX        idx_users_status           (status)
 
 **Relationships**
 
-- 1:N → `user_topics`
+- 1:N → `user_briefing_preferences`
 - 1:N → `briefing_jobs`
 - 1:N → `briefing_reports`
 - 1:N → `delivery_logs`
@@ -56,88 +56,223 @@ INDEX        idx_users_status           (status)
 
 ---
 
-### `topics`
+### `briefing_categories`
 
-Predefined preference categories that users can subscribe to. Seeded at application startup; not user-generated.
+Predefined briefing type categories. Seeded at application startup; not user-generated.
 
-The `topics` table is a **generic preference subscription system** — the seed rows and category labels change per MVP phase, but the schema and API contract remain the same.
+Each row represents a distinct type of briefing the service can produce. The 1st MVP activates only `JOB_POSTING`; later phases activate `COMPANY_NEWS` and `INDUSTRY_TREND`.
 
 | Column | Type | Constraints | Notes |
 |---|---|---|---|
 | `id` | BIGINT | PK, AUTO_INCREMENT | |
+| `code` | VARCHAR(50) | UNIQUE NOT NULL | Enum key: `JOB_POSTING`, `COMPANY_NEWS`, `INDUSTRY_TREND` |
 | `name` | VARCHAR(100) | NOT NULL | Human-readable label |
-| `slug` | VARCHAR(100) | UNIQUE NOT NULL | URL-safe identifier (e.g. `target-role`) |
-| `category` | VARCHAR(50) | NOT NULL | Broad grouping |
-| `description` | VARCHAR(500) | | Shown on preference selection UI |
-| `display_order` | INT | | Controls ordering on UI |
+| `description` | VARCHAR(500) | | Shown on preference setup UI |
+| `phase` | VARCHAR(20) | NOT NULL | MVP phase: `FIRST`, `ONE_FIVE`, `SECOND` |
 | `is_active` | BOOLEAN | NOT NULL DEFAULT TRUE | Inactive rows are hidden from UI |
+| `display_order` | INT | | Controls ordering on UI |
 | `created_at` | DATETIME | | |
 | `updated_at` | DATETIME | | |
 
-**1st MVP seed data — Job Briefing**
+**Seed data**
 
-| name | slug | category | description |
+| code | name | phase | is_active |
 |---|---|---|---|
-| Target Role | `target-role` | JOB_PREFERENCE | 목표 직무 (예: 백엔드 개발자, 풀스택 개발자) |
-| Target Companies | `target-companies` | JOB_PREFERENCE | 관심 회사 (예: 네이버, 카카오, 라인) |
-| Skills / Competencies | `skills` | JOB_PREFERENCE | 핵심 스킬 (예: Spring Boot, Java, Kotlin) |
-| Location | `location` | JOB_PREFERENCE | 희망 근무지 (예: 서울, 판교) |
-| Experience Level | `experience-level` | JOB_PREFERENCE | 경력 수준 (예: 신입, 3년 이상) |
-| Employment Type | `employment-type` | JOB_PREFERENCE | 고용 형태 (예: 정규직, 계약직) |
+| `JOB_POSTING` | 채용 공고 브리핑 | `FIRST` | TRUE |
+| `COMPANY_NEWS` | 관심 기업 브리핑 | `ONE_FIVE` | FALSE |
+| `INDUSTRY_TREND` | 산업/시장 브리핑 | `SECOND` | FALSE |
 
-**Later phases (not seeded in 1st MVP)**
-
-| Phase | Examples |
-|---|---|
-| 1.5 MVP — Interested Company Briefing | Target companies for news tracking, hiring trend signals |
-| 2nd MVP — Industry / Market Briefing | IT/AI, Semiconductor, Platform, Finance, Content |
+Only `JOB_POSTING` is active and visible during the 1st MVP. `COMPANY_NEWS` and `INDUSTRY_TREND` rows are seeded but inactive; they become active in later phases.
 
 **Indexes**
 
 ```sql
-UNIQUE INDEX uq_topics_slug      (slug)
-INDEX        idx_topics_category  (category)
-INDEX        idx_topics_active    (is_active)
+UNIQUE INDEX uq_briefing_categories_code    (code)
+INDEX        idx_briefing_categories_active (is_active)
 ```
 
 **Relationships**
 
-- 1:N → `user_topics`
+- 1:N → `user_briefing_preferences`
 
 ---
 
-### `user_topics`
+### `user_briefing_preferences`
 
-Each row is one topic + keyword pair that a user subscribes to. One user can subscribe to the same topic with multiple different keywords.
+Stores a user's preferences for a specific briefing category. One row per `(user, category)` pair.
+
+Unlike a flat keyword-per-topic model, this table stores all preference dimensions for a category in a single JSON column. The JSON approach keeps the schema flexible across MVP phases — different categories have different preference shapes.
 
 | Column | Type | Constraints | Notes |
 |---|---|---|---|
 | `id` | BIGINT | PK, AUTO_INCREMENT | |
 | `user_id` | BIGINT | FK `users.id` NOT NULL | |
-| `topic_id` | BIGINT | FK `topics.id` NOT NULL | |
-| `keyword` | VARCHAR(100) | NOT NULL | User-entered keyword within the topic |
-| `priority` | INT | NOT NULL DEFAULT 1 | Higher value = higher weight in briefing |
+| `category_id` | BIGINT | FK `briefing_categories.id` NOT NULL | |
 | `is_active` | BOOLEAN | NOT NULL DEFAULT TRUE | Soft-delete: set to FALSE instead of hard-delete |
+| `preference_json` | JSON | NOT NULL | Category-specific preference data (see schema below) |
+| `created_at` | DATETIME | | |
+| `updated_at` | DATETIME | | |
+
+**`preference_json` schema — `JOB_POSTING` category (1st MVP)**
+
+```json
+{
+  "roles": ["백엔드 개발자", "풀스택 개발자"],
+  "companies": ["네이버", "카카오", "라인"],
+  "skills": ["Spring Boot", "Java", "Kotlin"],
+  "locations": ["서울", "판교"],
+  "experienceLevels": ["신입", "3년 이상"],
+  "employmentTypes": ["정규직"]
+}
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `roles` | Array\<String\> | Target job roles |
+| `companies` | Array\<String\> | Target companies; used for both posting search and company news |
+| `skills` | Array\<String\> | Required or preferred skills / competencies |
+| `locations` | Array\<String\> | Preferred work locations |
+| `experienceLevels` | Array\<String\> | e.g. `신입`, `경력 3년 이상` |
+| `employmentTypes` | Array\<String\> | e.g. `정규직`, `계약직`, `인턴` |
+
+**`preference_json` schema — `COMPANY_NEWS` category (1.5 MVP, for reference)**
+
+```json
+{
+  "watchedCompanies": ["네이버", "카카오", "토스"],
+  "alertSignals": ["HIRING_CHANGE", "EARNINGS", "BUSINESS_ISSUE"]
+}
+```
+
+**`preference_json` schema — `INDUSTRY_TREND` category (2nd MVP, for reference)**
+
+```json
+{
+  "industries": ["IT/AI", "반도체", "플랫폼"],
+  "keywords": ["LLM", "파운드리", "쿠팡"]
+}
+```
+
+**Evolution note:** The JSON approach is intentional for MVP flexibility. If search performance, analytics, or recommendation features require structured querying of individual preference fields, the JSON can be normalized into dedicated tables (`user_job_preference_roles`, etc.) in a later migration without changing the external API contract.
+
+**Indexes**
+
+```sql
+UNIQUE INDEX uq_user_briefing_pref  (user_id, category_id)
+INDEX        idx_ubp_user           (user_id)
+INDEX        idx_ubp_category       (category_id)
+INDEX        idx_ubp_active         (is_active)
+```
+
+**Notes**
+
+- At most one active row per `(user_id, category_id)` — enforced by the unique index.
+- Deletion is soft: set `is_active = FALSE`. Do not hard-delete so that briefing history remains coherent.
+
+**Relationships**
+
+- N:1 → `users`
+- N:1 → `briefing_categories`
+
+---
+
+### `job_postings`
+
+Candidate pool for job briefings. Written by the Agent `DailyCollectWorkflow`; read by `UserBriefingWorkflow` to generate user-specific briefings without re-fetching from external sources.
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | BIGINT | PK, AUTO_INCREMENT | |
+| `title` | VARCHAR(500) | NOT NULL | Job posting title |
+| `company` | VARCHAR(255) | NOT NULL | Hiring company name |
+| `source` | VARCHAR(255) | | Source platform (e.g. Wanted, 사람인, LinkedIn) |
+| `url` | VARCHAR(1000) | UNIQUE NOT NULL | Original URL; used for deduplication |
+| `location` | VARCHAR(255) | | Work location |
+| `roles` | TEXT | | JSON array of matched role tags |
+| `skills` | TEXT | | JSON array of required skill tags |
+| `experience_level` | VARCHAR(100) | | e.g. `신입`, `3년 이상` |
+| `employment_type` | VARCHAR(100) | | e.g. `정규직`, `계약직` |
+| `deadline` | DATE | | Application deadline (`NULL` if not specified) |
+| `description_summary` | TEXT | | Agent-generated summary of the posting |
+| `content_hash` | VARCHAR(64) | | SHA-256 of key fields; used to detect changed postings |
+| `collected_date` | DATE | NOT NULL | Date the row was inserted by the collector |
+| `published_at` | DATETIME | | Original publication time from the source |
 | `created_at` | DATETIME | | |
 | `updated_at` | DATETIME | | |
 
 **Indexes**
 
 ```sql
-INDEX        idx_user_topics_user   (user_id)
-INDEX        idx_user_topics_topic  (topic_id)
-UNIQUE INDEX uq_user_topic_keyword  (user_id, topic_id, keyword)
+UNIQUE INDEX uq_job_postings_url         (url)
+INDEX        idx_job_postings_company     (company)
+INDEX        idx_job_postings_deadline    (deadline)
+INDEX        idx_job_postings_collected   (collected_date)
+INDEX        idx_job_postings_hash        (content_hash)
 ```
 
 **Notes**
 
-- Deletion is soft: set `is_active = FALSE`. Do not hard-delete rows so that briefing history remains coherent.
-- The `priority` field is reserved for future ranking; use default `1` for MVP.
+- `url` uniqueness prevents re-inserting the same posting on repeated collection runs.
+- `content_hash` allows detecting changed postings (e.g. deadline extension) for future update logic.
+- The Agent service owns writes; the backend reads for ranking and briefing generation.
+- Rows older than a configurable retention window (e.g. 30 days past deadline) can be purged in future.
 
-**Relationships**
+---
 
-- N:1 → `users`
-- N:1 → `topics`
+### `company_issues`
+
+Candidate pool for company news briefings. Written by Agent `DailyCollectWorkflow`. Used by `COMPANY_NEWS` briefing category (1.5 MVP).
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | BIGINT | PK, AUTO_INCREMENT | |
+| `company` | VARCHAR(255) | NOT NULL | Company name |
+| `title` | VARCHAR(500) | NOT NULL | News or event headline |
+| `source` | VARCHAR(255) | | Publisher / domain name |
+| `url` | VARCHAR(1000) | UNIQUE NOT NULL | Original URL |
+| `summary` | TEXT | | Agent-generated summary |
+| `issue_type` | VARCHAR(50) | | e.g. `HIRING_CHANGE`, `BUSINESS_ISSUE`, `EARNINGS` |
+| `published_at` | DATETIME | | Original publication time |
+| `collected_date` | DATE | NOT NULL | Date collected |
+| `created_at` | DATETIME | | |
+
+> **1.5 MVP scope.** This table is scaffolded now for schema consistency. Do not populate or read from it during the 1st MVP.
+
+**Indexes**
+
+```sql
+UNIQUE INDEX uq_company_issues_url       (url)
+INDEX        idx_company_issues_company  (company)
+INDEX        idx_company_issues_date     (collected_date)
+```
+
+---
+
+### `industry_issues`
+
+Candidate pool for industry / market briefings. Written by Agent `DailyCollectWorkflow`. Used by `INDUSTRY_TREND` briefing category (2nd MVP).
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | BIGINT | PK, AUTO_INCREMENT | |
+| `industry` | VARCHAR(100) | NOT NULL | e.g. `IT/AI`, `반도체`, `플랫폼`, `금융`, `콘텐츠` |
+| `title` | VARCHAR(500) | NOT NULL | News or trend headline |
+| `source` | VARCHAR(255) | | Publisher / domain name |
+| `url` | VARCHAR(1000) | UNIQUE NOT NULL | Original URL |
+| `summary` | TEXT | | Agent-generated summary |
+| `published_at` | DATETIME | | Original publication time |
+| `collected_date` | DATE | NOT NULL | Date collected |
+| `created_at` | DATETIME | | |
+
+> **2nd MVP scope.** Content must be information-only. Never generate or suggest buy/sell recommendations anywhere in prompts, copy, or tool responses.
+
+**Indexes**
+
+```sql
+UNIQUE INDEX uq_industry_issues_url       (url)
+INDEX        idx_industry_issues_industry (industry)
+INDEX        idx_industry_issues_date     (collected_date)
+```
 
 ---
 
@@ -316,7 +451,7 @@ INDEX idx_delivery_logs_status (status)
 
 ### `user_feedbacks`
 
-Records a user's reaction to a briefing report. MVP stores the data only; future versions will use it to personalize topic weighting.
+Records a user's reaction to a briefing report. MVP stores the data only; future versions will use it to personalize preference weighting.
 
 | Column | Type | Constraints | Notes |
 |---|---|---|---|
@@ -343,8 +478,8 @@ INDEX idx_user_feedbacks_report (briefing_report_id)
 **Notes**
 
 - No `updated_at`: feedback rows are write-once.
-- A user can submit multiple feedback entries per report (e.g. one per article impression) — uniqueness is not enforced at the DB level for MVP.
-- Future: aggregate `USEFUL`/`NOT_USEFUL` ratios per topic to adjust `user_topics.priority` automatically.
+- A user can submit multiple feedback entries per report — uniqueness is not enforced at the DB level for MVP.
+- Future: aggregate `USEFUL`/`NOT_USEFUL` ratios per preference category to improve ranking weights in `UserBriefingWorkflow` automatically.
 
 **Relationships**
 
@@ -388,18 +523,24 @@ UNIQUE INDEX uq_notification_settings_user (user_id)
 ## Entity Relationship Summary
 
 ```
-users ──────────────────────────────────────────────────────────────────────┐
-  │ 1:N user_topics (topic subscriptions + keywords)                        │
-  │   N:1 topics                                                            │
-  │                                                                         │
-  │ 1:N briefing_jobs (generation lifecycle)                                │
-  │       1:1 briefing_reports (Markdown content)                          │
-  │             1:N briefing_articles (source articles)                     │
-  │             1:N delivery_logs (email send attempts)  ←── also N:1 users│
-  │             1:N user_feedbacks (reactions)           ←── also N:1 users│
-  │                                                                         │
-  │ 1:1 notification_settings (delivery preferences)                        │
-  └────────────────────────────────────────────────────────────────────────┘
+users ──────────────────────────────────────────────────────────────────────────┐
+  │ 1:N user_briefing_preferences (preference per briefing category)             │
+  │       N:1 briefing_categories                                                │
+  │                                                                              │
+  │ 1:N briefing_jobs (generation lifecycle)                                     │
+  │       1:1 briefing_reports (Markdown content)                               │
+  │             1:N briefing_articles (source articles)                          │
+  │             1:N delivery_logs (email send attempts)  ←── also N:1 users     │
+  │             1:N user_feedbacks (reactions)           ←── also N:1 users     │
+  │                                                                              │
+  │ 1:1 notification_settings (delivery preferences)                             │
+  └────────────────────────────────────────────────────────────────────────────┘
+
+Candidate pool tables (written by Agent DailyCollectWorkflow, read by UserBriefingWorkflow):
+
+  job_postings       ← 1st MVP  (JOB_POSTING category)
+  company_issues     ← 1.5 MVP  (COMPANY_NEWS category)
+  industry_issues    ← 2nd MVP  (INDUSTRY_TREND category)
 ```
 
 ---
@@ -420,17 +561,4 @@ users ────────────────────────�
 
 - **`briefing_reports.content`** is stored as Markdown for MVP. The frontend renders it with a Markdown parser (e.g. `react-markdown`). Future versions may switch to a structured JSON format (sections, bullets, article cards) for richer client-side rendering.
 - **`briefing_articles.summary`** and **`.why_it_matters`** are plain text generated by the agent. No special formatting is assumed.
-
----
-
-## Alignment with docs/api.md
-
-`docs/api.md` was fully rewritten on 2026-06-05 to match this schema. The following previously-noted conflicts have been resolved:
-
-| Resolved conflict | Resolution in api.md |
-|---|---|
-| Old `POST /api/auth/register` + `POST /api/auth/login` used email/password (no `password_hash` column in DB) | Removed. Auth is Google OAuth only: `GET /api/oauth2/authorize/google` → `GET /api/oauth2/callback/google` |
-| Old `GET /api/preferences` returned `newsLanguages`, `briefingTime`, `lengthPreference` (no matching columns) | Removed. Topic subscriptions are managed via `GET/POST /api/me/topics`; delivery time via `notification_settings` |
-| Old briefing response included a stored `categories` array | Removed. Categories are derived at query time from `user_topics → topics.category`, not persisted on the report |
-
-No known inconsistencies remain between this document and `docs/api.md`.
+- **`user_briefing_preferences.preference_json`** is a JSON object. The backend reads it as a typed DTO per category; do not store it as a raw string in JPA entities — use `@Column(columnDefinition = "JSON")` with a converter or `@Type`.
