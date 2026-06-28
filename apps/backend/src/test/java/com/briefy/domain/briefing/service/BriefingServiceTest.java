@@ -20,14 +20,16 @@ import com.briefy.domain.briefing.entity.BriefingJob;
 import com.briefy.domain.briefing.entity.BriefingReport;
 import com.briefy.domain.briefing.repository.BriefingJobRepository;
 import com.briefy.domain.briefing.repository.BriefingReportRepository;
-import com.briefy.domain.topic.entity.Topic;
-import com.briefy.domain.topic.entity.UserTopic;
-import com.briefy.domain.topic.repository.UserTopicRepository;
+import com.briefy.domain.briefingpreference.entity.BriefingCategory;
+import com.briefy.domain.briefingpreference.entity.BriefingCategoryCode;
+import com.briefy.domain.briefingpreference.entity.UserBriefingPreference;
+import com.briefy.domain.briefingpreference.repository.UserBriefingPreferenceRepository;
 import com.briefy.global.exception.BusinessException;
 import com.briefy.global.exception.ErrorCode;
 import com.briefy.global.response.PageResult;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -48,22 +50,22 @@ class BriefingServiceTest {
 
   @Mock private BriefingJobRepository briefingJobRepository;
   @Mock private BriefingReportRepository briefingReportRepository;
-  @Mock private UserTopicRepository userTopicRepository;
+  @Mock private UserBriefingPreferenceRepository userBriefingPreferenceRepository;
   @Mock private AgentClient agentClient;
 
   @InjectMocks private BriefingService briefingService;
 
-  private UserTopic mockUserTopic;
+  private UserBriefingPreference mockPref;
   private AgentBriefingResponse mockAgentResponse;
 
   @BeforeEach
   void setUp() {
-    Topic topic = mock(Topic.class);
-    when(topic.getName()).thenReturn("Target Role");
+    BriefingCategory category = mock(BriefingCategory.class);
+    when(category.getCode()).thenReturn(BriefingCategoryCode.JOB_POSTING);
 
-    mockUserTopic = mock(UserTopic.class);
-    when(mockUserTopic.getTopic()).thenReturn(topic);
-    when(mockUserTopic.getKeyword()).thenReturn("백엔드 개발자");
+    mockPref = mock(UserBriefingPreference.class);
+    when(mockPref.getCategory()).thenReturn(category);
+    when(mockPref.getPreference()).thenReturn(Map.of("roles", List.of("백엔드 개발자")));
 
     mockAgentResponse =
         new AgentBriefingResponse(
@@ -83,7 +85,8 @@ class BriefingServiceTest {
 
   @Test
   void generateBriefing_success_returnsCompletedResult() {
-    when(userTopicRepository.findAllByUserIdAndActiveTrue(1L)).thenReturn(List.of(mockUserTopic));
+    when(userBriefingPreferenceRepository.findAllByUserIdAndActiveTrue(1L))
+        .thenReturn(List.of(mockPref));
     when(briefingJobRepository.save(any(BriefingJob.class))).thenAnswer(inv -> inv.getArgument(0));
     when(agentClient.generate(any(AgentBriefingRequest.class))).thenReturn(mockAgentResponse);
 
@@ -100,7 +103,8 @@ class BriefingServiceTest {
 
   @Test
   void generateBriefing_defaultToneIsEasy_whenToneIsNull() {
-    when(userTopicRepository.findAllByUserIdAndActiveTrue(1L)).thenReturn(List.of(mockUserTopic));
+    when(userBriefingPreferenceRepository.findAllByUserIdAndActiveTrue(1L))
+        .thenReturn(List.of(mockPref));
     when(briefingJobRepository.save(any(BriefingJob.class))).thenAnswer(inv -> inv.getArgument(0));
     when(agentClient.generate(any(AgentBriefingRequest.class)))
         .thenAnswer(
@@ -120,7 +124,8 @@ class BriefingServiceTest {
 
   @Test
   void generateBriefing_agentThrows_marksJobFailedAndRethrows() {
-    when(userTopicRepository.findAllByUserIdAndActiveTrue(1L)).thenReturn(List.of(mockUserTopic));
+    when(userBriefingPreferenceRepository.findAllByUserIdAndActiveTrue(1L))
+        .thenReturn(List.of(mockPref));
     when(briefingJobRepository.save(any(BriefingJob.class))).thenAnswer(inv -> inv.getArgument(0));
     when(agentClient.generate(any(AgentBriefingRequest.class)))
         .thenThrow(new BusinessException(ErrorCode.AGENT_SERVER_ERROR));

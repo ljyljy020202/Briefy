@@ -2,10 +2,11 @@ package com.briefy.domain.dashboard.dto;
 
 import com.briefy.domain.briefing.dto.BriefingListItem;
 import java.util.List;
+import java.util.Map;
 
 public record DashboardResponse(
     UserSummary user,
-    List<SubscribedTopicGroup> subscribedTopics,
+    List<BriefingPreferenceSummary> briefingPreferences,
     String nextDeliveryTime,
     BriefingListItem latestBriefing,
     String latestDeliveryStatus,
@@ -13,5 +14,6 @@ public record DashboardResponse(
 
   public record UserSummary(String nickname, String email, boolean onboardingCompleted) {}
 
-  public record SubscribedTopicGroup(String topicName, List<String> keywords) {}
+  public record BriefingPreferenceSummary(
+      String categoryCode, String categoryDisplayName, Map<String, Object> preference) {}
 }

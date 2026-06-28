@@ -9,16 +9,18 @@ import static org.mockito.Mockito.when;
 
 import com.briefy.domain.briefing.entity.BriefingReport;
 import com.briefy.domain.briefing.repository.BriefingReportRepository;
+import com.briefy.domain.briefingpreference.entity.BriefingCategory;
+import com.briefy.domain.briefingpreference.entity.BriefingCategoryCode;
+import com.briefy.domain.briefingpreference.entity.UserBriefingPreference;
+import com.briefy.domain.briefingpreference.repository.UserBriefingPreferenceRepository;
 import com.briefy.domain.dashboard.dto.DashboardResponse;
-import com.briefy.domain.topic.entity.Topic;
-import com.briefy.domain.topic.entity.UserTopic;
-import com.briefy.domain.topic.repository.UserTopicRepository;
 import com.briefy.domain.user.entity.User;
 import com.briefy.domain.user.repository.UserRepository;
 import com.briefy.global.exception.BusinessException;
 import com.briefy.global.exception.ErrorCode;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -37,7 +39,7 @@ import org.springframework.data.domain.Pageable;
 class DashboardServiceTest {
 
   @Mock private UserRepository userRepository;
-  @Mock private UserTopicRepository userTopicRepository;
+  @Mock private UserBriefingPreferenceRepository userBriefingPreferenceRepository;
   @Mock private BriefingReportRepository briefingReportRepository;
 
   @InjectMocks private DashboardService dashboardService;
@@ -53,15 +55,19 @@ class DashboardServiceTest {
   }
 
   @Test
-  void getDashboard_success_returnsUserAndTopicsAndRecentReports() {
+  void getDashboard_success_returnsUserAndPreferencesAndRecentReports() {
     when(userRepository.findById(1L)).thenReturn(Optional.of(mockUser));
 
-    Topic topic = mock(Topic.class);
-    when(topic.getName()).thenReturn("Target Role");
-    UserTopic userTopic = mock(UserTopic.class);
-    when(userTopic.getTopic()).thenReturn(topic);
-    when(userTopic.getKeyword()).thenReturn("백엔드 개발자");
-    when(userTopicRepository.findAllByUserIdAndActiveTrue(1L)).thenReturn(List.of(userTopic));
+    BriefingCategory category = mock(BriefingCategory.class);
+    when(category.getCode()).thenReturn(BriefingCategoryCode.JOB_POSTING);
+    when(category.getDisplayName()).thenReturn("채용 브리핑");
+
+    UserBriefingPreference pref = mock(UserBriefingPreference.class);
+    when(pref.getCategory()).thenReturn(category);
+    when(pref.getPreference()).thenReturn(Map.of("roles", List.of("백엔드 개발자")));
+
+    when(userBriefingPreferenceRepository.findAllByUserIdAndActiveTrue(1L))
+        .thenReturn(List.of(pref));
 
     BriefingReport report = mock(BriefingReport.class);
     when(report.getId()).thenReturn(1L);
@@ -79,9 +85,10 @@ class DashboardServiceTest {
     assertThat(response.user().nickname()).isEqualTo("테스터");
     assertThat(response.user().email()).isEqualTo("test@example.com");
     assertThat(response.user().onboardingCompleted()).isTrue();
-    assertThat(response.subscribedTopics()).hasSize(1);
-    assertThat(response.subscribedTopics().get(0).topicName()).isEqualTo("Target Role");
-    assertThat(response.subscribedTopics().get(0).keywords()).containsExactly("백엔드 개발자");
+    assertThat(response.briefingPreferences()).hasSize(1);
+    assertThat(response.briefingPreferences().get(0).categoryCode()).isEqualTo("JOB_POSTING");
+    assertThat(response.briefingPreferences().get(0).categoryDisplayName()).isEqualTo("채용 브리핑");
+    assertThat(response.briefingPreferences().get(0).preference()).containsKey("roles");
     assertThat(response.recentReports()).hasSize(1);
     assertThat(response.recentReports().get(0).title()).isEqualTo("오늘의 채용 브리핑");
     assertThat(response.latestBriefing()).isNotNull();
@@ -93,7 +100,7 @@ class DashboardServiceTest {
   @Test
   void getDashboard_noReports_latestBriefingIsNull() {
     when(userRepository.findById(1L)).thenReturn(Optional.of(mockUser));
-    when(userTopicRepository.findAllByUserIdAndActiveTrue(1L)).thenReturn(List.of());
+    when(userBriefingPreferenceRepository.findAllByUserIdAndActiveTrue(1L)).thenReturn(List.of());
     when(briefingReportRepository.findAllByUserIdOrderByReportDateDesc(eq(1L), any(Pageable.class)))
         .thenReturn(new PageImpl<>(List.of()));
 
@@ -101,6 +108,7 @@ class DashboardServiceTest {
 
     assertThat(response.recentReports()).isEmpty();
     assertThat(response.latestBriefing()).isNull();
+    assertThat(response.briefingPreferences()).isEmpty();
   }
 
   @Test
@@ -116,43 +124,43 @@ class DashboardServiceTest {
   }
 
   @Test
-  void getDashboard_multipleKeywordsGroupedByTopicName() {
+  void getDashboard_multiplePreferences_allReturned() {
     when(userRepository.findById(1L)).thenReturn(Optional.of(mockUser));
 
-    Topic roleT = mock(Topic.class);
-    when(roleT.getName()).thenReturn("Target Role");
-    Topic compT = mock(Topic.class);
-    when(compT.getName()).thenReturn("Target Companies");
+    BriefingCategory jobCat = mock(BriefingCategory.class);
+    when(jobCat.getCode()).thenReturn(BriefingCategoryCode.JOB_POSTING);
+    when(jobCat.getDisplayName()).thenReturn("채용 브리핑");
 
-    UserTopic ut1 = mock(UserTopic.class);
-    when(ut1.getTopic()).thenReturn(roleT);
-    when(ut1.getKeyword()).thenReturn("백엔드 개발자");
-    UserTopic ut2 = mock(UserTopic.class);
-    when(ut2.getTopic()).thenReturn(roleT);
-    when(ut2.getKeyword()).thenReturn("풀스택 개발자");
-    UserTopic ut3 = mock(UserTopic.class);
-    when(ut3.getTopic()).thenReturn(compT);
-    when(ut3.getKeyword()).thenReturn("네이버");
+    BriefingCategory companyCat = mock(BriefingCategory.class);
+    when(companyCat.getCode()).thenReturn(BriefingCategoryCode.COMPANY_NEWS);
+    when(companyCat.getDisplayName()).thenReturn("관심 기업 브리핑");
 
-    when(userTopicRepository.findAllByUserIdAndActiveTrue(1L)).thenReturn(List.of(ut1, ut2, ut3));
+    UserBriefingPreference jobPref = mock(UserBriefingPreference.class);
+    when(jobPref.getCategory()).thenReturn(jobCat);
+    when(jobPref.getPreference()).thenReturn(Map.of("roles", List.of("백엔드 개발자")));
+
+    UserBriefingPreference companyPref = mock(UserBriefingPreference.class);
+    when(companyPref.getCategory()).thenReturn(companyCat);
+    when(companyPref.getPreference()).thenReturn(Map.of("companies", List.of("네이버")));
+
+    when(userBriefingPreferenceRepository.findAllByUserIdAndActiveTrue(1L))
+        .thenReturn(List.of(jobPref, companyPref));
     when(briefingReportRepository.findAllByUserIdOrderByReportDateDesc(eq(1L), any(Pageable.class)))
         .thenReturn(new PageImpl<>(List.of()));
 
     DashboardResponse response = dashboardService.getDashboard(1L);
 
-    assertThat(response.subscribedTopics()).hasSize(2);
-    DashboardResponse.SubscribedTopicGroup roleGroup =
-        response.subscribedTopics().stream()
-            .filter(g -> g.topicName().equals("Target Role"))
-            .findFirst()
-            .orElseThrow();
-    assertThat(roleGroup.keywords()).containsExactlyInAnyOrder("백엔드 개발자", "풀스택 개발자");
+    assertThat(response.briefingPreferences()).hasSize(2);
+    assertThat(
+            response.briefingPreferences().stream()
+                .map(DashboardResponse.BriefingPreferenceSummary::categoryCode))
+        .containsExactlyInAnyOrder("JOB_POSTING", "COMPANY_NEWS");
   }
 
   @Test
   void getDashboard_latestBriefingIsFirstOfRecentReports() {
     when(userRepository.findById(1L)).thenReturn(Optional.of(mockUser));
-    when(userTopicRepository.findAllByUserIdAndActiveTrue(1L)).thenReturn(List.of());
+    when(userBriefingPreferenceRepository.findAllByUserIdAndActiveTrue(1L)).thenReturn(List.of());
 
     BriefingReport r1 = mock(BriefingReport.class);
     when(r1.getId()).thenReturn(3L);

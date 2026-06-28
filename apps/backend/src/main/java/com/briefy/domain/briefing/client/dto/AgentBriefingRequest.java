@@ -1,8 +1,10 @@
 package com.briefy.domain.briefing.client.dto;
 
-import java.util.List;
+import java.util.Map;
 
-public record AgentBriefingRequest(Long userId, List<TopicInput> topics, String date, String tone) {
-
-  public record TopicInput(String name, List<String> keywords) {}
-}
+public record AgentBriefingRequest(
+    Long userId,
+    String category,
+    Map<String, Object> preference,
+    String briefingDate,
+    String tone) {}

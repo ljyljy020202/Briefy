@@ -9,7 +9,7 @@ import static org.mockito.Mockito.when;
 
 import com.briefy.domain.briefing.repository.BriefingJobRepository;
 import com.briefy.domain.briefing.repository.BriefingReportRepository;
-import com.briefy.domain.topic.repository.UserTopicRepository;
+import com.briefy.domain.briefingpreference.repository.UserBriefingPreferenceRepository;
 import com.briefy.domain.user.dto.UpdateOnboardingRequest;
 import com.briefy.domain.user.dto.UpdateOnboardingResponse;
 import com.briefy.domain.user.dto.UserMeResponse;
@@ -30,7 +30,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class UserServiceTest {
 
   @Mock private UserRepository userRepository;
-  @Mock private UserTopicRepository userTopicRepository;
+  @Mock private UserBriefingPreferenceRepository userBriefingPreferenceRepository;
   @Mock private BriefingReportRepository briefingReportRepository;
   @Mock private BriefingJobRepository briefingJobRepository;
 
@@ -127,7 +127,7 @@ class UserServiceTest {
 
     userService.deleteAccount(1L);
 
-    verify(userTopicRepository).deleteAllByUserId(1L);
+    verify(userBriefingPreferenceRepository).deleteAllByUserId(1L);
     verify(briefingReportRepository).deleteAll(List.of());
     verify(briefingJobRepository).deleteAllByUserId(1L);
     verify(userRepository).deleteById(1L);

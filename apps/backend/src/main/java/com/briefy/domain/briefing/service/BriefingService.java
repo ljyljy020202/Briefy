@@ -12,8 +12,9 @@ import com.briefy.domain.briefing.entity.BriefingJob;
 import com.briefy.domain.briefing.entity.BriefingReport;
 import com.briefy.domain.briefing.repository.BriefingJobRepository;
 import com.briefy.domain.briefing.repository.BriefingReportRepository;
-import com.briefy.domain.topic.entity.UserTopic;
-import com.briefy.domain.topic.repository.UserTopicRepository;
+import com.briefy.domain.briefingpreference.entity.BriefingCategoryCode;
+import com.briefy.domain.briefingpreference.entity.UserBriefingPreference;
+import com.briefy.domain.briefingpreference.repository.UserBriefingPreferenceRepository;
 import com.briefy.global.exception.BusinessException;
 import com.briefy.global.exception.ErrorCode;
 import com.briefy.global.response.PageResult;
@@ -21,7 +22,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -32,17 +32,17 @@ public class BriefingService {
 
   private final BriefingJobRepository briefingJobRepository;
   private final BriefingReportRepository briefingReportRepository;
-  private final UserTopicRepository userTopicRepository;
+  private final UserBriefingPreferenceRepository userBriefingPreferenceRepository;
   private final AgentClient agentClient;
 
   public BriefingService(
       BriefingJobRepository briefingJobRepository,
       BriefingReportRepository briefingReportRepository,
-      UserTopicRepository userTopicRepository,
+      UserBriefingPreferenceRepository userBriefingPreferenceRepository,
       AgentClient agentClient) {
     this.briefingJobRepository = briefingJobRepository;
     this.briefingReportRepository = briefingReportRepository;
-    this.userTopicRepository = userTopicRepository;
+    this.userBriefingPreferenceRepository = userBriefingPreferenceRepository;
     this.agentClient = agentClient;
   }
 
@@ -52,14 +52,21 @@ public class BriefingService {
    */
   @Transactional(noRollbackFor = Exception.class)
   public GenerateResult generateBriefing(Long userId, GenerateBriefingRequest request) {
-    List<UserTopic> userTopics = userTopicRepository.findAllByUserIdAndActiveTrue(userId);
+    List<UserBriefingPreference> preferences =
+        userBriefingPreferenceRepository.findAllByUserIdAndActiveTrue(userId);
+
+    UserBriefingPreference jobPref =
+        preferences.stream()
+            .filter(p -> p.getCategory().getCode() == BriefingCategoryCode.JOB_POSTING)
+            .findFirst()
+            .orElse(null);
 
     BriefingJob job = BriefingJob.createManual(userId);
     job.startProcessing();
     briefingJobRepository.save(job);
 
     try {
-      AgentBriefingRequest agentRequest = buildAgentRequest(userId, userTopics, request);
+      AgentBriefingRequest agentRequest = buildAgentRequest(userId, jobPref, request);
       AgentBriefingResponse agentResponse = agentClient.generate(agentRequest);
 
       BriefingReport report = buildReport(userId, job, request.resolvedTone(), agentResponse);
@@ -101,21 +108,14 @@ public class BriefingService {
   }
 
   private AgentBriefingRequest buildAgentRequest(
-      Long userId, List<UserTopic> userTopics, GenerateBriefingRequest request) {
-    Map<String, List<String>> grouped =
-        userTopics.stream()
-            .collect(
-                Collectors.groupingBy(
-                    ut -> ut.getTopic().getName(),
-                    Collectors.mapping(UserTopic::getKeyword, Collectors.toList())));
-
-    List<AgentBriefingRequest.TopicInput> topicInputs =
-        grouped.entrySet().stream()
-            .map(e -> new AgentBriefingRequest.TopicInput(e.getKey(), e.getValue()))
-            .toList();
-
+      Long userId, UserBriefingPreference pref, GenerateBriefingRequest request) {
+    Map<String, Object> preference = pref != null ? pref.getPreference() : Map.of();
     return new AgentBriefingRequest(
-        userId, topicInputs, LocalDate.now().toString(), request.resolvedTone());
+        userId,
+        BriefingCategoryCode.JOB_POSTING.name(),
+        preference,
+        LocalDate.now().toString(),
+        request.resolvedTone());
   }
 
   private BriefingReport buildReport(

@@ -14,10 +14,10 @@ public enum ErrorCode {
   // User
   USER_NOT_FOUND(HttpStatus.NOT_FOUND, "User not found"),
 
-  // Topic / UserTopic
-  TOPIC_NOT_FOUND(HttpStatus.NOT_FOUND, "Topic not found"),
-  USER_TOPIC_NOT_FOUND(HttpStatus.NOT_FOUND, "Subscription not found"),
-  DUPLICATE_USER_TOPIC(HttpStatus.CONFLICT, "Subscription already exists"),
+  // BriefingCategory / UserBriefingPreference
+  BRIEFING_CATEGORY_NOT_FOUND(HttpStatus.NOT_FOUND, "Briefing category not found"),
+  BRIEFING_PREFERENCE_NOT_FOUND(HttpStatus.NOT_FOUND, "Briefing preference not found"),
+  DUPLICATE_BRIEFING_PREFERENCE(HttpStatus.CONFLICT, "Briefing preference already exists"),
 
   // Briefing
   BRIEFING_REPORT_NOT_FOUND(HttpStatus.NOT_FOUND, "Briefing report not found"),

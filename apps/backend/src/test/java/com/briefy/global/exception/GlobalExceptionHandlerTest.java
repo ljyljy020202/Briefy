@@ -52,7 +52,8 @@ class GlobalExceptionHandlerTest {
 
     @GetMapping("/test/business-custom-message")
     public ApiResponse<Void> businessExceptionCustomMessage() {
-      throw new BusinessException(ErrorCode.DUPLICATE_USER_TOPIC, "Already subscribed to OpenAI");
+      throw new BusinessException(
+          ErrorCode.DUPLICATE_BRIEFING_PREFERENCE, "Preference already exists for this category");
     }
 
     @PostMapping("/test/validation")
@@ -101,8 +102,9 @@ class GlobalExceptionHandlerTest {
     mockMvc
         .perform(get("/test/business-custom-message"))
         .andExpect(status().isConflict())
-        .andExpect(jsonPath("$.error.code").value("DUPLICATE_USER_TOPIC"))
-        .andExpect(jsonPath("$.error.message").value("Already subscribed to OpenAI"));
+        .andExpect(jsonPath("$.error.code").value("DUPLICATE_BRIEFING_PREFERENCE"))
+        .andExpect(
+            jsonPath("$.error.message").value("Preference already exists for this category"));
   }
 
   @Test

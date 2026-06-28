@@ -3,7 +3,7 @@ package com.briefy.domain.user.service;
 import com.briefy.domain.briefing.entity.BriefingReport;
 import com.briefy.domain.briefing.repository.BriefingJobRepository;
 import com.briefy.domain.briefing.repository.BriefingReportRepository;
-import com.briefy.domain.topic.repository.UserTopicRepository;
+import com.briefy.domain.briefingpreference.repository.UserBriefingPreferenceRepository;
 import com.briefy.domain.user.dto.UpdateOnboardingRequest;
 import com.briefy.domain.user.dto.UpdateOnboardingResponse;
 import com.briefy.domain.user.dto.UserMeResponse;
@@ -21,17 +21,17 @@ import org.springframework.transaction.annotation.Transactional;
 public class UserService {
 
   private final UserRepository userRepository;
-  private final UserTopicRepository userTopicRepository;
+  private final UserBriefingPreferenceRepository userBriefingPreferenceRepository;
   private final BriefingReportRepository briefingReportRepository;
   private final BriefingJobRepository briefingJobRepository;
 
   public UserService(
       UserRepository userRepository,
-      UserTopicRepository userTopicRepository,
+      UserBriefingPreferenceRepository userBriefingPreferenceRepository,
       BriefingReportRepository briefingReportRepository,
       BriefingJobRepository briefingJobRepository) {
     this.userRepository = userRepository;
-    this.userTopicRepository = userTopicRepository;
+    this.userBriefingPreferenceRepository = userBriefingPreferenceRepository;
     this.briefingReportRepository = briefingReportRepository;
     this.briefingJobRepository = briefingJobRepository;
   }
@@ -62,7 +62,7 @@ public class UserService {
     if (!userRepository.existsById(userId)) {
       throw new BusinessException(ErrorCode.USER_NOT_FOUND);
     }
-    userTopicRepository.deleteAllByUserId(userId);
+    userBriefingPreferenceRepository.deleteAllByUserId(userId);
     List<BriefingReport> reports = briefingReportRepository.findAllByUserId(userId);
     briefingReportRepository.deleteAll(reports);
     briefingJobRepository.deleteAllByUserId(userId);

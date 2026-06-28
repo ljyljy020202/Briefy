@@ -53,9 +53,9 @@ class ApiResponseTest {
     assertThat(ErrorCode.FORBIDDEN.getStatus().value()).isEqualTo(403);
     assertThat(ErrorCode.VALIDATION_ERROR.getStatus().value()).isEqualTo(400);
     assertThat(ErrorCode.USER_NOT_FOUND.getStatus().value()).isEqualTo(404);
-    assertThat(ErrorCode.TOPIC_NOT_FOUND.getStatus().value()).isEqualTo(404);
-    assertThat(ErrorCode.USER_TOPIC_NOT_FOUND.getStatus().value()).isEqualTo(404);
-    assertThat(ErrorCode.DUPLICATE_USER_TOPIC.getStatus().value()).isEqualTo(409);
+    assertThat(ErrorCode.BRIEFING_CATEGORY_NOT_FOUND.getStatus().value()).isEqualTo(404);
+    assertThat(ErrorCode.BRIEFING_PREFERENCE_NOT_FOUND.getStatus().value()).isEqualTo(404);
+    assertThat(ErrorCode.DUPLICATE_BRIEFING_PREFERENCE.getStatus().value()).isEqualTo(409);
     assertThat(ErrorCode.BRIEFING_REPORT_NOT_FOUND.getStatus().value()).isEqualTo(404);
     assertThat(ErrorCode.BRIEFING_JOB_FAILED.getStatus().value()).isEqualTo(500);
     assertThat(ErrorCode.AGENT_SERVER_ERROR.getStatus().value()).isEqualTo(502);

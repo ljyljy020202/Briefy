@@ -14,6 +14,7 @@ import com.briefy.global.exception.BusinessException;
 import com.briefy.global.exception.ErrorCode;
 import com.briefy.global.exception.GlobalExceptionHandler;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -49,7 +50,9 @@ class DashboardControllerTest {
     DashboardResponse response =
         new DashboardResponse(
             new DashboardResponse.UserSummary("테스터", "test@example.com", true),
-            List.of(new DashboardResponse.SubscribedTopicGroup("Target Role", List.of("백엔드 개발자"))),
+            List.of(
+                new DashboardResponse.BriefingPreferenceSummary(
+                    "JOB_POSTING", "채용 브리핑", Map.of("roles", List.of("백엔드 개발자")))),
             null,
             latest,
             null,
@@ -64,8 +67,9 @@ class DashboardControllerTest {
         .andExpect(jsonPath("$.data.user.nickname").value("테스터"))
         .andExpect(jsonPath("$.data.user.email").value("test@example.com"))
         .andExpect(jsonPath("$.data.user.onboardingCompleted").value(true))
-        .andExpect(jsonPath("$.data.subscribedTopics[0].topicName").value("Target Role"))
-        .andExpect(jsonPath("$.data.subscribedTopics[0].keywords[0]").value("백엔드 개발자"))
+        .andExpect(jsonPath("$.data.briefingPreferences[0].categoryCode").value("JOB_POSTING"))
+        .andExpect(jsonPath("$.data.briefingPreferences[0].categoryDisplayName").value("채용 브리핑"))
+        .andExpect(jsonPath("$.data.briefingPreferences[0].preference.roles[0]").value("백엔드 개발자"))
         .andExpect(jsonPath("$.data.latestBriefing.id").value(1))
         .andExpect(jsonPath("$.data.latestBriefing.title").value("오늘의 채용 브리핑"))
         .andExpect(jsonPath("$.data.latestBriefing.reportDate").value("2026-06-26"))
