@@ -1,4 +1,8 @@
-from app.schemas.briefing import BriefingGenerateRequest, BriefingGenerateResponse, TopicInput
+from app.schemas.briefing import (
+    BriefingGenerateRequest,
+    BriefingGenerateResponse,
+    TopicInput,
+)
 from app.services.dummy_briefing import generate
 
 
@@ -37,7 +41,9 @@ def test_generate_title_contains_primary_role():
 def test_generate_articles_reference_target_company():
     result = generate(_make_request())
     companies_mentioned = [
-        a for a in result.articles if "네이버" in a.title or "카카오" in a.title or "라인" in a.title
+        a
+        for a in result.articles
+        if "네이버" in a.title or "카카오" in a.title or "라인" in a.title
     ]
     assert len(companies_mentioned) > 0
 

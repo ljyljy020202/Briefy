@@ -63,7 +63,8 @@ def _build_postings(
                     f"주요 기술: {skill_str}."
                 ),
                 "why_it_matters": (
-                    f"목표 기업({company})의 공고이며 핵심 스킬({skill_a})과 매칭됩니다."
+                    f"목표 기업({company})의 공고이며 "
+                    f"핵심 스킬({skill_a})과 매칭됩니다."
                 ),
             }
         )
@@ -125,9 +126,15 @@ def _build_markdown(
         "### 💡 오늘의 추천 액션",
         "",
         f"1. {company_label}의 채용 공고를 지금 바로 확인하고 지원해보세요.",
-        f"2. 포트폴리오에 **{primary_skill}** 프로젝트를 추가하면 서류 통과율이 높아집니다.",
+        (
+            f"2. 포트폴리오에 **{primary_skill}** 프로젝트를 "
+            "추가하면 서류 통과율이 높아집니다."
+        ),
         "3. 오늘 마감되는 공고가 없는지 다시 한 번 확인하세요.",
-        f"4. {primary_role} 관련 기술 블로그나 오픈소스 기여로 GitHub를 업데이트하세요.",
+        (
+            f"4. {primary_role} 관련 기술 블로그나 오픈소스 기여로 "
+            "GitHub를 업데이트하세요."
+        ),
         "",
     ]
 
@@ -138,13 +145,11 @@ def generate(request: BriefingGenerateRequest) -> BriefingGenerateResponse:
     roles = _keywords_for(request.topics, "Target Role")
     companies = _keywords_for(request.topics, "Target Companies")
     skills = _keywords_for(request.topics, "Skills / Competencies")
-    locations = _keywords_for(request.topics, "Location")
     exp_levels = _keywords_for(request.topics, "Experience Level")
     emp_types = _keywords_for(request.topics, "Employment Type")
 
     primary_role = roles[0] if roles else "소프트웨어 엔지니어"
     primary_skill = skills[0] if skills else "개발"
-    primary_location = locations[0] if locations else "서울"
 
     all_postings = _build_postings(
         companies, roles, skills, exp_levels, emp_types, request.user_id, request.date
