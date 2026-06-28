@@ -2,17 +2,24 @@ from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
 
-class TopicInput(BaseModel):
-    name: str
-    keywords: list[str]
+class JobPostingPreference(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    roles: list[str] = []
+    companies: list[str] = []
+    skills: list[str] = []
+    locations: list[str] = []
+    experience_levels: list[str] = []  # JSON: experienceLevels
+    employment_types: list[str] = []   # JSON: employmentTypes
 
 
 class BriefingGenerateRequest(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
     user_id: int
-    topics: list[TopicInput]
-    date: str
+    category: str
+    preference: JobPostingPreference
+    briefing_date: str  # JSON: briefingDate
     tone: str = "easy"
 
 

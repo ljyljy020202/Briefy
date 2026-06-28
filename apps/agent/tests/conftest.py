@@ -5,18 +5,16 @@ from app.main import app
 
 FULL_REQUEST = {
     "userId": 1,
-    "topics": [
-        {"name": "Target Role", "keywords": ["백엔드 개발자", "풀스택 개발자"]},
-        {"name": "Target Companies", "keywords": ["네이버", "카카오", "라인"]},
-        {
-            "name": "Skills / Competencies",
-            "keywords": ["Spring Boot", "Java", "Kotlin"],
-        },
-        {"name": "Location", "keywords": ["서울", "판교"]},
-        {"name": "Experience Level", "keywords": ["신입", "3년 이상"]},
-        {"name": "Employment Type", "keywords": ["정규직"]},
-    ],
-    "date": "2026-06-26",
+    "category": "JOB_POSTING",
+    "preference": {
+        "roles": ["백엔드 개발자", "풀스택 개발자"],
+        "companies": ["네이버", "카카오", "라인"],
+        "skills": ["Spring Boot", "Java", "Kotlin"],
+        "locations": ["서울", "판교"],
+        "experienceLevels": ["신입", "3년 이상"],
+        "employmentTypes": ["정규직"],
+    },
+    "briefingDate": "2026-06-26",
     "tone": "easy",
 }
 

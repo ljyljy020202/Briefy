@@ -56,8 +56,14 @@ async def test_generate_content_references_company_keyword(client):
     assert "네이버" in content
 
 
-async def test_generate_with_empty_topics_returns_valid_response(client):
-    minimal = {"userId": 2, "topics": [], "date": "2026-06-26", "tone": "easy"}
+async def test_generate_with_empty_preference_returns_valid_response(client):
+    minimal = {
+        "userId": 2,
+        "category": "JOB_POSTING",
+        "preference": {},
+        "briefingDate": "2026-06-26",
+        "tone": "easy",
+    }
     response = await client.post("/briefings/generate", json=minimal)
     assert response.status_code == 200
     body = response.json()

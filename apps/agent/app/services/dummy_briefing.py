@@ -1,7 +1,7 @@
 """Parameterised dummy briefing generator — no LLM, no real crawling.
 
 Produces a realistic-looking job briefing from the user's preference
-keywords so the Spring Boot backend can integrate against a stable schema
+fields so the Spring Boot backend can integrate against a stable schema
 before real agent workflows are available.
 """
 
@@ -17,13 +17,6 @@ _NEW_COUNT = 3
 _TOTAL_COUNT = 5
 
 
-def _keywords_for(topics: list, name: str) -> list[str]:
-    for t in topics:
-        if t.name == name:
-            return t.keywords
-    return []
-
-
 def _build_postings(
     companies: list[str],
     roles: list[str],
@@ -31,7 +24,7 @@ def _build_postings(
     exp_levels: list[str],
     emp_types: list[str],
     user_id: int,
-    date: str,
+    briefing_date: str,
 ) -> list[dict]:
     eff_companies = companies or ["테크 스타트업", "소프트웨어 회사"]
     eff_roles = roles or ["소프트웨어 엔지니어"]
@@ -72,7 +65,7 @@ def _build_postings(
 
 
 def _build_markdown(
-    date: str,
+    briefing_date: str,
     new_postings: list[dict],
     deadline_postings: list[dict],
     primary_role: str,
@@ -83,7 +76,8 @@ def _build_markdown(
         "## 오늘의 채용 요약",
         "",
         (
-            f"{date} 기준, 설정하신 선호도에 맞는 신규 공고 **{len(new_postings)}건**, "
+            f"{briefing_date} 기준, 설정하신 선호도에 맞는 "
+            f"신규 공고 **{len(new_postings)}건**, "
             f"마감 임박 공고 **{len(deadline_postings)}건**이 확인되었습니다."
         ),
         "",
@@ -142,22 +136,24 @@ def _build_markdown(
 
 
 def generate(request: BriefingGenerateRequest) -> BriefingGenerateResponse:
-    roles = _keywords_for(request.topics, "Target Role")
-    companies = _keywords_for(request.topics, "Target Companies")
-    skills = _keywords_for(request.topics, "Skills / Competencies")
-    exp_levels = _keywords_for(request.topics, "Experience Level")
-    emp_types = _keywords_for(request.topics, "Employment Type")
+    pref = request.preference
+    roles = pref.roles
+    companies = pref.companies
+    skills = pref.skills
+    exp_levels = pref.experience_levels
+    emp_types = pref.employment_types
 
     primary_role = roles[0] if roles else "소프트웨어 엔지니어"
     primary_skill = skills[0] if skills else "개발"
 
     all_postings = _build_postings(
-        companies, roles, skills, exp_levels, emp_types, request.user_id, request.date
+        companies, roles, skills, exp_levels, emp_types,
+        request.user_id, request.briefing_date,
     )
     new_postings = all_postings[:_NEW_COUNT]
     deadline_postings = all_postings[_NEW_COUNT:]
 
-    title = f"오늘의 채용 브리핑 — {primary_role} ({request.date})"
+    title = f"오늘의 채용 브리핑 — {primary_role} ({request.briefing_date})"
     if companies:
         co_display = "·".join(companies[:3])
         extra = len(companies) - 3
@@ -173,7 +169,7 @@ def generate(request: BriefingGenerateRequest) -> BriefingGenerateResponse:
         )
 
     content = _build_markdown(
-        request.date,
+        request.briefing_date,
         new_postings,
         deadline_postings,
         primary_role,
@@ -181,7 +177,7 @@ def generate(request: BriefingGenerateRequest) -> BriefingGenerateResponse:
         companies,
     )
 
-    published_at = f"{request.date}T09:00:00"
+    published_at = f"{request.briefing_date}T09:00:00"
     articles = [
         JobArticle(
             title=p["title"],

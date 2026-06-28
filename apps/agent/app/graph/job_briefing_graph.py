@@ -13,8 +13,9 @@ from typing import TypedDict
 
 class JobBriefingState(TypedDict):
     user_id: int
-    topics: list[dict]
-    date: str
+    category: str
+    preference: dict
+    briefing_date: str
     tone: str
     raw_postings: list[dict]
     deduplicated: list[dict]

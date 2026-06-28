@@ -1,7 +1,7 @@
 from app.schemas.briefing import (
     BriefingGenerateRequest,
     BriefingGenerateResponse,
-    TopicInput,
+    JobPostingPreference,
 )
 from app.services.dummy_briefing import generate
 
@@ -9,15 +9,16 @@ from app.services.dummy_briefing import generate
 def _make_request(**overrides) -> BriefingGenerateRequest:
     defaults: dict = {
         "user_id": 1,
-        "topics": [
-            TopicInput(name="Target Role", keywords=["백엔드 개발자"]),
-            TopicInput(name="Target Companies", keywords=["네이버", "카카오", "라인"]),
-            TopicInput(name="Skills / Competencies", keywords=["Spring Boot", "Java"]),
-            TopicInput(name="Location", keywords=["서울"]),
-            TopicInput(name="Experience Level", keywords=["신입"]),
-            TopicInput(name="Employment Type", keywords=["정규직"]),
-        ],
-        "date": "2026-06-26",
+        "category": "JOB_POSTING",
+        "preference": JobPostingPreference(
+            roles=["백엔드 개발자"],
+            companies=["네이버", "카카오", "라인"],
+            skills=["Spring Boot", "Java"],
+            locations=["서울"],
+            experience_levels=["신입"],
+            employment_types=["정규직"],
+        ),
+        "briefing_date": "2026-06-26",
         "tone": "easy",
     }
     defaults.update(overrides)
@@ -48,8 +49,8 @@ def test_generate_articles_reference_target_company():
     assert len(companies_mentioned) > 0
 
 
-def test_generate_handles_empty_topics():
-    result = generate(_make_request(topics=[]))
+def test_generate_handles_empty_preference():
+    result = generate(_make_request(preference=JobPostingPreference()))
     assert isinstance(result, BriefingGenerateResponse)
     assert len(result.articles) > 0
 
