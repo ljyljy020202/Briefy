@@ -14,7 +14,7 @@ interface KeywordInputProps {
 export function KeywordInput({
   keywords,
   onChange,
-  placeholder = "Add keyword, press Enter…",
+  placeholder = "직접 입력 후 Enter…",
 }: KeywordInputProps) {
   const [value, setValue] = useState("");
 
@@ -71,7 +71,7 @@ export function KeywordInput({
         </div>
       )}
       <p className="text-xs text-muted-foreground">
-        {keywords.length}/10 keywords
+        {keywords.length}/10개
       </p>
     </div>
   );

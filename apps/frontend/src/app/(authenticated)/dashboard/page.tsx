@@ -56,7 +56,7 @@ export default function DashboardPage() {
               email: user.email,
               onboardingCompleted: user.onboardingCompleted,
             },
-            subscribedTopics: [],
+            briefingPreferences: [],
             nextDeliveryTime: null,
             latestBriefing: null,
             latestDeliveryStatus: null,
@@ -121,7 +121,7 @@ export default function DashboardPage() {
           className={cn(buttonVariants({ variant: 'outline' }), 'inline-flex items-center gap-2')}
         >
           <Settings2 className="size-4" />
-          주제 설정
+          선호도 설정
         </Link>
       </div>
 
@@ -184,10 +184,10 @@ export default function DashboardPage() {
             </CardContent>
 
             <div className="border-t border-border bg-secondary/40 p-6 sm:p-8 lg:border-l lg:border-t-0">
-              <p className="text-sm font-medium text-foreground">구독 중인 키워드</p>
+              <p className="text-sm font-medium text-foreground">설정한 조건</p>
               <div className="mt-3 flex flex-wrap gap-1.5">
-                {(summary?.subscribedTopics ?? [])
-                  .flatMap((t) => t.keywords)
+                {(summary?.briefingPreferences ?? [])
+                  .flatMap((p) => Object.values(p.preference).flat())
                   .slice(0, 8)
                   .map((k) => (
                     <Badge key={k} variant="muted">
@@ -247,7 +247,7 @@ export default function DashboardPage() {
             </CardContent>
 
             <div className="border-t border-border bg-secondary/40 p-6 sm:p-8 lg:border-l lg:border-t-0">
-              <p className="text-sm font-medium text-foreground">담은 주제</p>
+              <p className="text-sm font-medium text-foreground">브리핑 조건</p>
               <div className="mt-3 flex flex-wrap gap-1.5">
                 {mockLatest.topics.map((t) => (
                   <Badge key={t} variant="muted">
@@ -299,13 +299,14 @@ export default function DashboardPage() {
           <CardContent className="p-6">
             <div className="flex items-center gap-2 text-sm font-medium text-foreground">
               <Hash className="size-4 text-primary" />
-              구독 중인 키워드
+              설정한 조건
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
-              {summary?.subscribedTopics.flatMap((t) => t.keywords ?? []).length
-                ? summary.subscribedTopics.flatMap((t) => t.keywords ?? []).map((k) => (
-                    <Badge key={k}>{k}</Badge>
-                  ))
+              {(summary?.briefingPreferences ?? [])
+                .flatMap((p) => Object.values(p.preference).flat()).length > 0
+                ? (summary?.briefingPreferences ?? [])
+                    .flatMap((p) => Object.values(p.preference).flat())
+                    .map((k) => <Badge key={k}>{k}</Badge>)
                 : ['백엔드 개발자', '네이버', 'Spring Boot'].map((k) => (
                     <Badge key={k}>{k}</Badge>
                   ))}
@@ -317,7 +318,7 @@ export default function DashboardPage() {
                 'mt-4 inline-flex items-center gap-1',
               )}
             >
-              키워드 편집
+              조건 편집
               <ArrowRight className="size-3.5" />
             </Link>
           </CardContent>

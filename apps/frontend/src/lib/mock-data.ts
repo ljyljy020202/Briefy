@@ -22,10 +22,10 @@ export type MockReport = {
   sections: MockReportSection[]
 }
 
-// Per-topic suggested values for the onboarding keyword step.
-// Keys match Topic.name values seeded in the backend.
+// Suggested values for each JOB_POSTING preference field in onboarding.
+// Keys match JobPostingPreference field names.
 export const JOB_KEYWORD_SUGGESTIONS: Record<string, string[]> = {
-  'Target Role': [
+  roles: [
     '백엔드 개발자',
     '풀스택 개발자',
     '데이터 엔지니어',
@@ -33,7 +33,7 @@ export const JOB_KEYWORD_SUGGESTIONS: Record<string, string[]> = {
     'iOS 개발자',
     'Android 개발자',
   ],
-  'Target Companies': [
+  companies: [
     '네이버',
     '카카오',
     '라인',
@@ -43,7 +43,7 @@ export const JOB_KEYWORD_SUGGESTIONS: Record<string, string[]> = {
     '배달의민족',
     '크래프톤',
   ],
-  'Skills / Competencies': [
+  skills: [
     'Spring Boot',
     'Python',
     'Kotlin',
@@ -54,9 +54,9 @@ export const JOB_KEYWORD_SUGGESTIONS: Record<string, string[]> = {
     'Docker',
     'Kubernetes',
   ],
-  Location: ['서울', '판교', '부산', '재택 가능'],
-  'Experience Level': ['신입', '1~3년', '3~5년', '5년 이상', '경력 무관'],
-  'Employment Type': ['정규직', '계약직', '인턴'],
+  locations: ['서울', '판교', '부산', '재택 가능'],
+  experienceLevels: ['신입', '1~3년', '3~5년', '5년 이상', '경력 무관'],
+  employmentTypes: ['정규직', '계약직', '채용연계형 인턴', '인턴'],
 }
 
 export const DELIVERY_TIMES = [
@@ -73,7 +73,7 @@ export const MOCK_REPORTS: MockReport[] = [
     date: '2026년 6월 26일 (금)',
     readTime: '3분 분량',
     status: 'delivered',
-    topics: ['목표 직무', '관심 기업', '핵심 스킬'],
+    topics: ['목표 직무', '관심 기업', '기술/역량'],
     preview:
       '네이버·카카오·라인에서 신규 공고 3건, 마감 임박 공고 2건이 확인됐습니다. Spring Boot 스킬과 직접 매칭되는 포지션이 포함돼 있습니다.',
     highlights: [
@@ -204,7 +204,7 @@ export const MOCK_REPORTS: MockReport[] = [
     date: '2026년 6월 27일 (토)',
     readTime: '예약됨',
     status: 'scheduled',
-    topics: ['목표 직무', '관심 기업', '핵심 스킬'],
+    topics: ['목표 직무', '관심 기업', '기술/역량'],
     preview:
       '내일 오전 8시에 전송될 예정입니다. 선호도는 언제든 수정할 수 있습니다.',
     highlights: [],
@@ -215,7 +215,7 @@ export const MOCK_REPORTS: MockReport[] = [
 export const MOCK_STATS = [
   { label: '연속 수신', value: '23일', hint: '꾸준히 읽고 있어요' },
   { label: '오늘 신규 공고', value: '3건', hint: '관심 기업 기준' },
-  { label: '설정 선호도', value: '6개', hint: '직무·기업·스킬 등' },
+  { label: '설정 조건', value: '6개', hint: '직무·기업·스킬 등' },
   { label: '마감 임박', value: '2건', hint: '3일 이내 마감' },
 ]
 

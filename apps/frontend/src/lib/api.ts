@@ -1,8 +1,9 @@
 import type {
   User,
-  Topic,
-  UserTopic,
-  BulkTopicRequest,
+  BriefingCategory,
+  BriefingPreference,
+  UpsertBriefingPreferenceRequest,
+  PatchBriefingPreferenceRequest,
   OnboardingResult,
   DashboardSummary,
   BriefingListItem,
@@ -62,17 +63,31 @@ export const users = {
     apiFetch<null>("/users/me", { method: "DELETE" }),
 };
 
-export const topics = {
-  getAll: (): Promise<Topic[]> => apiFetch<Topic[]>("/topics"),
-  getMine: (): Promise<UserTopic[]> => apiFetch<UserTopic[]>("/me/topics"),
-  subscribeBulk: (body: BulkTopicRequest): Promise<{ createdCount: number }> =>
-    apiFetch<{ createdCount: number }>("/me/topics/bulk", {
+export const briefingCategories = {
+  getAll: (): Promise<BriefingCategory[]> =>
+    apiFetch<BriefingCategory[]>("/briefing-categories"),
+};
+
+export const briefingPreferences = {
+  getMine: (): Promise<BriefingPreference[]> =>
+    apiFetch<BriefingPreference[]>("/me/briefing-preferences"),
+  upsert: (body: UpsertBriefingPreferenceRequest): Promise<BriefingPreference> =>
+    apiFetch<BriefingPreference>("/me/briefing-preferences", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     }),
-  unsubscribe: (id: number): Promise<null> =>
-    apiFetch<null>(`/me/topics/${id}`, { method: "DELETE" }),
+  patch: (
+    id: number,
+    body: PatchBriefingPreferenceRequest
+  ): Promise<BriefingPreference> =>
+    apiFetch<BriefingPreference>(`/me/briefing-preferences/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  delete: (id: number): Promise<null> =>
+    apiFetch<null>(`/me/briefing-preferences/${id}`, { method: "DELETE" }),
 };
 
 export const dashboard = {

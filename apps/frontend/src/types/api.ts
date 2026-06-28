@@ -9,40 +9,50 @@ export interface User {
   onboardingCompleted: boolean;
 }
 
-export interface Topic {
+export interface BriefingCategory {
   id: number;
-  name: string;
-  slug: string;
-  category: string;
-  description: string;
-  displayOrder: number;
+  code: string;
+  displayName: string;
+  phase: string;
+  active: boolean;
 }
 
-export interface UserTopic {
+export interface JobPostingPreference {
+  roles?: string[];
+  companies?: string[];
+  skills?: string[];
+  locations?: string[];
+  experienceLevels?: string[];
+  employmentTypes?: string[];
+}
+
+export interface BriefingPreference {
   id: number;
-  topicId: number;
-  topicName: string;
-  keyword: string;
-  priority: number;
-  isActive: boolean;
+  categoryCode: string;
+  categoryDisplayName: string;
+  preference: JobPostingPreference;
+  active: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
 }
 
-export interface BulkTopicItem {
-  topicId: number;
-  keywords: string[];
+export interface UpsertBriefingPreferenceRequest {
+  categoryId: number;
+  preference: JobPostingPreference;
 }
 
-export interface BulkTopicRequest {
-  topics: BulkTopicItem[];
+export interface PatchBriefingPreferenceRequest {
+  preference: Partial<JobPostingPreference>;
 }
 
 export interface OnboardingResult {
   onboardingCompleted: boolean;
 }
 
-export interface SubscribedTopicGroup {
-  topicName: string;
-  keywords: string[];
+export interface BriefingPreferenceSummary {
+  categoryCode: string;
+  categoryDisplayName: string;
+  preference: Record<string, string[]>;
 }
 
 export interface DashboardSummary {
@@ -51,7 +61,7 @@ export interface DashboardSummary {
     email: string;
     onboardingCompleted: boolean;
   };
-  subscribedTopics: SubscribedTopicGroup[];
+  briefingPreferences: BriefingPreferenceSummary[];
   nextDeliveryTime: string | null;
   latestBriefing: BriefingListItem | null;
   latestDeliveryStatus: "SENT" | "PENDING" | "FAILED" | null;

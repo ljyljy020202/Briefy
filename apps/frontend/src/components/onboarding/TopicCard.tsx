@@ -1,15 +1,15 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import type { Topic } from "@/types/api";
+import type { BriefingCategory } from "@/types/api";
 
 interface TopicCardProps {
-  topic: Topic;
+  category: BriefingCategory;
   selected: boolean;
   onToggle: () => void;
 }
 
-export function TopicCard({ topic, selected, onToggle }: TopicCardProps) {
+export function TopicCard({ category, selected, onToggle }: TopicCardProps) {
   return (
     <button
       onClick={onToggle}
@@ -22,12 +22,7 @@ export function TopicCard({ topic, selected, onToggle }: TopicCardProps) {
     >
       <div className="flex items-start justify-between gap-2">
         <div className="space-y-1 flex-1 min-w-0">
-          <p className="font-medium text-sm">{topic.name}</p>
-          {topic.description && (
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              {topic.description}
-            </p>
-          )}
+          <p className="font-medium text-sm">{category.displayName}</p>
         </div>
         <span
           className={cn(
