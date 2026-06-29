@@ -23,6 +23,9 @@ public enum ErrorCode {
   BRIEFING_REPORT_NOT_FOUND(HttpStatus.NOT_FOUND, "Briefing report not found"),
   BRIEFING_JOB_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "Briefing generation failed"),
 
+  // Collection
+  COLLECTION_JOB_NOT_FOUND(HttpStatus.NOT_FOUND, "Collection job not found"),
+
   // External
   AGENT_SERVER_ERROR(HttpStatus.BAD_GATEWAY, "Agent server error"),
   DELIVERY_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "Email delivery failed"),
