@@ -1,5 +1,168 @@
 # Database Design
 
+## ERD
+
+> **Notes:**
+> - `collection_jobs` tracks executions of the common daily collection workflow; it is an independent execution-log table with no FK into the candidate pool.
+> - `job_postings`, `company_issues`, and `industry_issues` are candidate pool tables written by the Agent `DailyCollectWorkflow` and read during briefing generation.
+> - `briefing_reports` stores the final generated briefing per user per day.
+> - `briefing_articles` stores article snapshots included in each report; `source` and `url` provide a logical trace back to the candidate pool tables, but no DB-level FK is enforced.
+> - Some `user_id` columns (`briefing_jobs.user_id`, `briefing_reports.user_id`) are **logical FKs** stored as plain `BIGINT` — no DB-level `FOREIGN KEY` constraint is defined.
+> - `delivery_logs` and `user_feedback` are **planned** tables; they are documented below but not yet implemented as Java entities.
+
+```mermaid
+erDiagram
+    users {
+        bigint id PK
+        varchar email UK
+        varchar nickname
+        varchar profile_image_url
+        varchar provider
+        varchar provider_id
+        varchar role
+        varchar status
+        boolean onboarding_completed
+        datetime created_at
+        datetime updated_at
+    }
+
+    briefing_categories {
+        bigint id PK
+        varchar code UK
+        varchar display_name
+        varchar phase
+        boolean is_active
+        datetime created_at
+        datetime updated_at
+    }
+
+    user_briefing_preferences {
+        bigint id PK
+        bigint user_id "logical FK to users"
+        bigint category_id FK
+        text preference_json
+        boolean is_active
+        datetime created_at
+        datetime updated_at
+    }
+
+    collection_jobs {
+        bigint id PK
+        date collection_date
+        varchar status
+        varchar trigger_type
+        text categories
+        datetime started_at
+        datetime completed_at
+        int collected_count
+        int saved_count
+        int deduplicated_count
+        text error_message
+        int retry_count
+        datetime created_at
+        datetime updated_at
+    }
+
+    job_postings {
+        bigint id PK
+        varchar title
+        varchar company
+        varchar url UK
+        varchar location
+        date deadline
+        text description
+        varchar skills
+        varchar employment_type
+        varchar experience_level
+        varchar content_hash
+        date collected_date
+        datetime published_at
+        datetime created_at
+        datetime updated_at
+    }
+
+    company_issues {
+        bigint id PK
+        varchar company
+        varchar title
+        varchar url UK
+        text summary
+        datetime published_at
+        varchar content_hash
+        date collected_date
+        datetime created_at
+        datetime updated_at
+    }
+
+    industry_issues {
+        bigint id PK
+        varchar category
+        varchar title
+        varchar url UK
+        text summary
+        datetime published_at
+        varchar content_hash
+        date collected_date
+        datetime created_at
+        datetime updated_at
+    }
+
+    briefing_jobs {
+        bigint id PK
+        bigint user_id "logical FK to users"
+        varchar status
+        varchar trigger_type
+        datetime scheduled_at
+        datetime started_at
+        datetime completed_at
+        text error_message
+        int retry_count
+        datetime created_at
+        datetime updated_at
+    }
+
+    briefing_reports {
+        bigint id PK
+        bigint user_id "logical FK to users (denormalized)"
+        bigint briefing_job_id FK
+        varchar title
+        varchar summary
+        mediumtext content
+        date report_date
+        varchar tone
+        int article_count
+        int token_input
+        int token_output
+        datetime created_at
+        datetime updated_at
+    }
+
+    briefing_articles {
+        bigint id PK
+        bigint briefing_report_id FK
+        varchar title
+        varchar source "publisher name; logically traces to candidate pool"
+        varchar url "source URL; logically traces to job_postings / company_issues / industry_issues"
+        text summary
+        text why_it_matters
+        datetime published_at
+        int display_order
+        datetime created_at
+    }
+
+    %% Planned (not yet implemented as Java entities):
+    %% delivery_logs  — email send attempts per briefing_report
+    %% user_feedback  — user reactions to briefing reports
+
+    users ||--o{ user_briefing_preferences : "user_id"
+    briefing_categories ||--o{ user_briefing_preferences : "category_id"
+    users ||--o{ briefing_jobs : "user_id"
+    briefing_jobs ||--o| briefing_reports : "briefing_job_id"
+    briefing_reports ||--o{ briefing_articles : "briefing_report_id"
+```
+
+---
+
 ## Overview
 
 Briefy uses MySQL 8.0 (AWS RDS in production, Docker container in development).  
