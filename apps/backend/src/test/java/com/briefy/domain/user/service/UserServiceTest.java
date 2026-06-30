@@ -71,15 +71,17 @@ class UserServiceTest {
   }
 
   @Test
-  void completeOnboarding_setsNicknameAndCompletedFlag() {
+  void completeOnboarding_setsNicknameAndReportEmailAndCompletedFlag() {
     User user = sampleUser();
     when(userRepository.findById(1L)).thenReturn(Optional.of(user));
 
     UpdateOnboardingResponse response =
-        userService.completeOnboarding(1L, new UpdateOnboardingRequest("NewNick"));
+        userService.completeOnboarding(
+            1L, new UpdateOnboardingRequest("NewNick", "report@example.com"));
 
     assertThat(response.onboardingCompleted()).isTrue();
     assertThat(user.getNickname()).isEqualTo("NewNick");
+    assertThat(user.getReportEmail()).isEqualTo("report@example.com");
     assertThat(user.isOnboardingCompleted()).isTrue();
   }
 
@@ -89,7 +91,7 @@ class UserServiceTest {
     when(userRepository.findById(1L)).thenReturn(Optional.of(user));
 
     UpdateOnboardingResponse response =
-        userService.completeOnboarding(1L, new UpdateOnboardingRequest(null));
+        userService.completeOnboarding(1L, new UpdateOnboardingRequest(null, null));
 
     assertThat(response.onboardingCompleted()).isTrue();
     assertThat(user.getNickname()).isEqualTo("Jiye");
@@ -97,7 +99,21 @@ class UserServiceTest {
 
   @Test
   void completeOnboarding_withBlankNickname_throwsValidationError() {
-    assertThatThrownBy(() -> userService.completeOnboarding(1L, new UpdateOnboardingRequest("  ")))
+    assertThatThrownBy(
+            () -> userService.completeOnboarding(1L, new UpdateOnboardingRequest("  ", null)))
+        .isInstanceOf(BusinessException.class)
+        .satisfies(
+            ex ->
+                assertThat(((BusinessException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.VALIDATION_ERROR));
+
+    verify(userRepository, never()).findById(any());
+  }
+
+  @Test
+  void completeOnboarding_withBlankReportEmail_throwsValidationError() {
+    assertThatThrownBy(
+            () -> userService.completeOnboarding(1L, new UpdateOnboardingRequest(null, "  ")))
         .isInstanceOf(BusinessException.class)
         .satisfies(
             ex ->
@@ -112,7 +128,9 @@ class UserServiceTest {
     when(userRepository.findById(99L)).thenReturn(Optional.empty());
 
     assertThatThrownBy(
-            () -> userService.completeOnboarding(99L, new UpdateOnboardingRequest("Nick")))
+            () ->
+                userService.completeOnboarding(
+                    99L, new UpdateOnboardingRequest("Nick", "report@example.com")))
         .isInstanceOf(BusinessException.class)
         .satisfies(
             ex ->
