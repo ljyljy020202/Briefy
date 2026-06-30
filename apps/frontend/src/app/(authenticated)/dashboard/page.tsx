@@ -117,7 +117,7 @@ export default function DashboardPage() {
           </h1>
         </div>
         <Link
-          href="/onboarding"
+          href="/mypage"
           className={cn(buttonVariants({ variant: 'outline' }), 'inline-flex items-center gap-2')}
         >
           <Settings2 className="size-4" />
@@ -312,7 +312,7 @@ export default function DashboardPage() {
                   ))}
             </div>
             <Link
-              href="/onboarding"
+              href="/mypage"
               className={cn(
                 buttonVariants({ variant: 'ghost', size: 'sm' }),
                 'mt-4 inline-flex items-center gap-1',
