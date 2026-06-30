@@ -55,6 +55,9 @@ public class User extends BaseTimeEntity {
   @Column(nullable = false)
   private boolean onboardingCompleted;
 
+  @Column(length = 255)
+  private String reportEmail;
+
   protected User() {}
 
   private User(
@@ -93,9 +96,12 @@ public class User extends BaseTimeEntity {
         false);
   }
 
-  public void completeOnboarding(String nickname) {
+  public void completeOnboarding(String nickname, String reportEmail) {
     if (nickname != null) {
       this.nickname = nickname;
+    }
+    if (reportEmail != null) {
+      this.reportEmail = reportEmail;
     }
     this.onboardingCompleted = true;
   }
@@ -134,5 +140,9 @@ public class User extends BaseTimeEntity {
 
   public boolean isOnboardingCompleted() {
     return onboardingCompleted;
+  }
+
+  public String getReportEmail() {
+    return reportEmail;
   }
 }

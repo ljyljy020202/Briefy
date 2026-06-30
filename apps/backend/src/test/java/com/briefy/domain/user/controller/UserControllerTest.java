@@ -60,7 +60,13 @@ class UserControllerTest {
     when(userService.getMe(1L))
         .thenReturn(
             new UserMeResponse(
-                1L, "user@gmail.com", "Jiye", "https://img.example.com/photo.jpg", "USER", true));
+                1L,
+                "user@gmail.com",
+                "Jiye",
+                "report@example.com",
+                "https://img.example.com/photo.jpg",
+                "USER",
+                true));
 
     mockMvc
         .perform(get("/api/users/me"))
@@ -147,6 +153,17 @@ class UserControllerTest {
             patch("/api/users/me/onboarding")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"nickname\":\"" + tooLong + "\"}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
+  }
+
+  @Test
+  void completeOnboarding_returns400_whenReportEmailInvalid() throws Exception {
+    mockMvc
+        .perform(
+            patch("/api/users/me/onboarding")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"reportEmail\":\"not-an-email\"}"))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
   }
