@@ -4,7 +4,7 @@
 
 > **Notes:**
 > - `collection_jobs` tracks executions of the common daily collection workflow; it is an independent execution-log table with no FK into the candidate pool.
-> - `job_postings`, `company_issues`, and `industry_issues` are candidate pool tables written by the Agent `DailyCollectWorkflow` and read during briefing generation.
+> - `job_postings`, `company_issues`, and `industry_issues` are candidate pool tables. **The Spring backend owns all writes** — the Agent returns raw job postings in the `POST /collections/daily` response, and Spring upserts them via `CandidatePoolService`. The Agent does not connect to the database directly. Spring reads the candidate pool during briefing generation and sends it to the Agent in the `candidatePool` field of the `POST /briefings/generate` request.
 > - `briefing_reports` stores the final generated briefing per user per day.
 > - `briefing_articles` stores article snapshots included in each report; `source` and `url` provide a logical trace back to the candidate pool tables, but no DB-level FK is enforced.
 > - Some `user_id` columns (`briefing_jobs.user_id`, `briefing_reports.user_id`) are **logical FKs** stored as plain `BIGINT` — no DB-level `FOREIGN KEY` constraint is defined.
@@ -377,7 +377,7 @@ INDEX        idx_job_postings_hash        (content_hash)
 
 - `url` uniqueness prevents re-inserting the same posting on repeated collection runs.
 - `content_hash` allows detecting changed postings (e.g. deadline extension) for future update logic.
-- The Agent service owns writes; the backend reads for ranking and briefing generation.
+- **Spring owns all writes** via `CandidatePoolService.upsertJobPostings` after the Agent returns raw postings. Spring also owns reads during briefing generation.
 - Rows older than a configurable retention window (e.g. 30 days past deadline) can be purged in future.
 
 ---
@@ -699,11 +699,11 @@ users ────────────────────────�
   │ 1:1 notification_settings (delivery preferences)                             │
   └────────────────────────────────────────────────────────────────────────────┘
 
-Candidate pool tables (written by Agent DailyCollectWorkflow, read by UserBriefingWorkflow):
+Candidate pool tables (written by Spring after Agent returns raw data; read by Spring before calling Agent for briefing):
 
   job_postings       ← 1st MVP  (JOB_POSTING category)
-  company_issues     ← 1.5 MVP  (COMPANY_NEWS category)
-  industry_issues    ← 2nd MVP  (INDUSTRY_TREND category)
+  company_issues     ← 1.5 MVP  (COMPANY_NEWS category)  [placeholder — not populated in 1st MVP]
+  industry_issues    ← 2nd MVP  (INDUSTRY_TREND category) [placeholder — not populated in 1st MVP]
 ```
 
 ---
