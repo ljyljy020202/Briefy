@@ -7,4 +7,5 @@ public record AgentBriefingRequest(
     String category,
     Map<String, Object> preference,
     String briefingDate,
-    String tone) {}
+    String tone,
+    AgentCandidatePool candidatePool) {}

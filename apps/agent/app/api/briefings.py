@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
+from app.graph import user_briefing_graph
 from app.schemas.briefing import BriefingGenerateRequest, BriefingGenerateResponse
-from app.services import dummy_briefing
 
 router = APIRouter()
 
@@ -14,4 +14,4 @@ router = APIRouter()
 async def generate_briefing(
     request: BriefingGenerateRequest,
 ) -> BriefingGenerateResponse:
-    return dummy_briefing.generate(request)
+    return user_briefing_graph.run(request)

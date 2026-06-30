@@ -3,6 +3,8 @@ package com.briefy.domain.briefing.client;
 import com.briefy.config.AgentProperties;
 import com.briefy.domain.briefing.client.dto.AgentBriefingRequest;
 import com.briefy.domain.briefing.client.dto.AgentBriefingResponse;
+import com.briefy.domain.briefing.client.dto.AgentCollectionRequest;
+import com.briefy.domain.briefing.client.dto.AgentCollectionResponse;
 import com.briefy.global.exception.BusinessException;
 import com.briefy.global.exception.ErrorCode;
 import java.time.Duration;
@@ -53,6 +55,39 @@ public class AgentClient {
       throw e;
     } catch (Exception e) {
       log.error("Agent call failed, userId={}: {}", request.userId(), e.getMessage());
+      throw new BusinessException(ErrorCode.AGENT_SERVER_ERROR, "Agent server error");
+    }
+  }
+
+  public AgentCollectionResponse triggerDailyCollection(AgentCollectionRequest request) {
+    log.info("Calling agent for daily collection, date={}", request.collectDate());
+    try {
+      AgentCollectionResponse response =
+          webClient
+              .post()
+              .uri("/collections/daily")
+              .contentType(MediaType.APPLICATION_JSON)
+              .bodyValue(request)
+              .retrieve()
+              .onStatus(
+                  HttpStatusCode::isError,
+                  resp ->
+                      resp.bodyToMono(String.class)
+                          .defaultIfEmpty("")
+                          .map(
+                              body ->
+                                  new BusinessException(
+                                      ErrorCode.AGENT_SERVER_ERROR,
+                                      "Agent returned " + resp.statusCode() + ": " + body)))
+              .bodyToMono(AgentCollectionResponse.class)
+              .timeout(Duration.ofSeconds(120))
+              .block();
+      log.info("Agent daily collection succeeded, date={}", request.collectDate());
+      return response;
+    } catch (BusinessException e) {
+      throw e;
+    } catch (Exception e) {
+      log.error("Agent collection call failed: {}", e.getMessage());
       throw new BusinessException(ErrorCode.AGENT_SERVER_ERROR, "Agent server error");
     }
   }
