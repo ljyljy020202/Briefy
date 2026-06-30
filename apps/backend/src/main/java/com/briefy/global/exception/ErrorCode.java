@@ -25,6 +25,7 @@ public enum ErrorCode {
 
   // Collection
   COLLECTION_JOB_NOT_FOUND(HttpStatus.NOT_FOUND, "Collection job not found"),
+  COLLECTION_JOB_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "Daily collection failed"),
 
   // External
   AGENT_SERVER_ERROR(HttpStatus.BAD_GATEWAY, "Agent server error"),
