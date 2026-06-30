@@ -15,4 +15,7 @@ public interface CollectionJobRepository extends JpaRepository<CollectionJob, Lo
 
   Optional<CollectionJob> findTopByCollectionDateAndStatusOrderByCreatedAtDesc(
       LocalDate collectionDate, CollectionJobStatus status);
+
+  boolean existsByCollectionDateAndStatusIn(
+      LocalDate collectionDate, List<CollectionJobStatus> statuses);
 }

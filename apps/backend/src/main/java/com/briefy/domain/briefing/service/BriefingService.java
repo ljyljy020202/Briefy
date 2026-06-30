@@ -12,6 +12,7 @@ import com.briefy.domain.briefing.dto.GenerateResult;
 import com.briefy.domain.briefing.entity.BriefingArticle;
 import com.briefy.domain.briefing.entity.BriefingJob;
 import com.briefy.domain.briefing.entity.BriefingReport;
+import com.briefy.domain.briefing.entity.BriefingTriggerType;
 import com.briefy.domain.briefing.repository.BriefingJobRepository;
 import com.briefy.domain.briefing.repository.BriefingReportRepository;
 import com.briefy.domain.briefingpreference.entity.BriefingCategoryCode;
@@ -64,6 +65,17 @@ public class BriefingService {
    */
   @Transactional(noRollbackFor = Exception.class)
   public GenerateResult generateBriefing(Long userId, GenerateBriefingRequest request) {
+    return doGenerateBriefing(userId, request, BriefingTriggerType.MANUAL);
+  }
+
+  @Transactional(noRollbackFor = Exception.class)
+  public GenerateResult generateScheduledBriefing(Long userId) {
+    return doGenerateBriefing(
+        userId, new GenerateBriefingRequest(null), BriefingTriggerType.SCHEDULED);
+  }
+
+  private GenerateResult doGenerateBriefing(
+      Long userId, GenerateBriefingRequest request, BriefingTriggerType triggerType) {
     List<UserBriefingPreference> preferences =
         userBriefingPreferenceRepository.findAllByUserIdAndActiveTrue(userId);
 
@@ -73,7 +85,10 @@ public class BriefingService {
             .findFirst()
             .orElse(null);
 
-    BriefingJob job = BriefingJob.createManual(userId);
+    BriefingJob job =
+        triggerType == BriefingTriggerType.SCHEDULED
+            ? BriefingJob.createScheduled(userId)
+            : BriefingJob.createManual(userId);
     job.startProcessing();
     briefingJobRepository.save(job);
 

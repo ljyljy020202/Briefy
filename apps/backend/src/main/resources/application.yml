@@ -42,3 +42,10 @@ jwt:
 
 app:
   frontend-base-url: ${FRONTEND_BASE_URL:http://localhost:3000}
+
+briefy:
+  scheduler:
+    enabled: false
+    daily-collection-cron: "0 0 6 * * *"
+    daily-briefing-cron: "0 0 8 * * *"
+    zone: Asia/Seoul
