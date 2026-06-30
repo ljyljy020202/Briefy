@@ -9,8 +9,38 @@ class JobPostingPreference(BaseModel):
     companies: list[str] = []
     skills: list[str] = []
     locations: list[str] = []
-    experience_levels: list[str] = []  # JSON: experienceLevels
-    employment_types: list[str] = []   # JSON: employmentTypes
+    experience_levels: list[str] = []
+    employment_types: list[str] = []
+
+
+class CandidateJobPosting(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    id: int | None = None
+    source: str | None = None
+    source_url: str | None = None
+    company_name: str | None = None
+    title: str | None = None
+    position: str | None = None
+    employment_type: str | None = None
+    experience_level: str | None = None
+    location: str | None = None
+    deadline: str | None = None
+    skills: list[str] = []
+    roles: list[str] = []
+    description: str | None = None
+    posted_at: str | None = None
+    collected_date: str | None = None
+    content_hash: str | None = None
+    pre_score: int = 0
+
+
+class CandidatePool(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    job_postings: list[CandidateJobPosting] = []
+    company_issues: list = []
+    industry_issues: list = []
 
 
 class BriefingGenerateRequest(BaseModel):
@@ -19,8 +49,9 @@ class BriefingGenerateRequest(BaseModel):
     user_id: int
     category: str
     preference: JobPostingPreference
-    briefing_date: str  # JSON: briefingDate
+    briefing_date: str
     tone: str = "easy"
+    candidate_pool: CandidatePool = Field(default_factory=CandidatePool)
 
 
 class JobArticle(BaseModel):
@@ -32,6 +63,7 @@ class JobArticle(BaseModel):
     summary: str | None = None
     why_it_matters: str | None = None
     published_at: str | None = None
+    company_name: str | None = None
 
 
 class TokenUsage(BaseModel):

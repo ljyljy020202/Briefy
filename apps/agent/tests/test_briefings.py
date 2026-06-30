@@ -57,14 +57,36 @@ async def test_generate_content_references_company_keyword(client):
 
 
 async def test_generate_with_empty_preference_returns_valid_response(client):
-    minimal = {
+    request = {
         "userId": 2,
         "category": "JOB_POSTING",
         "preference": {},
         "briefingDate": "2026-06-26",
         "tone": "easy",
+        "candidatePool": {
+            "jobPostings": [
+                {
+                    "id": 99,
+                    "source": "원티드",
+                    "sourceUrl": "https://www.wanted.co.kr/wd/00099",
+                    "companyName": "스타트업A",
+                    "title": "백엔드 개발자",
+                    "position": "백엔드 개발자",
+                    "employmentType": "정규직",
+                    "experienceLevel": "신입",
+                    "location": "서울",
+                    "deadline": "2026-07-15",
+                    "skills": ["Python"],
+                    "roles": ["백엔드 개발자"],
+                    "description": "백엔드 개발자 채용",
+                    "preScore": 30,
+                }
+            ],
+            "companyIssues": [],
+            "industryIssues": [],
+        },
     }
-    response = await client.post("/briefings/generate", json=minimal)
+    response = await client.post("/briefings/generate", json=request)
     assert response.status_code == 200
     body = response.json()
     assert body["title"]
