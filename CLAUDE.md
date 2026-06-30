@@ -160,6 +160,74 @@ Spring profile `local` (activated via `--spring.profiles.active=local`) uses `dd
 - Never commit secrets, API keys, or credentials; use environment variables.
 - Do not commit build artifacts (`node_modules/`, `build/`, `.gradle/`, `__pycache__/`).
 
+## Branch Strategy
+
+### Branch Roles
+
+| Branch | Role |
+|--------|------|
+| `main` | Stable, always deployable. Never push feature work here directly. |
+| `dev` | Integration branch. All feature branches merge here first. |
+| `feature/*` | Feature-specific working branches, cut from `dev`. |
+
+### Branch Naming
+
+Use a service prefix so the branch name immediately shows what is being changed:
+
+```
+feature/<service>-<short-description>
+```
+
+| Prefix | Area |
+|--------|------|
+| `feature/frontend-` | `apps/frontend/` |
+| `feature/backend-` | `apps/backend/` |
+| `feature/agent-` | `apps/agent/` |
+| `feature/infra-` | Docker Compose, Makefile, scripts |
+| `feature/docs-` | `docs/` |
+| `feature/ci-` | `.github/workflows/` |
+
+**Examples:**
+
+```
+feature/frontend-onboarding-page
+feature/frontend-dashboard
+feature/backend-auth
+feature/backend-preference
+feature/backend-briefing-job
+feature/agent-daily-collect
+feature/agent-user-briefing
+feature/infra-docker-compose
+feature/docs-database-erd
+feature/ci-backend-workflow
+```
+
+### PR Rules
+
+- Always create a PR from `feature/*` → `dev`; never push feature work directly to `main`.
+- Merge `dev` → `main` only when the integrated version is tested and deployable.
+- Prefer small, single-feature PRs. Avoid mixing frontend, backend, and agent changes in one PR unless the feature genuinely requires cross-service integration — if it does, explain why in the PR description.
+- Before opening a PR, run the relevant checks for changed services:
+  - **backend**: `./gradlew test` and `./gradlew spotlessCheck`
+  - **frontend**: `npm run lint` and `npm run build`
+  - **agent**: `poetry run pytest` and `poetry run ruff check .`
+- Update `docs/` when API contracts, database schema, environment variables, or workflows change.
+
+### Typical Flow
+
+1. Cut a feature branch from `dev`:
+   ```bash
+   git switch dev && git pull
+   git switch -c feature/backend-auth
+   ```
+2. Commit with the Korean-subject convention (see [Commit Convention](#commit-convention)):
+   ```
+   feat(backend): Google OAuth 콜백 핸들러 추가
+   ```
+3. Push and open a PR from `feature/backend-auth` → `dev`.
+4. After review and CI passes, merge to `dev`.
+5. Merge `dev` → `main` only after integration testing confirms the build is deployable.
+
 ## Commit Convention
 
 All commits in this repository follow **Conventional Commits**.
@@ -172,7 +240,7 @@ All commits in this repository follow **Conventional Commits**.
 
 - **type**: what kind of change (see table below)
 - **scope**: which service or layer is affected (optional but recommended)
-- **subject**: imperative, lowercase, no trailing period, ≤ 72 chars total
+- **subject**: 한국어로 작성, no trailing period, ≤ 72 chars total (type + scope + subject combined)
 
 ### Types
 
@@ -203,18 +271,18 @@ Use the service name or layer affected:
 ### Examples
 
 ```
-feat(backend): add Google OAuth callback handler
-fix(agent): handle empty articles list from LLM
-docs: rewrite api.md to match database schema
-chore(backend): add spring-security-oauth2-jose dependency
-ci: fix workflow paths to use apps/ prefix
-refactor(frontend): extract api client to lib/api.ts
-test(backend): add unit tests for BriefingService
+feat(backend): Google OAuth 콜백 핸들러 추가
+fix(agent): 빈 기사 목록 처리 로직 추가
+docs: database.md에 ERD 추가
+chore(backend): spring-security-oauth2-jose 의존성 추가
+ci: apps 경로 기준으로 워크플로우 수정
+refactor(frontend): API 클라이언트를 lib/api.ts로 분리
+test(backend): BriefingService 단위 테스트 추가
 ```
 
 ### Rules
 
-- Use English for commit messages.
+- The type and scope must be written in English; the subject after the colon should be written in Korean.
 - Do not reference issue numbers or PR numbers unless they exist.
 - Never commit `.env`, secrets, API keys, or build artifacts.
 - Each commit should represent one logical change — do not mix unrelated changes.
