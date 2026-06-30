@@ -32,6 +32,9 @@ public class JobPosting extends BaseTimeEntity {
   @Column(nullable = false, length = 100)
   private String company;
 
+  @Column(length = 255)
+  private String source;
+
   @Column(nullable = false, length = 1000)
   private String url;
 
@@ -42,6 +45,9 @@ public class JobPosting extends BaseTimeEntity {
 
   @Column(columnDefinition = "TEXT")
   private String description;
+
+  @Column(columnDefinition = "TEXT")
+  private String roles;
 
   @Column(length = 1000)
   private String skills;
@@ -63,6 +69,56 @@ public class JobPosting extends BaseTimeEntity {
 
   protected JobPosting() {}
 
+  public static JobPosting create(
+      String title,
+      String company,
+      String source,
+      String url,
+      String location,
+      LocalDate deadline,
+      String description,
+      String roles,
+      String skills,
+      String employmentType,
+      String experienceLevel,
+      String contentHash,
+      LocalDate collectedDate,
+      LocalDateTime publishedAt) {
+    JobPosting jp = new JobPosting();
+    jp.title = title;
+    jp.company = company;
+    jp.source = source;
+    jp.url = url;
+    jp.location = location;
+    jp.deadline = deadline;
+    jp.description = description;
+    jp.roles = roles;
+    jp.skills = skills;
+    jp.employmentType = employmentType;
+    jp.experienceLevel = experienceLevel;
+    jp.contentHash = contentHash;
+    jp.collectedDate = collectedDate;
+    jp.publishedAt = publishedAt;
+    return jp;
+  }
+
+  public void refreshFrom(
+      LocalDate newDeadline,
+      String newDescription,
+      String newContentHash,
+      LocalDate collectedDate) {
+    if (newDeadline != null) {
+      this.deadline = newDeadline;
+    }
+    if (newDescription != null && !newDescription.isBlank()) {
+      this.description = newDescription;
+    }
+    if (newContentHash != null) {
+      this.contentHash = newContentHash;
+    }
+    this.collectedDate = collectedDate;
+  }
+
   public Long getId() {
     return id;
   }
@@ -73,6 +129,10 @@ public class JobPosting extends BaseTimeEntity {
 
   public String getCompany() {
     return company;
+  }
+
+  public String getSource() {
+    return source;
   }
 
   public String getUrl() {
@@ -89,6 +149,10 @@ public class JobPosting extends BaseTimeEntity {
 
   public String getDescription() {
     return description;
+  }
+
+  public String getRoles() {
+    return roles;
   }
 
   public String getSkills() {
