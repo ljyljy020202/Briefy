@@ -4,6 +4,7 @@ export interface User {
   id: number;
   email: string;
   nickname: string;
+  reportEmail: string | null;
   profileImageUrl: string | null;
   role: "USER" | "ADMIN";
   onboardingCompleted: boolean;
