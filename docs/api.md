@@ -1102,6 +1102,16 @@ Do **not** store the JWT or any user session data in `localStorage` or `sessionS
 
 `briefing_reports.content` is Markdown. Render it with a sanitized Markdown parser (e.g. `react-markdown` with `rehype-sanitize`). Do not use `dangerouslySetInnerHTML` with unsanitized content.
 
+### Page routing
+
+| Route | Description | APIs called |
+|---|---|---|
+| `/onboarding` | First-time setup (unauthenticated or pre-onboarding). Redirects to `/dashboard` if already completed. | `GET /api/users/me`, `GET /api/briefing-categories`, `POST /api/me/briefing-preferences`, `PATCH /api/users/me/onboarding` |
+| `/dashboard` | Main landing after login. | `GET /api/dashboard` |
+| `/reports` | Paginated briefing list. | `GET /api/briefings` |
+| `/reports/[id]` | Briefing detail view. | `GET /api/briefings/{id}` |
+| `/mypage` | Account info and briefing preference management. Logout and account deletion are accessible here only. | `GET /api/me/briefing-preferences`, `GET /api/briefing-categories`, `PATCH /api/users/me/onboarding`, `POST /api/me/briefing-preferences`, `PATCH /api/me/briefing-preferences/{id}`, `DELETE /api/me/briefing-preferences/{id}`, `POST /api/auth/logout`, `DELETE /api/users/me` |
+
 ---
 
 ## MVP Implementation Order

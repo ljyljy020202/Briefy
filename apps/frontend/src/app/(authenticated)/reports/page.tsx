@@ -3,52 +3,49 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Search } from 'lucide-react'
 
-import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import { briefings } from '@/lib/api'
 import { ReportCard } from '@/components/briefy/ReportCard'
-import { MOCK_REPORTS } from '@/lib/mock-data'
+import type { BriefingListItem } from '@/types/api'
+import type { MockReport } from '@/lib/mock-data'
 
-const FILTERS = [
-  { id: 'all', label: '전체' },
-  { id: 'delivered', label: '도착함' },
-  { id: 'scheduled', label: '예약됨' },
-] as const
-
-type FilterId = (typeof FILTERS)[number]['id']
+function briefingItemToCard(item: BriefingListItem): MockReport {
+  return {
+    id: String(item.id),
+    title: item.title,
+    date: item.reportDate,
+    readTime: item.articleCount > 0 ? `${item.articleCount}건` : '',
+    status: 'delivered',
+    topics: [],
+    preview: item.summary ?? '',
+    highlights: [],
+    sections: [],
+  }
+}
 
 export default function ReportsPage() {
-  const [filter, setFilter] = useState<FilterId>('all')
   const [query, setQuery] = useState('')
+  const [items, setItems] = useState<BriefingListItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [useMock, setUseMock] = useState(false)
+  const [fetchError, setFetchError] = useState(false)
 
   useEffect(() => {
     briefings
       .list(0, 50)
-      .then(() => {
-        // TODO: Replace mock fallback with real data when GET /api/briefings is implemented (Backend step 8)
-      })
-      .catch(() => {
-        setUseMock(true)
-      })
+      .then((res) => setItems(res.content))
+      .catch(() => setFetchError(true))
       .finally(() => setLoading(false))
   }, [])
 
   const reports = useMemo(() => {
-    // TODO: Replace with real reports from API (Backend step 8)
-    const source = useMock ? MOCK_REPORTS : MOCK_REPORTS
-    return source.filter((r) => {
-      const matchesFilter = filter === 'all' || r.status === filter
-      const q = query.trim().toLowerCase()
-      const matchesQuery =
-        !q ||
-        r.title.toLowerCase().includes(q) ||
-        r.preview.toLowerCase().includes(q) ||
-        r.topics.some((t) => t.toLowerCase().includes(q))
-      return matchesFilter && matchesQuery
-    })
-  }, [filter, query, useMock])
+    const q = query.trim().toLowerCase()
+    if (!q) return items
+    return items.filter(
+      (item) =>
+        item.title.toLowerCase().includes(q) ||
+        (item.summary ?? '').toLowerCase().includes(q),
+    )
+  }, [items, query])
 
   if (loading) {
     return (
@@ -73,50 +70,40 @@ export default function ReportsPage() {
         지금까지 받은 모든 아침 브리핑을 한곳에서 다시 읽어보세요.
       </p>
 
-      {/* Controls */}
-      <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-1.5 rounded-xl border border-border bg-card p-1">
-          {FILTERS.map((f) => (
-            <button
-              key={f.id}
-              type="button"
-              onClick={() => setFilter(f.id)}
-              className={cn(
-                'rounded-lg px-3.5 py-1.5 text-sm font-medium transition-colors',
-                filter === f.id
-                  ? 'bg-accent text-accent-foreground'
-                  : 'text-muted-foreground hover:text-foreground',
-              )}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="relative w-full sm:max-w-xs">
-          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="제목, 주제로 검색"
-            className="pl-9"
-          />
-        </div>
+      {/* Search */}
+      <div className="relative mt-6 w-full sm:max-w-xs">
+        <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="제목으로 검색"
+          className="pl-9"
+        />
       </div>
 
       {/* List */}
-      {reports.length > 0 ? (
+      {fetchError ? (
+        <div className="mt-16 text-center">
+          <p className="text-sm font-medium text-foreground">브리핑을 불러오지 못했습니다.</p>
+          <p className="mt-1 text-sm text-muted-foreground">새로고침 후 다시 시도해 주세요.</p>
+        </div>
+      ) : items.length === 0 ? (
+        <div className="mt-16 text-center">
+          <p className="text-sm font-medium text-foreground">아직 받은 브리핑이 없습니다.</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            선호도를 설정하면 매일 아침 맞춤 브리핑이 전달됩니다.
+          </p>
+        </div>
+      ) : reports.length > 0 ? (
         <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {reports.map((r) => (
-            <ReportCard key={r.id} report={r} />
+          {reports.map((item) => (
+            <ReportCard key={item.id} report={briefingItemToCard(item)} />
           ))}
         </div>
       ) : (
         <div className="mt-16 text-center">
-          <p className="text-sm font-medium text-foreground">결과가 없어요</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            다른 검색어나 필터를 시도해 보세요.
-          </p>
+          <p className="text-sm font-medium text-foreground">검색 결과가 없습니다.</p>
+          <p className="mt-1 text-sm text-muted-foreground">다른 검색어를 시도해 보세요.</p>
         </div>
       )}
     </div>

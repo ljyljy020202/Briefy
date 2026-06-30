@@ -5,8 +5,6 @@ import Link from 'next/link'
 import {
   ArrowRight,
   CalendarClock,
-  Flame,
-  Hash,
   Mail,
   Settings2,
   Sparkles,
@@ -20,7 +18,6 @@ import { dashboard } from '@/lib/api'
 import type { BriefingListItem, DashboardSummary } from '@/types/api'
 import { useAuthContext } from '@/contexts/AuthContext'
 import { ReportCard } from '@/components/briefy/ReportCard'
-import { MOCK_REPORTS, MOCK_STATS } from '@/lib/mock-data'
 import type { MockReport } from '@/lib/mock-data'
 
 function briefingItemToCard(item: BriefingListItem): MockReport {
@@ -73,28 +70,17 @@ export default function DashboardPage() {
     return (
       <div className="space-y-6 animate-pulse">
         <div className="h-12 w-64 rounded-lg bg-muted" />
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="h-28 rounded-lg bg-muted" />
-          ))}
-        </div>
         <div className="h-64 rounded-lg bg-muted" />
+        <div className="h-32 rounded-lg bg-muted" />
+        <div className="h-48 rounded-lg bg-muted" />
       </div>
     )
   }
 
-  const hasRealReports = (summary?.recentReports?.length ?? 0) > 0
-  const realLatest = hasRealReports ? (summary?.latestBriefing ?? null) : null
-  const realRecent = summary?.recentReports ?? []
-
-  // Mock fallbacks — used only when no real reports exist yet
-  const mockLatest = !hasRealReports
-    ? MOCK_REPORTS.find((r) => r.status === 'delivered')
-    : null
-  const mockScheduled = MOCK_REPORTS.find((r) => r.status === 'scheduled')
-  const mockRecent = !hasRealReports
-    ? MOCK_REPORTS.filter((r) => r.status === 'delivered').slice(0, 3)
-    : []
+  const latestBriefing = summary?.latestBriefing ?? null
+  const recentReports = summary?.recentReports ?? []
+  const nextDeliveryTime = summary?.nextDeliveryTime ?? null
+  const preferences = summary?.briefingPreferences ?? []
 
   const displayName =
     summary?.user?.nickname ??
@@ -103,6 +89,10 @@ export default function DashboardPage() {
     '사용자'
 
   const displayEmail = summary?.user?.email ?? user?.email ?? ''
+
+  const prefKeywords = preferences
+    .flatMap((p) => Object.values(p.preference).flat())
+    .slice(0, 8)
 
   return (
     <div>
@@ -117,7 +107,7 @@ export default function DashboardPage() {
           </h1>
         </div>
         <Link
-          href="/onboarding"
+          href="/mypage"
           className={cn(buttonVariants({ variant: 'outline' }), 'inline-flex items-center gap-2')}
         >
           <Settings2 className="size-4" />
@@ -125,26 +115,8 @@ export default function DashboardPage() {
         </Link>
       </div>
 
-      {/* Stats */}
-      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {MOCK_STATS.map((s, i) => (
-          <Card key={s.label}>
-            <CardContent className="p-5">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                {i === 0 && <Flame className="size-3.5 text-primary" />}
-                {s.label}
-              </div>
-              <p className="mt-2 text-2xl font-bold tracking-tight text-foreground">
-                {s.value}
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">{s.hint}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* Latest briefing — real data when available, mock otherwise */}
-      {realLatest ? (
+      {/* Latest briefing */}
+      {latestBriefing ? (
         <Card className="mt-6 overflow-hidden">
           <div className="grid gap-0 lg:grid-cols-[1.4fr_1fr]">
             <CardContent className="p-6 sm:p-8">
@@ -154,88 +126,25 @@ export default function DashboardPage() {
                   최신 브리핑
                 </Badge>
                 <span className="text-xs text-muted-foreground">
-                  {realLatest.reportDate}
+                  {latestBriefing.reportDate}
                 </span>
               </div>
               <h2 className="mt-4 text-xl font-bold tracking-tight text-foreground">
-                {realLatest.title}
+                {latestBriefing.title}
               </h2>
-              {realLatest.summary && (
+              {latestBriefing.summary && (
                 <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                  {realLatest.summary}
+                  {latestBriefing.summary}
                 </p>
               )}
               <p className="mt-3 text-sm text-muted-foreground">
                 신규·마감 공고{' '}
                 <span className="font-semibold text-foreground">
-                  {realLatest.articleCount}건
+                  {latestBriefing.articleCount}건
                 </span>
               </p>
               <Link
-                href={`/reports/${realLatest.id}`}
-                className={cn(
-                  buttonVariants(),
-                  'mt-6 inline-flex items-center gap-2',
-                )}
-              >
-                전체 브리핑 읽기
-                <ArrowRight className="size-4" />
-              </Link>
-            </CardContent>
-
-            <div className="border-t border-border bg-secondary/40 p-6 sm:p-8 lg:border-l lg:border-t-0">
-              <p className="text-sm font-medium text-foreground">설정한 조건</p>
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {(summary?.briefingPreferences ?? [])
-                  .flatMap((p) => Object.values(p.preference).flat())
-                  .slice(0, 8)
-                  .map((k) => (
-                    <Badge key={k} variant="muted">
-                      {k}
-                    </Badge>
-                  ))}
-              </div>
-              <div className="mt-6 flex items-center gap-3 rounded-xl border border-border bg-card p-4">
-                <span className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                  <Mail className="size-4" />
-                </span>
-                <div className="text-sm">
-                  <p className="font-medium text-foreground">{displayEmail}</p>
-                  <p className="text-xs text-muted-foreground">매일 오전 8시 발송</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </Card>
-      ) : mockLatest ? (
-        <Card className="mt-6 overflow-hidden">
-          <div className="grid gap-0 lg:grid-cols-[1.4fr_1fr]">
-            <CardContent className="p-6 sm:p-8">
-              <div className="flex items-center gap-2">
-                <Badge>
-                  <Sparkles className="size-3.5" />
-                  오늘의 브리핑
-                </Badge>
-                <span className="text-xs text-muted-foreground">
-                  {mockLatest.date} · {mockLatest.readTime}
-                </span>
-              </div>
-              <h2 className="mt-4 text-xl font-bold tracking-tight text-foreground">
-                {mockLatest.title}
-              </h2>
-              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                {mockLatest.preview}
-              </p>
-              <ul className="mt-5 space-y-2.5">
-                {mockLatest.highlights.map((h) => (
-                  <li key={h} className="flex items-start gap-2.5 text-sm">
-                    <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-primary" />
-                    <span className="text-foreground">{h}</span>
-                  </li>
-                ))}
-              </ul>
-              <Link
-                href={`/reports/${mockLatest.id}`}
+                href={`/reports/${latestBriefing.id}`}
                 className={cn(
                   buttonVariants(),
                   'mt-6 inline-flex items-center gap-2',
@@ -249,13 +158,27 @@ export default function DashboardPage() {
             <div className="border-t border-border bg-secondary/40 p-6 sm:p-8 lg:border-l lg:border-t-0">
               <p className="text-sm font-medium text-foreground">브리핑 조건</p>
               <div className="mt-3 flex flex-wrap gap-1.5">
-                {mockLatest.topics.map((t) => (
-                  <Badge key={t} variant="muted">
-                    {t}
-                  </Badge>
-                ))}
+                {prefKeywords.length > 0 ? (
+                  prefKeywords.map((k) => (
+                    <Badge key={k} variant="muted">
+                      {k}
+                    </Badge>
+                  ))
+                ) : (
+                  <p className="text-xs text-muted-foreground">설정된 조건이 없습니다.</p>
+                )}
               </div>
-              <div className="mt-6 flex items-center gap-3 rounded-xl border border-border bg-card p-4">
+              <Link
+                href="/mypage"
+                className={cn(
+                  buttonVariants({ variant: 'ghost', size: 'sm' }),
+                  'mt-3 inline-flex items-center gap-1 px-0',
+                )}
+              >
+                조건 편집
+                <ArrowRight className="size-3.5" />
+              </Link>
+              <div className="mt-4 flex items-center gap-3 rounded-xl border border-border bg-card p-4">
                 <span className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
                   <Mail className="size-4" />
                 </span>
@@ -267,65 +190,50 @@ export default function DashboardPage() {
             </div>
           </div>
         </Card>
-      ) : null}
-
-      {/* Next + keywords row */}
-      <div className="mt-6 grid gap-6 lg:grid-cols-2">
-        {mockScheduled && (
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                <CalendarClock className="size-4 text-primary" />
-                다음 브리핑
-              </div>
-              <p className="mt-3 text-lg font-semibold text-foreground">
-                {mockScheduled.date}
-              </p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {mockScheduled.preview}
-              </p>
-              <div className="mt-4 flex flex-wrap gap-1.5">
-                {mockScheduled.topics.map((t) => (
-                  <Badge key={t} variant="muted">
-                    {t}
-                  </Badge>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-              <Hash className="size-4 text-primary" />
-              설정한 조건
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              {(summary?.briefingPreferences ?? [])
-                .flatMap((p) => Object.values(p.preference).flat()).length > 0
-                ? (summary?.briefingPreferences ?? [])
-                    .flatMap((p) => Object.values(p.preference).flat())
-                    .map((k) => <Badge key={k}>{k}</Badge>)
-                : ['백엔드 개발자', '네이버', 'Spring Boot'].map((k) => (
-                    <Badge key={k}>{k}</Badge>
-                  ))}
-            </div>
+      ) : (
+        <Card className="mt-6">
+          <CardContent className="flex flex-col items-center py-16 text-center">
+            <Sparkles className="size-8 text-muted-foreground/40" />
+            <p className="mt-3 text-sm font-medium text-foreground">아직 생성된 브리핑이 없습니다.</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              선호도를 설정하면 매일 아침 맞춤 브리핑이 전달됩니다.
+            </p>
             <Link
-              href="/onboarding"
-              className={cn(
-                buttonVariants({ variant: 'ghost', size: 'sm' }),
-                'mt-4 inline-flex items-center gap-1',
-              )}
+              href="/mypage"
+              className={cn(buttonVariants({ variant: 'outline' }), 'mt-5 inline-flex items-center gap-2')}
             >
-              조건 편집
-              <ArrowRight className="size-3.5" />
+              선호도 설정하기
+              <ArrowRight className="size-4" />
             </Link>
           </CardContent>
         </Card>
-      </div>
+      )}
 
-      {/* Recent reports — real data when available, mock otherwise */}
+      {/* Next briefing */}
+      <Card className="mt-6">
+        <CardContent className="p-6">
+          <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <CalendarClock className="size-4 text-primary" />
+            다음 브리핑
+          </div>
+          {nextDeliveryTime ? (
+            <>
+              <p className="mt-3 text-lg font-semibold text-foreground">
+                {nextDeliveryTime}
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                설정한 조건 기준으로 브리핑이 생성됩니다.
+              </p>
+            </>
+          ) : (
+            <p className="mt-3 text-sm text-muted-foreground">
+              예정된 브리핑이 없습니다.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Recent reports */}
       <div className="mt-8 flex items-center justify-between">
         <h2 className="text-lg font-semibold text-foreground">최근 브리핑</h2>
         <Link
@@ -339,13 +247,17 @@ export default function DashboardPage() {
           <ArrowRight className="size-3.5" />
         </Link>
       </div>
-      <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {hasRealReports
-          ? realRecent.map((r) => (
-              <ReportCard key={r.id} report={briefingItemToCard(r)} />
-            ))
-          : mockRecent.map((r) => <ReportCard key={r.id} report={r} />)}
-      </div>
+      {recentReports.length > 0 ? (
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {recentReports.map((r) => (
+            <ReportCard key={r.id} report={briefingItemToCard(r)} />
+          ))}
+        </div>
+      ) : (
+        <div className="mt-4 flex items-center justify-center rounded-xl border border-border py-12">
+          <p className="text-sm text-muted-foreground">최근 브리핑이 없습니다.</p>
+        </div>
+      )}
     </div>
   )
 }
