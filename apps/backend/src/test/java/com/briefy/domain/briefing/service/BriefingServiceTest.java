@@ -3,6 +3,7 @@ package com.briefy.domain.briefing.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -12,6 +13,7 @@ import static org.mockito.Mockito.when;
 import com.briefy.domain.briefing.client.AgentClient;
 import com.briefy.domain.briefing.client.dto.AgentBriefingRequest;
 import com.briefy.domain.briefing.client.dto.AgentBriefingResponse;
+import com.briefy.domain.briefing.client.dto.AgentCandidateJobPosting;
 import com.briefy.domain.briefing.dto.BriefingDetailResponse;
 import com.briefy.domain.briefing.dto.BriefingListItem;
 import com.briefy.domain.briefing.dto.GenerateBriefingRequest;
@@ -24,6 +26,8 @@ import com.briefy.domain.briefingpreference.entity.BriefingCategory;
 import com.briefy.domain.briefingpreference.entity.BriefingCategoryCode;
 import com.briefy.domain.briefingpreference.entity.UserBriefingPreference;
 import com.briefy.domain.briefingpreference.repository.UserBriefingPreferenceRepository;
+import com.briefy.domain.candidatepool.entity.JobPosting;
+import com.briefy.domain.candidatepool.service.CandidatePoolService;
 import com.briefy.global.exception.BusinessException;
 import com.briefy.global.exception.ErrorCode;
 import com.briefy.global.response.PageResult;
@@ -31,9 +35,11 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -52,6 +58,7 @@ class BriefingServiceTest {
   @Mock private BriefingReportRepository briefingReportRepository;
   @Mock private UserBriefingPreferenceRepository userBriefingPreferenceRepository;
   @Mock private AgentClient agentClient;
+  @Mock private CandidatePoolService candidatePoolService;
 
   @InjectMocks private BriefingService briefingService;
 
@@ -216,5 +223,121 @@ class BriefingServiceTest {
         .isInstanceOf(BusinessException.class)
         .satisfies(
             e -> assertThat(((BusinessException) e).getErrorCode()).isEqualTo(ErrorCode.FORBIDDEN));
+  }
+
+  @Test
+  void generateBriefing_includesCandidatePoolInAgentRequest() {
+    when(userBriefingPreferenceRepository.findAllByUserIdAndActiveTrue(1L))
+        .thenReturn(List.of(mockPref));
+    when(briefingJobRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+    JobPosting posting = samplePosting("네이버", "백엔드 개발자", "서울", LocalDate.now().plusDays(3));
+    when(candidatePoolService.findJobPostingsByDate(any())).thenReturn(List.of(posting));
+
+    ArgumentCaptor<AgentBriefingRequest> captor =
+        ArgumentCaptor.forClass(AgentBriefingRequest.class);
+    when(agentClient.generate(captor.capture())).thenReturn(mockAgentResponse);
+
+    BriefingReport mockReport = mock(BriefingReport.class);
+    when(mockReport.getId()).thenReturn(1L);
+    when(briefingReportRepository.save(any())).thenReturn(mockReport);
+
+    briefingService.generateBriefing(1L, new GenerateBriefingRequest(null));
+
+    var pool = captor.getValue().candidatePool();
+    assertThat(pool).isNotNull();
+    assertThat(pool.jobPostings()).hasSize(1);
+    assertThat(pool.companyIssues()).isEmpty();
+    assertThat(pool.industryIssues()).isEmpty();
+  }
+
+  @Test
+  void generateBriefing_limitsTo30Candidates_whenMoreExist() {
+    when(userBriefingPreferenceRepository.findAllByUserIdAndActiveTrue(1L))
+        .thenReturn(List.of(mockPref));
+    when(briefingJobRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+    List<JobPosting> postings =
+        IntStream.range(0, 35)
+            .mapToObj(i -> samplePosting("회사" + i, "개발자 " + i, "서울", null))
+            .toList();
+    when(candidatePoolService.findJobPostingsByDate(any())).thenReturn(postings);
+
+    ArgumentCaptor<AgentBriefingRequest> captor =
+        ArgumentCaptor.forClass(AgentBriefingRequest.class);
+    when(agentClient.generate(captor.capture())).thenReturn(mockAgentResponse);
+
+    BriefingReport mockReport = mock(BriefingReport.class);
+    when(mockReport.getId()).thenReturn(1L);
+    when(briefingReportRepository.save(any())).thenReturn(mockReport);
+
+    briefingService.generateBriefing(1L, new GenerateBriefingRequest(null));
+
+    assertThat(captor.getValue().candidatePool().jobPostings()).hasSize(30);
+  }
+
+  @Test
+  void generateBriefing_emptyCandidatePool_doesNotCrash() {
+    when(userBriefingPreferenceRepository.findAllByUserIdAndActiveTrue(1L))
+        .thenReturn(List.of(mockPref));
+    when(briefingJobRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+    when(candidatePoolService.findJobPostingsByDate(any())).thenReturn(List.of());
+    when(agentClient.generate(any())).thenReturn(mockAgentResponse);
+
+    BriefingReport mockReport = mock(BriefingReport.class);
+    when(mockReport.getId()).thenReturn(1L);
+    when(briefingReportRepository.save(any())).thenReturn(mockReport);
+
+    GenerateResult result = briefingService.generateBriefing(1L, new GenerateBriefingRequest(null));
+
+    assertThat(result.status()).isEqualTo("COMPLETED");
+    verify(agentClient).generate(argThat(req -> req.candidatePool().jobPostings().isEmpty()));
+  }
+
+  @Test
+  void generateBriefing_highScoreCandidate_sentFirst() {
+    when(userBriefingPreferenceRepository.findAllByUserIdAndActiveTrue(1L))
+        .thenReturn(List.of(mockPref));
+    when(briefingJobRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+    // mockPref preference: {roles: ["백엔드 개발자"]} → title match → +30
+    JobPosting highScore = samplePosting("네이버", "백엔드 개발자 채용", "서울", null);
+    JobPosting lowScore = samplePosting("카카오", "프론트엔드 개발자", "서울", null);
+    when(candidatePoolService.findJobPostingsByDate(any()))
+        .thenReturn(List.of(lowScore, highScore));
+
+    ArgumentCaptor<AgentBriefingRequest> captor =
+        ArgumentCaptor.forClass(AgentBriefingRequest.class);
+    when(agentClient.generate(captor.capture())).thenReturn(mockAgentResponse);
+
+    BriefingReport mockReport = mock(BriefingReport.class);
+    when(mockReport.getId()).thenReturn(1L);
+    when(briefingReportRepository.save(any())).thenReturn(mockReport);
+
+    briefingService.generateBriefing(1L, new GenerateBriefingRequest(null));
+
+    List<AgentCandidateJobPosting> candidates = captor.getValue().candidatePool().jobPostings();
+    assertThat(candidates).hasSize(2);
+    assertThat(candidates.get(0).title()).contains("백엔드");
+    assertThat(candidates.get(0).preScore()).isGreaterThan(candidates.get(1).preScore());
+  }
+
+  private JobPosting samplePosting(
+      String company, String title, String location, LocalDate deadline) {
+    return JobPosting.create(
+        title,
+        company,
+        "원티드",
+        "https://example.com/" + company.hashCode() + "/" + title.hashCode(),
+        location,
+        deadline,
+        null,
+        null,
+        null,
+        null,
+        null,
+        "hash-" + company + "-" + title,
+        LocalDate.now(),
+        null);
   }
 }
