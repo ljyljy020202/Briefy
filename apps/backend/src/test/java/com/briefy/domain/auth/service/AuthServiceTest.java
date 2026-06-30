@@ -95,7 +95,7 @@ class AuthServiceTest {
             "https://example.com/photo.jpg",
             AuthProvider.GOOGLE,
             "google-sub-123");
-    existingUser.completeOnboarding(null);
+    existingUser.completeOnboarding(null, null);
 
     when(googleOAuthClient.exchangeCode("auth-code")).thenReturn(tokenResponse);
     when(googleOAuthClient.fetchUserInfo("access-token")).thenReturn(userInfo);

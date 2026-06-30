@@ -49,11 +49,14 @@ public class UserService {
     if (request.nickname() != null && request.nickname().isBlank()) {
       throw new BusinessException(ErrorCode.VALIDATION_ERROR, "nickname must not be blank");
     }
+    if (request.reportEmail() != null && request.reportEmail().isBlank()) {
+      throw new BusinessException(ErrorCode.VALIDATION_ERROR, "reportEmail must not be blank");
+    }
     User user =
         userRepository
             .findById(userId)
             .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-    user.completeOnboarding(request.nickname());
+    user.completeOnboarding(request.nickname(), request.reportEmail());
     return new UpdateOnboardingResponse(user.isOnboardingCompleted());
   }
 

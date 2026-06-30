@@ -7,7 +7,6 @@ import {
   ArrowLeft,
   ArrowRight,
   Check,
-  Clock,
   Hash,
   Plus,
   X,
@@ -27,11 +26,11 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { BriefyLogo } from '@/components/briefy/BriefyLogo'
 import { GoogleLoginButton } from '@/components/auth/GoogleLoginButton'
-import { JOB_KEYWORD_SUGGESTIONS, DELIVERY_TIMES } from '@/lib/mock-data'
+import { JOB_KEYWORD_SUGGESTIONS } from '@/lib/mock-data'
 
 type PreferenceKey = keyof Required<JobPostingPreference>
 
-const STEPS = ['계정', '채용 조건 입력', '발송 시간']
+const STEPS = ['계정', '채용 조건 입력', '프로필 설정']
 
 const PREFERENCE_FIELDS: {
   key: PreferenceKey
@@ -88,6 +87,8 @@ const EMPTY_INPUTS: Record<PreferenceKey, string> = {
   employmentTypes: '',
 }
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
 export default function OnboardingPage() {
   const router = useRouter()
   const [step, setStep] = useState(0)
@@ -106,8 +107,9 @@ export default function OnboardingPage() {
   const [inputByField, setInputByField] =
     useState<Record<PreferenceKey, string>>(EMPTY_INPUTS)
 
-  // Delivery time (display only; no backend field yet)
-  const [deliveryTime, setDeliveryTime] = useState('morning')
+  // Profile fields (Step 2)
+  const [nickname, setNickname] = useState('')
+  const [reportEmail, setReportEmail] = useState('')
 
   useEffect(() => {
     Promise.all([users.me(), categoriesApi.getAll()])
@@ -118,6 +120,8 @@ export default function OnboardingPage() {
         }
         const jobCategory = categories.find((c) => c.code === 'JOB_POSTING')
         setJobCategoryId(jobCategory?.id ?? null)
+        setNickname(user.nickname ?? '')
+        setReportEmail(user.email ?? '')
         setStep(1)
         setPageLoading(false)
       })
@@ -152,7 +156,13 @@ export default function OnboardingPage() {
     (f) => preference[f.key].length > 0,
   )
 
+  const isEmailValid = EMAIL_RE.test(reportEmail.trim())
+
   const handleSubmit = async () => {
+    if (!isEmailValid) {
+      setError('올바른 이메일 주소를 입력해 주세요.')
+      return
+    }
     setSubmitting(true)
     setError(null)
 
@@ -160,7 +170,10 @@ export default function OnboardingPage() {
       if (jobCategoryId !== null) {
         await prefsApi.upsert({ categoryId: jobCategoryId, preference })
       }
-      await users.completeOnboarding()
+      await users.completeOnboarding(
+        nickname.trim() || undefined,
+        reportEmail.trim(),
+      )
       router.push('/dashboard')
     } catch (err) {
       setError(
@@ -371,76 +384,77 @@ export default function OnboardingPage() {
               </div>
             )}
 
-            {/* Step 2 — delivery time */}
+            {/* Step 2 — profile setup (nickname + report email) */}
             {step === 2 && (
               <div>
                 <h1 className="text-2xl font-bold tracking-tight text-foreground">
-                  언제 받아볼까요?
+                  프로필을 완성해 주세요
                 </h1>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  매일 이 시간에 맞춰 브리핑이 메일로 도착합니다.
+                  닉네임과 브리핑 리포트를 받을 이메일 주소를 확인해 주세요.
                 </p>
-                <div className="mt-6 grid gap-3 sm:grid-cols-2">
-                  {DELIVERY_TIMES.map((t) => {
-                    const active = deliveryTime === t.id
-                    return (
-                      <button
-                        key={t.id}
-                        type="button"
-                        onClick={() => setDeliveryTime(t.id)}
-                        className={cn(
-                          'flex items-center gap-3 rounded-xl border p-4 text-left transition-colors',
-                          active
-                            ? 'border-primary bg-accent'
-                            : 'border-border bg-card hover:border-primary/40 hover:bg-muted',
-                        )}
-                      >
-                        <span
-                          className={cn(
-                            'flex size-10 items-center justify-center rounded-lg',
-                            active
-                              ? 'bg-primary text-primary-foreground'
-                              : 'bg-muted text-muted-foreground',
-                          )}
-                        >
-                          <Clock className="size-5" />
-                        </span>
-                        <span>
-                          <span className="block text-sm font-semibold text-foreground">
-                            {t.label}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            {t.hint}
-                          </span>
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
 
-                <div className="mt-6 rounded-xl border border-border bg-secondary/40 p-4">
-                  <p className="text-sm font-medium text-foreground">
-                    설정 요약
-                  </p>
-                  <div className="mt-3 space-y-2">
-                    {PREFERENCE_FIELDS.filter(
-                      (f) => preference[f.key].length > 0,
-                    ).map(({ key, label }) => (
-                      <div key={key} className="flex flex-wrap gap-1.5">
-                        <Badge variant="muted">{label}</Badge>
-                        {preference[key].map((v) => (
-                          <Badge key={v}>{v}</Badge>
-                        ))}
-                      </div>
-                    ))}
-                    {!hasAnyPreference && (
-                      <p className="text-xs text-muted-foreground">
-                        입력된 조건이 없습니다. 나중에 선호도 설정에서 추가할
-                        수 있습니다.
-                      </p>
-                    )}
+                <div className="mt-6 space-y-5">
+                  <div className="rounded-xl border border-border p-4">
+                    <label
+                      htmlFor="nickname"
+                      className="text-sm font-medium text-foreground"
+                    >
+                      닉네임 <span className="text-muted-foreground font-normal">(선택)</span>
+                    </label>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      브리핑 인사말에 사용됩니다.
+                    </p>
+                    <Input
+                      id="nickname"
+                      className="mt-3"
+                      value={nickname}
+                      onChange={(e) => setNickname(e.target.value)}
+                      placeholder="닉네임을 입력하세요"
+                      maxLength={100}
+                    />
+                  </div>
+
+                  <div className="rounded-xl border border-border p-4">
+                    <label
+                      htmlFor="reportEmail"
+                      className="text-sm font-medium text-foreground"
+                    >
+                      리포트 수신 이메일 <span className="text-destructive">*</span>
+                    </label>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      매일 브리핑 리포트가 이 주소로 발송됩니다.
+                    </p>
+                    <Input
+                      id="reportEmail"
+                      type="email"
+                      className="mt-3"
+                      value={reportEmail}
+                      onChange={(e) => setReportEmail(e.target.value)}
+                      placeholder="example@email.com"
+                    />
                   </div>
                 </div>
+
+                {hasAnyPreference && (
+                  <div className="mt-6 rounded-xl border border-border bg-secondary/40 p-4">
+                    <p className="text-sm font-medium text-foreground">
+                      설정 요약
+                    </p>
+                    <div className="mt-3 space-y-2">
+                      {PREFERENCE_FIELDS.filter(
+                        (f) => preference[f.key].length > 0,
+                      ).map(({ key, label }) => (
+                        <div key={key} className="flex flex-wrap gap-1.5">
+                          <Badge variant="muted">{label}</Badge>
+                          {preference[key].map((v) => (
+                            <Badge key={v}>{v}</Badge>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -478,7 +492,7 @@ export default function OnboardingPage() {
                 <Button
                   size="lg"
                   className="h-10 px-5"
-                  disabled={submitting}
+                  disabled={submitting || !isEmailValid}
                   onClick={handleSubmit}
                 >
                   {submitting ? '설정 중…' : '브리핑 시작하기'}

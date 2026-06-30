@@ -53,11 +53,11 @@ export const auth = {
 
 export const users = {
   me: (): Promise<User> => apiFetch<User>("/users/me"),
-  completeOnboarding: (nickname?: string): Promise<OnboardingResult> =>
+  completeOnboarding: (nickname?: string, reportEmail?: string): Promise<OnboardingResult> =>
     apiFetch<OnboardingResult>("/users/me/onboarding", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nickname }),
+      body: JSON.stringify({ nickname, reportEmail }),
     }),
   deleteAccount: (): Promise<null> =>
     apiFetch<null>("/users/me", { method: "DELETE" }),
