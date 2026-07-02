@@ -98,3 +98,15 @@ async def test_generate_articles_reference_target_company(client):
     response = await client.post("/briefings/generate", json=FULL_REQUEST)
     titles = [a["title"] for a in response.json()["articles"]]
     assert any("네이버" in t or "카카오" in t or "라인" in t for t in titles)
+
+
+async def test_generate_content_has_top_level_heading(client):
+    response = await client.post("/briefings/generate", json=FULL_REQUEST)
+    content = response.json()["content"]
+    assert content.startswith("# 오늘의 채용 브리핑")
+
+
+async def test_generate_articles_have_non_empty_why_it_matters(client):
+    response = await client.post("/briefings/generate", json=FULL_REQUEST)
+    for article in response.json()["articles"]:
+        assert article.get("whyItMatters"), "whyItMatters must be non-empty"

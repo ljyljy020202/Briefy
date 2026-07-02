@@ -45,15 +45,16 @@ _INVESTMENT_ADVICE_PATTERNS = [
     "투자 추천",
     "수익률 보장",
 ]
-_UNSUPPORTED_CLAIM_PATTERNS = [
-    "합격 가능성이 높다",
+_HALLUCINATION_PATTERNS = [
+    "합격 가능성이 높",
     "합격 보장",
     "반드시 합격",
+    "경쟁률이 낮",
 ]
 _REQUIRED_SECTIONS = [
     "오늘의 핵심 요약",
-    "추천 공고",
-    "신규/마감 임박",
+    "추천 공고 TOP",
+    "신규/마감 임박 공고",
     "오늘의 지원 추천 액션",
     "오늘의 키워드",
     "한 줄 정리",
@@ -314,6 +315,11 @@ def quality_check_node(state: UserBriefingState) -> dict:
     articles = state.get("articles", [])
     selected = state.get("selected", [])
 
+    if "# 오늘의 채용 브리핑" not in content:
+        logger.warning(
+            "[quality_check] missing top-level heading: # 오늘의 채용 브리핑"
+        )
+
     for section in _REQUIRED_SECTIONS:
         if section not in content:
             logger.warning(
@@ -326,10 +332,10 @@ def quality_check_node(state: UserBriefingState) -> dict:
                 "[quality_check] investment advice phrase detected: %r", phrase
             )
 
-    for phrase in _UNSUPPORTED_CLAIM_PATTERNS:
+    for phrase in _HALLUCINATION_PATTERNS:
         if phrase in content:
             logger.warning(
-                "[quality_check] unsupported claim detected: %r", phrase
+                "[quality_check] hallucination phrase detected: %r", phrase
             )
 
     for i, article in enumerate(articles):
@@ -374,12 +380,12 @@ def _build_enriched_inputs(
         if enrichment:
             summary = enrichment.summary
             matching_reason = enrichment.matching_reason or _build_why_it_matters(
-                posting, pref
+                posting, pref, today
             )
             matched_keywords = enrichment.matched_keywords
         else:
             summary = _deterministic_summary(posting)
-            matching_reason = _build_why_it_matters(posting, pref)
+            matching_reason = _build_why_it_matters(posting, pref, today)
             posting_skills_lower = [s.lower() for s in posting.skills]
             matched_keywords = [
                 s for s in pref.skills
@@ -434,63 +440,108 @@ def _deterministic_summary(posting: CandidateJobPosting) -> str:
 
 
 def _build_why_it_matters(
-    posting: CandidateJobPosting, pref: JobPostingPreference
+    posting: CandidateJobPosting,
+    pref: JobPostingPreference,
+    today: date_cls | None = None,
 ) -> str:
-    reasons = []
+    """Build a concrete matching reason from actual preference-posting overlap."""
+    reasons: list[str] = []
 
+    # Company match
     for co in pref.companies:
         if co == posting.company_name:
-            reasons.append(f"관심 기업({co})")
+            reasons.append(f"관심 기업 {co}")
             break
 
+    # Role match — check title and position
     title_lower = (posting.title or "").lower()
+    position_lower = (posting.position or "").lower()
     for role in pref.roles:
-        if role.lower() in title_lower:
-            reasons.append(f"{role} 포지션 매칭")
+        if role.lower() in title_lower or role.lower() in position_lower:
+            reasons.append(f"{role} 역할 일치")
             break
 
+    # Skill match
     posting_skills_lower = [s.lower() for s in posting.skills]
     matched_skills = [s for s in pref.skills if s.lower() in posting_skills_lower]
     if matched_skills:
-        reasons.append(f"스킬 매칭: {', '.join(matched_skills[:3])}")
+        reasons.append(f"{', '.join(matched_skills[:3])} 스킬 매칭")
 
-    return " · ".join(reasons) if reasons else "선호도 기반 추천 공고"
+    # Location match
+    for loc in pref.locations:
+        if loc in (posting.location or ""):
+            reasons.append(f"{loc} 근무")
+            break
+
+    # Experience level match
+    for exp in pref.experience_levels:
+        if exp == posting.experience_level:
+            reasons.append(f"{exp} 경력 조건 부합")
+            break
+
+    # Employment type match
+    for emp in pref.employment_types:
+        if emp == posting.employment_type:
+            reasons.append(f"{emp}")
+            break
+
+    # Deadline urgency
+    if posting.deadline and today:
+        try:
+            days = (date_cls.fromisoformat(posting.deadline) - today).days
+            if 0 <= days <= 3:
+                reasons.append(f"마감 {days}일 전 — 긴급")
+            elif 0 <= days <= 7:
+                reasons.append(f"마감 {days}일 이내")
+        except ValueError:
+            pass
+
+    if reasons:
+        return " · ".join(reasons)
+    # Non-vague fallback when nothing matched: at least name the company/title
+    company = posting.company_name or ""
+    title = posting.title or ""
+    return f"{company} {title}".strip() or "관심 조건에 기반한 추천"
 
 
 def _empty_state_report(briefing_date: str) -> dict:
     content = "\n".join([
+        "# 오늘의 채용 브리핑",
+        "",
         "## 오늘의 핵심 요약",
         "",
-        f"{briefing_date} 기준, 선호도에 맞는 채용 공고가 오늘은 없습니다.",
+        f"- {briefing_date} 기준, 선호도에 맞는 채용 공고가 오늘은 없습니다.",
+        "- 선호 조건을 확인하고 내일 다시 브리핑을 살펴보세요.",
+        "- 조건을 조금 넓히면 더 많은 공고를 만날 수 있습니다.",
         "",
         "---",
         "",
-        "## 🏆 추천 공고 TOP 0",
+        "## 추천 공고 TOP 0",
         "",
         "오늘 추천할 공고가 없습니다.",
         "",
         "---",
         "",
-        "## ⏰ 신규/마감 임박 공고",
+        "## 신규/마감 임박 공고",
         "",
-        "해당 사항 없습니다.",
+        "선별된 공고 중 7일 이내 마감 임박 공고가 없습니다.",
         "",
         "---",
         "",
-        "## 💡 오늘의 지원 추천 액션",
+        "## 오늘의 지원 추천 액션",
         "",
-        "1. 선호 조건을 다시 확인해 보세요.",
+        "1. 선호 조건(역할, 기업, 스킬, 위치)을 다시 확인해 보세요.",
         "2. 내일 다시 브리핑을 확인해 주세요.",
         "",
         "---",
         "",
-        "## 🔑 오늘의 키워드",
+        "## 오늘의 키워드",
         "",
         "해당 사항 없습니다.",
         "",
         "---",
         "",
-        "## ✏️ 한 줄 정리",
+        "## 한 줄 정리",
         "",
         "내일은 더 많은 공고가 준비되어 있을 거예요.",
     ])
@@ -527,36 +578,63 @@ def _build_deterministic_report(
         f"추천 공고 {n}건을 선별했습니다."
     )
 
+    # ── 핵심 요약: exactly 3 bullets ─────────────────────────────────────
+    bullet1 = (
+        f"- {briefing_date} 기준, {co_display}{extra_str}"
+        f"에서 {n}건의 추천 공고를 선별했습니다."
+    )
+    match_parts: list[str] = []
+    if pref.roles:
+        match_parts.append(f"{pref.roles[0]} 역할")
+    if pref.skills:
+        match_parts.append(f"{', '.join(pref.skills[:2])} 스킬")
+    if match_parts:
+        bullet2 = (
+            f"- 주요 매칭 조건: {' 및 '.join(match_parts)}"
+            "이 선별 기준으로 반영되었습니다."
+        )
+    else:
+        bullet2 = f"- 선호도 설정에 따라 {n}건의 공고가 추천되었습니다."
+    top_company = unique_companies[0] if unique_companies else "관심 기업"
+    bullet3 = f"- {top_company}의 공고를 오늘 확인해 지원 타이밍을 놓치지 마세요."
+
     lines = [
+        "# 오늘의 채용 브리핑",
+        "",
         "## 오늘의 핵심 요약",
         "",
-        f"{briefing_date} 기준, 선호 조건에 맞는 추천 공고 **{n}건**이 선별되었습니다.",
+        bullet1,
+        bullet2,
+        bullet3,
         "",
         "---",
         "",
-        f"## 🏆 추천 공고 TOP {n}",
+        f"## 추천 공고 TOP {n}",
         "",
     ]
 
     for i, inp in enumerate(enriched_inputs, 1):
         source_label = inp.get("source") or "채용 사이트"
         url = inp.get("url") or ""
-        link = f"[{source_label}]({url})" if url else source_label
+        link = f"[공고 보기]({url})" if url else source_label
         lines += [
             f"### {i}. {inp['title']}",
             f"- **기업**: {inp['company_name']}",
             f"- **출처**: {link}",
             f"- **추천 이유**: {inp['matching_reason']}",
-            "",
         ]
+        if inp.get("deadline"):
+            lines.append(f"- **마감일**: {inp['deadline']}")
+        lines.append("")
 
+    # ── 신규/마감 임박 공고 ───────────────────────────────────────────────
     deadline_near = [
         inp for inp in enriched_inputs
         if inp.get("days_until_deadline") is not None
         and 0 <= inp["days_until_deadline"] <= 7
     ]
 
-    lines += ["---", "", "## ⏰ 신규/마감 임박 공고", ""]
+    lines += ["---", "", "## 신규/마감 임박 공고", ""]
     if deadline_near:
         for inp in deadline_near:
             lines.append(
@@ -564,45 +642,66 @@ def _build_deterministic_report(
                 f"마감: {inp.get('deadline', '')}"
             )
     else:
-        lines.append("이번 주 마감 임박 공고가 없습니다.")
+        lines.append("선별된 공고 중 7일 이내 마감 임박 공고가 없습니다.")
     lines.append("")
 
-    action_company = unique_companies[0] if unique_companies else "관심 기업"
-    action_skill = pref.skills[0] if pref.skills else "핵심 기술"
-    lines += [
-        "---",
-        "",
-        "## 💡 오늘의 지원 추천 액션",
-        "",
-        f"1. {action_company}의 공고를 확인하고 즉시 지원해 보세요.",
-        f"2. 이력서에 **{action_skill}** 프로젝트 경험을 업데이트하세요.",
-        "3. 마감 임박 공고를 오늘 내로 확인하세요.",
-        f"4. {primary_role} 관련 기술 블로그나 GitHub를 최신화하세요.",
-        "",
-    ]
+    # ── 오늘의 지원 추천 액션 ─────────────────────────────────────────────
+    action_num = 1
+    action_lines = ["---", "", "## 오늘의 지원 추천 액션", ""]
+    action_lines.append(
+        f"{action_num}. {top_company}의 공고를 "
+        "확인하고 즉시 지원해 보세요."
+    )
+    action_num += 1
+    if pref.skills:
+        skills_str = ", ".join(pref.skills[:2])
+        action_lines.append(
+            f"{action_num}. 이력서에 **{skills_str}** "
+            "관련 프로젝트 경험을 구체적으로 작성하세요."
+        )
+        action_num += 1
+    if deadline_near:
+        near_count = len(deadline_near)
+        action_lines.append(
+            f"{action_num}. 마감 임박 공고({near_count}건)를 "
+            "오늘 안에 지원 검토하세요."
+        )
+        action_num += 1
+    if pref.roles:
+        action_lines.append(
+            f"{action_num}. {pref.roles[0]} 관련 "
+            "GitHub 또는 기술 포트폴리오를 최신화하세요."
+        )
+    action_lines.append("")
+    lines += action_lines
 
+    # ── 오늘의 키워드 ─────────────────────────────────────────────────────
     all_keywords: list[str] = []
     for inp in enriched_inputs:
         for kw in inp.get("matched_keywords", []):
             if kw not in all_keywords:
                 all_keywords.append(kw)
     if not all_keywords:
-        all_keywords = list(pref.skills[:10])
+        seen: set[str] = set()
+        for kw in list(pref.skills[:5]) + list(pref.roles[:2]):
+            if kw not in seen:
+                all_keywords.append(kw)
+                seen.add(kw)
 
     lines += [
         "---",
         "",
-        "## 🔑 오늘의 키워드",
+        "## 오늘의 키워드",
         "",
         " · ".join(all_keywords[:10]) if all_keywords else "채용 공고",
         "",
         "---",
         "",
-        "## ✏️ 한 줄 정리",
+        "## 한 줄 정리",
         "",
         (
-            f"{primary_role} 포지션을 중심으로 {n}건의 공고가 확인되었습니다. "
-            "지금 바로 지원해 보세요!"
+            f"{primary_role} 포지션 중심으로 {co_display}{extra_str}에서 "
+            f"{n}건의 공고가 확인되었습니다. 지금 바로 지원해 보세요!"
         ),
     ]
 

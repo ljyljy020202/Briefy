@@ -357,3 +357,79 @@ def test_synthesis_parse_response_raises_on_missing_fields():
 def test_synthesis_parse_response_raises_on_empty_dict():
     with pytest.raises(Exception):
         briefing_synthesis.parse_response({})
+
+
+# ===========================================================================
+# briefing_synthesis — prompt quality: structure and anti-hallucination
+# ===========================================================================
+
+
+def test_synthesis_system_prompt_requires_top_level_heading():
+    prompt = briefing_synthesis.get_system_prompt()
+    assert "# 오늘의 채용 브리핑" in prompt
+
+
+def test_synthesis_system_prompt_requires_three_summary_bullets():
+    prompt = briefing_synthesis.get_system_prompt()
+    assert "3개" in prompt or "3 개" in prompt
+
+
+def test_synthesis_system_prompt_forbids_salary_hallucination():
+    prompt = briefing_synthesis.get_system_prompt()
+    assert "급여" in prompt or "연봉" in prompt
+
+
+def test_synthesis_system_prompt_forbids_acceptance_probability():
+    prompt = briefing_synthesis.get_system_prompt()
+    assert "합격 가능성" in prompt or "합격 보장" in prompt
+
+
+def test_synthesis_system_prompt_forbids_vague_matching_phrases():
+    prompt = briefing_synthesis.get_system_prompt()
+    prohibited = ["좋은 기회", "적합한 공고", "기대해볼 만한", "추천드립니다"]
+    listed_in_prompt = [p for p in prohibited if p in prompt]
+    assert listed_in_prompt, (
+        "synthesis prompt should explicitly list prohibited vague phrases"
+    )
+
+
+def test_synthesis_system_prompt_requires_concrete_matching_reason():
+    prompt = briefing_synthesis.get_system_prompt()
+    # Must instruct to reference actual preference fields (role, skill, company, etc.)
+    assert "역할" in prompt and "스킬" in prompt
+
+
+def test_synthesis_system_prompt_deadline_omit_rule():
+    prompt = briefing_synthesis.get_system_prompt()
+    # Deadline must be omitted if not in the posting
+    assert "마감일" in prompt and "생략" in prompt
+
+
+# ===========================================================================
+# job_enrichment — prompt quality: anti-hallucination and concrete reasons
+# ===========================================================================
+
+
+def test_enrichment_system_prompt_forbids_salary_hallucination():
+    prompt = job_enrichment.get_system_prompt()
+    assert "급여" in prompt or "연봉" in prompt
+
+
+def test_enrichment_system_prompt_forbids_acceptance_probability():
+    prompt = job_enrichment.get_system_prompt()
+    assert "합격 가능성" in prompt or "합격 보장" in prompt
+
+
+def test_enrichment_system_prompt_forbids_vague_matching_phrases():
+    prompt = job_enrichment.get_system_prompt()
+    prohibited = ["좋은 기회입니다", "적합한 공고입니다", "기대해볼 만한"]
+    listed_in_prompt = [p for p in prohibited if p in prompt]
+    assert listed_in_prompt, (
+        "enrichment prompt should explicitly list prohibited vague phrases"
+    )
+
+
+def test_enrichment_system_prompt_requires_concrete_matching_examples():
+    prompt = job_enrichment.get_system_prompt()
+    # The prompt should show a concrete example (Spring Boot, 백엔드 개발자, etc.)
+    assert "Spring Boot" in prompt or "백엔드 개발자" in prompt

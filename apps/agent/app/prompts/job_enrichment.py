@@ -1,8 +1,8 @@
 """Prompt builders for per-posting LLM enrichment.
 
 Enrichment takes selected job postings + user preferences and returns a JSON
-object whose ``enrichments`` array provides a Korean summary and matching
-reason for each posting.
+object whose ``enrichments`` array provides a Korean summary and concrete
+matching reason for each posting.
 
 Expected LLM JSON output:
 {
@@ -10,7 +10,7 @@ Expected LLM JSON output:
     {
       "id": "<posting id>",
       "summary": "공고 핵심 내용 2-3문장",
-      "matchingReason": "이 공고가 선호도와 매칭되는 이유 1-2문장",
+      "matchingReason": "구체적 매칭 이유 (역할명·스킬명·기업명 등 실제 항목 명시)",
       "matchedKeywords": ["키워드1", "키워드2"]
     }
   ]
@@ -36,19 +36,39 @@ _SYSTEM_PROMPT = """\
     {
       "id": "<공고 ID>",
       "summary": "공고 핵심 내용 2-3문장 (한국어)",
-      "matchingReason": "이 공고가 사용자 선호도와 매칭되는 이유 1-2문장 (한국어)",
+      "matchingReason": "이 공고가 사용자 선호도와 매칭되는 구체적 이유 (한국어)",
       "matchedKeywords": ["매칭된 구체적 키워드 목록"]
     }
   ]
 }
 
-작성 규칙:
-- 입력 데이터에 존재하지 않는 사실을 절대 만들어내지 마세요.
-- matchingReason은 반드시 사용자 선호도(역할, 기업, 스킬, \
-위치, 경력 수준, 고용 형태)와 공고 필드를 근거로만 작성하세요.
-- matchedKeywords는 실제로 선호도와 공고 양쪽에 존재하는 키워드만 포함하세요.
+matchingReason 작성 규칙:
+- 반드시 아래 항목 중 실제로 매칭된 구체적 내용을 명시하세요:
+  역할(roles), 관심 기업(companies), 스킬(skills), 위치(locations),
+  경력 수준(experienceLevels), 고용 형태(employmentTypes), 마감 임박 여부
+- 좋은 예시:
+  "백엔드 개발자 역할과 Spring Boot, JPA 스킬이 사용자 관심 조건과 겹칩니다."
+  "관심 기업 네이버의 공고이며 서울 근무, 신입 조건이 선호도와 맞습니다."
+  "Kotlin, Java 스킬 매칭 · 판교 근무 · 3년 이상 경력 조건 부합"
+- 다음 모호한 표현을 절대 사용하지 마세요:
+  "좋은 기회입니다", "적합한 공고입니다", "사용자 관심사와 잘 맞습니다",
+  "추천드립니다", "기대해볼 만한 공고입니다", "성장 가능성이 있습니다"
+
+summary 작성 규칙:
+- 공고에 명시된 정보만 2-3문장으로 요약하세요.
+- 공고 제목, 기업명, 주요 업무 또는 기술 스택을 포함하세요.
+
+절대 만들어내지 말아야 할 내용:
+- 급여 또는 연봉 정보 (공고에 없는 경우)
+- 채용 프로세스 또는 면접 일정 (공고에 없는 경우)
+- 기업 규모, 복리후생 (공고에 없는 경우)
+- 합격 가능성, 경쟁률, 합격 보장
+- 사용자의 커리어 전망 또는 성장 가능성
+- 공고에 없는 마감일, 공고에 없는 요구 스킬
+
+matchedKeywords 작성 규칙:
+- 사용자 선호도와 공고 양쪽에 실제로 존재하는 키워드만 포함하세요.
 - 투자 조언, 매수/매도 추천 등 금융 관련 의견을 절대 포함하지 마세요.
-- summary는 공고에 명시된 정보만 요약하세요.
 - 한국어로 작성하세요.
 - 유효한 JSON 객체만 반환하세요.\
 """

@@ -73,12 +73,21 @@ _RANKING_REQUEST = {
 
 _VALID_SYNTHESIS_RESPONSE = {
     "markdownContent": (
-        "## 오늘의 핵심 요약\n내용\n"
-        "## 🏆 추천 공고 TOP 3\n공고\n"
-        "## ⏰ 신규/마감 임박 공고\n없음\n"
-        "## 💡 오늘의 지원 추천 액션\n1. 지원하세요\n"
-        "## 🔑 오늘의 키워드\nSpring Boot\n"
-        "## ✏️ 한 줄 정리\n요약."
+        "# 오늘의 채용 브리핑\n\n"
+        "## 오늘의 핵심 요약\n\n"
+        "- 2026-06-26 기준, 네이버 등 3건의 공고를 선별했습니다.\n"
+        "- 백엔드 개발자 역할과 Spring Boot 스킬이 주요 매칭 조건입니다.\n"
+        "- 네이버 공고를 오늘 확인해 보세요.\n\n"
+        "## 추천 공고 TOP 3\n\n"
+        "공고 내용\n\n"
+        "## 신규/마감 임박 공고\n\n"
+        "선별된 공고 중 7일 이내 마감 임박 공고가 없습니다.\n\n"
+        "## 오늘의 지원 추천 액션\n\n"
+        "1. 지원하세요\n\n"
+        "## 오늘의 키워드\n\n"
+        "Spring Boot · Java\n\n"
+        "## 한 줄 정리\n\n"
+        "오늘의 핵심 요약."
     ),
     "overallSummary": "LLM이 생성한 한 줄 요약입니다.",
 }
@@ -397,3 +406,137 @@ async def test_llm_invalid_json_falls_back_safely(client):
     assert body["title"]
     assert isinstance(body["articles"], list)
     assert len(body["articles"]) > 0
+
+
+# ---------------------------------------------------------------------------
+# Report structure quality
+# ---------------------------------------------------------------------------
+
+
+async def test_report_has_top_level_heading(client):
+    """Deterministic fallback report starts with the top-level heading."""
+    response = await client.post("/briefings/generate", json=FULL_REQUEST)
+    content = response.json()["content"]
+    assert content.startswith("# 오늘의 채용 브리핑"), (
+        f"content does not start with top-level heading; got: {content[:80]!r}"
+    )
+
+
+async def test_required_sections_present_in_fallback_report(client):
+    """All six required sections exist in the deterministic fallback report."""
+    response = await client.post("/briefings/generate", json=FULL_REQUEST)
+    content = response.json()["content"]
+    required_sections = [
+        "오늘의 핵심 요약",
+        "추천 공고 TOP",
+        "신규/마감 임박 공고",
+        "오늘의 지원 추천 액션",
+        "오늘의 키워드",
+        "한 줄 정리",
+    ]
+    for section in required_sections:
+        assert section in content, f"required section missing: {section}"
+
+
+async def test_empty_pool_report_also_has_required_sections(client):
+    """Even the empty-pool report keeps all required section headers."""
+    request = {
+        **FULL_REQUEST,
+        "candidatePool": {
+            "jobPostings": [],
+            "companyIssues": [],
+            "industryIssues": [],
+        },
+    }
+    response = await client.post("/briefings/generate", json=request)
+    content = response.json()["content"]
+    for section in ["오늘의 핵심 요약", "추천 공고 TOP", "신규/마감 임박 공고",
+                    "오늘의 지원 추천 액션", "오늘의 키워드", "한 줄 정리"]:
+        assert section in content, f"empty-state section missing: {section}"
+
+
+# ---------------------------------------------------------------------------
+# Matching reason quality
+# ---------------------------------------------------------------------------
+
+
+async def test_matching_reason_excludes_vague_phrases(client):
+    """whyItMatters must not contain generic filler phrases."""
+    response = await client.post("/briefings/generate", json=FULL_REQUEST)
+    articles = response.json()["articles"]
+    vague_phrases = [
+        "좋은 기회입니다",
+        "적합한 공고입니다",
+        "사용자 관심사와 잘 맞습니다",
+        "추천드립니다",
+        "기대해볼 만한",
+        "선호도 기반 추천 공고",
+    ]
+    for article in articles:
+        why = article.get("whyItMatters", "")
+        for phrase in vague_phrases:
+            assert phrase not in why, (
+                f"vague phrase {phrase!r} found in whyItMatters: {why!r}"
+            )
+
+
+async def test_matching_reason_includes_concrete_terms(client):
+    """whyItMatters must mention actual preference terms (role, skill, or company)."""
+    response = await client.post("/briefings/generate", json=FULL_REQUEST)
+    articles = response.json()["articles"]
+    # Terms present in FULL_REQUEST preferences and in the test postings
+    concrete_terms = {
+        "Spring Boot", "Java", "Kotlin",
+        "백엔드 개발자", "풀스택 개발자",
+        "네이버", "카카오", "라인",
+        "서울", "판교",
+        "신입", "3년 이상", "정규직",
+    }
+    for article in articles:
+        why = article.get("whyItMatters", "")
+        matched = [t for t in concrete_terms if t in why]
+        assert matched, (
+            f"no concrete preference terms found in whyItMatters: {why!r}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Ranking stability
+# ---------------------------------------------------------------------------
+
+
+async def test_articles_ranked_order_matches_scoring(client):
+    """Articles are in descending rank order: 네이버 > 카카오 > 라인."""
+    response = await client.post("/briefings/generate", json=FULL_REQUEST)
+    articles = response.json()["articles"]
+    assert len(articles) == 3
+    assert "네이버" in articles[0]["title"], (
+        f"expected 네이버 first; got {articles[0]['title']!r}"
+    )
+    assert "카카오" in articles[1]["title"], (
+        f"expected 카카오 second; got {articles[1]['title']!r}"
+    )
+    assert "라인" in articles[2]["title"], (
+        f"expected 라인 third; got {articles[2]['title']!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Hallucination guardrails
+# ---------------------------------------------------------------------------
+
+
+async def test_no_acceptance_probability_in_fallback_content(client):
+    """Deterministic report must not contain hallucination patterns."""
+    response = await client.post("/briefings/generate", json=FULL_REQUEST)
+    content = response.json()["content"]
+    hallucination_phrases = [
+        "합격 가능성이 높",
+        "합격 보장",
+        "반드시 합격",
+        "경쟁률이 낮",
+    ]
+    for phrase in hallucination_phrases:
+        assert phrase not in content, (
+            f"hallucination phrase {phrase!r} found in content"
+        )
