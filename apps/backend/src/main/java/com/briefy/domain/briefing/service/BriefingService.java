@@ -95,8 +95,7 @@ public class BriefingService {
       List<AgentCandidateJobPosting> candidates = selectCandidates(briefingDate, preference);
       AgentCandidatePool candidatePool = new AgentCandidatePool(candidates, List.of(), List.of());
 
-      AgentBriefingRequest agentRequest =
-          buildAgentRequest(userId, preference, candidatePool);
+      AgentBriefingRequest agentRequest = buildAgentRequest(userId, preference, candidatePool);
       AgentBriefingResponse agentResponse = agentClient.generate(agentRequest);
 
       BriefingReport report = buildReport(userId, job, agentResponse);

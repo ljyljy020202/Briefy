@@ -51,7 +51,9 @@ public class UserBriefingPreferenceController {
     return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(response));
   }
 
-  @Operation(summary = "브리핑 선호도 부분 수정", description = "선호도 항목을 부분 수정합니다. 전달한 필드만 업데이트되며 나머지는 유지됩니다.")
+  @Operation(
+      summary = "브리핑 선호도 부분 수정",
+      description = "선호도 항목을 부분 수정합니다. 전달한 필드만 업데이트되며 나머지는 유지됩니다.")
   @PatchMapping("/{id}")
   public ResponseEntity<ApiResponse<BriefingPreferenceResponse>> patchPreference(
       @PathVariable Long id, @RequestBody @Valid PatchBriefingPreferenceRequest request) {
