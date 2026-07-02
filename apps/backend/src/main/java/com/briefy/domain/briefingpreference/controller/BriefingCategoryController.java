@@ -22,7 +22,7 @@ public class BriefingCategoryController {
     this.briefingCategoryService = briefingCategoryService;
   }
 
-  @Operation(summary = "활성 브리핑 카테고리 목록 조회")
+  @Operation(summary = "활성 브리핑 카테고리 목록 조회", description = "현재 활성화된 브리핑 카테고리 목록을 반환합니다. 선호도 설정 시 카테고리 선택에 사용합니다.")
   @GetMapping
   public ResponseEntity<ApiResponse<List<BriefingCategoryResponse>>> getActiveCategories() {
     return ResponseEntity.ok(ApiResponse.success(briefingCategoryService.getActiveCategories()));

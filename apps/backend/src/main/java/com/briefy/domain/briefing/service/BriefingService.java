@@ -7,7 +7,6 @@ import com.briefy.domain.briefing.client.dto.AgentCandidateJobPosting;
 import com.briefy.domain.briefing.client.dto.AgentCandidatePool;
 import com.briefy.domain.briefing.dto.BriefingDetailResponse;
 import com.briefy.domain.briefing.dto.BriefingListItem;
-import com.briefy.domain.briefing.dto.GenerateBriefingRequest;
 import com.briefy.domain.briefing.dto.GenerateResult;
 import com.briefy.domain.briefing.entity.BriefingArticle;
 import com.briefy.domain.briefing.entity.BriefingJob;
@@ -64,18 +63,16 @@ public class BriefingService {
    * re-thrown, so failure state is always visible for debugging and retries.
    */
   @Transactional(noRollbackFor = Exception.class)
-  public GenerateResult generateBriefing(Long userId, GenerateBriefingRequest request) {
-    return doGenerateBriefing(userId, request, BriefingTriggerType.MANUAL);
+  public GenerateResult generateBriefing(Long userId) {
+    return doGenerateBriefing(userId, BriefingTriggerType.MANUAL);
   }
 
   @Transactional(noRollbackFor = Exception.class)
   public GenerateResult generateScheduledBriefing(Long userId) {
-    return doGenerateBriefing(
-        userId, new GenerateBriefingRequest(null), BriefingTriggerType.SCHEDULED);
+    return doGenerateBriefing(userId, BriefingTriggerType.SCHEDULED);
   }
 
-  private GenerateResult doGenerateBriefing(
-      Long userId, GenerateBriefingRequest request, BriefingTriggerType triggerType) {
+  private GenerateResult doGenerateBriefing(Long userId, BriefingTriggerType triggerType) {
     List<UserBriefingPreference> preferences =
         userBriefingPreferenceRepository.findAllByUserIdAndActiveTrue(userId);
 
@@ -99,10 +96,10 @@ public class BriefingService {
       AgentCandidatePool candidatePool = new AgentCandidatePool(candidates, List.of(), List.of());
 
       AgentBriefingRequest agentRequest =
-          buildAgentRequest(userId, preference, request, candidatePool);
+          buildAgentRequest(userId, preference, candidatePool);
       AgentBriefingResponse agentResponse = agentClient.generate(agentRequest);
 
-      BriefingReport report = buildReport(userId, job, request.resolvedTone(), agentResponse);
+      BriefingReport report = buildReport(userId, job, agentResponse);
       BriefingReport saved = briefingReportRepository.save(report);
 
       job.complete();
@@ -278,21 +275,18 @@ public class BriefingService {
   }
 
   private AgentBriefingRequest buildAgentRequest(
-      Long userId,
-      Map<String, Object> preference,
-      GenerateBriefingRequest request,
-      AgentCandidatePool candidatePool) {
+      Long userId, Map<String, Object> preference, AgentCandidatePool candidatePool) {
     return new AgentBriefingRequest(
         userId,
         BriefingCategoryCode.JOB_POSTING.name(),
         preference,
         LocalDate.now().toString(),
-        request.resolvedTone(),
+        "easy",
         candidatePool);
   }
 
   private BriefingReport buildReport(
-      Long userId, BriefingJob job, String tone, AgentBriefingResponse agentResponse) {
+      Long userId, BriefingJob job, AgentBriefingResponse agentResponse) {
     List<AgentBriefingResponse.AgentArticle> agentArticles =
         agentResponse.articles() != null ? agentResponse.articles() : List.of();
 
@@ -311,7 +305,7 @@ public class BriefingService {
             agentResponse.summary(),
             agentResponse.content(),
             LocalDate.now(),
-            tone,
+            "easy",
             tokenInput,
             tokenOutput,
             agentArticles.size());
