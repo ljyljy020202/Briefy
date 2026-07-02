@@ -1,3 +1,8 @@
+from datetime import date
+from unittest.mock import AsyncMock, patch
+
+from app.schemas.collection import CollectionStats, DailyCollectResponse
+
 COLLECT_REQUEST = {
     "collectDate": "2026-06-30",
     "categories": ["JOB_POSTING"],
@@ -67,7 +72,8 @@ async def test_collect_daily_stats_match_posting_count(client):
     response = await client.post("/collections/daily", json=COLLECT_REQUEST)
     body = response.json()
     assert body["stats"]["jobPostingCount"] == len(body["jobPostings"])
-    assert body["stats"]["collectedCount"] == len(body["jobPostings"])
+    # collectedCount is the raw total before dedup/filter, so it can be >= final count
+    assert body["stats"]["collectedCount"] >= len(body["jobPostings"])
 
 
 async def test_collect_daily_non_job_posting_category_returns_no_postings(client):
@@ -89,3 +95,33 @@ async def test_collect_daily_content_hash_is_stable_across_calls(client):
     hashes_1 = [p["contentHash"] for p in r1["jobPostings"]]
     hashes_2 = [p["contentHash"] for p in r2["jobPostings"]]
     assert hashes_1 == hashes_2
+
+
+async def test_collect_daily_uses_daily_collection_service(client):
+    """Route must delegate to DailyCollectionService, not dummy_collection."""
+    stub = DailyCollectResponse(
+        collect_date=date(2026, 6, 30),
+        stats=CollectionStats(),
+    )
+    with patch(
+        "app.api.collections._service.collect",
+        new_callable=AsyncMock,
+        return_value=stub,
+    ) as mock_collect:
+        response = await client.post("/collections/daily", json=COLLECT_REQUEST)
+
+    assert response.status_code == 200
+    mock_collect.assert_called_once()
+
+
+async def test_collect_daily_no_real_network_calls_in_fixture_mode(client, monkeypatch):
+    """Fixture mode uses only FixtureAdapter — source='fixture', no network calls."""
+    from app.adapters.fixture import FixtureAdapter
+
+    monkeypatch.setattr(
+        "app.services.daily_collection._build_adapters",
+        lambda: [FixtureAdapter()],
+    )
+    response = await client.post("/collections/daily", json=COLLECT_REQUEST)
+    postings = response.json()["jobPostings"]
+    assert all(p["source"] == "fixture" for p in postings)

@@ -992,7 +992,9 @@ POST /collections/daily
 
 **Auth:** None (internal network only; restrict via Docker network or security group in production)
 
-**Description:** Accepts seed keywords aggregated by Spring, generates stub job postings (1st MVP — no real scraping), and returns the raw list to Spring. Spring then upserts them into `job_postings`. The Agent does not access the database.
+**Description:** Accepts seed keywords aggregated by Spring, collects job postings via the configured adapters, and returns the raw list to Spring. Spring then upserts them into `job_postings`. The Agent does not access the database.
+
+Default mode (`JOB_COLLECTION_USE_FIXTURE=true`, `JOB_COLLECTION_ENABLE_REAL_SOURCES=false`) returns deterministic fixture postings with no network calls. Set `JOB_COLLECTION_ENABLE_REAL_SOURCES=true` in `apps/agent/.env` to enable real source collection (JasoseolAdapter).
 
 Must run before `POST /briefings/generate` so the candidate pool is populated.
 
@@ -1037,10 +1039,10 @@ Must run before `POST /briefings/generate` so the candidate pool is populated.
   "collectDate": "2026-07-01",
   "jobPostings": [
     {
-      "source": "원티드",
-      "sourceUrl": "https://www.wanted.co.kr/wd/00123",
+      "source": "fixture",
+      "sourceUrl": "https://fixture.local/jobs/00123",
       "companyName": "네이버",
-      "title": "네이버 백엔드 개발자",
+      "title": "네이버 — 백엔드 개발자",
       "position": "백엔드 개발자",
       "employmentType": "정규직",
       "experienceLevel": "신입",
@@ -1048,7 +1050,7 @@ Must run before `POST /briefings/generate` so the candidate pool is populated.
       "deadline": "2026-07-15",
       "skills": ["Spring Boot", "Java"],
       "roles": ["백엔드 개발자"],
-      "description": "채용 공고 설명",
+      "description": "[픽스처 데이터] 채용 공고 설명",
       "postedAt": "2026-07-01T09:00:00",
       "contentHash": "a3f2...sha256hex...64chars"
     }
@@ -1056,9 +1058,9 @@ Must run before `POST /briefings/generate` so the candidate pool is populated.
   "companyIssues": [],
   "industryIssues": [],
   "stats": {
-    "collectedCount": 5,
+    "collectedCount": 3,
     "deduplicatedCount": 0,
-    "jobPostingCount": 5,
+    "jobPostingCount": 3,
     "companyIssueCount": 0,
     "industryIssueCount": 0
   },
@@ -1069,10 +1071,13 @@ Must run before `POST /briefings/generate` so the candidate pool is populated.
 | Field | Notes |
 |---|---|
 | `jobPostings` | Raw postings returned to Spring for upsert into `job_postings` |
+| `jobPostings[].source` | `"fixture"` in default mode; `"jasoseol"` when real source enabled |
 | `companyIssues` | Always `[]` in 1st MVP |
 | `industryIssues` | Always `[]` in 1st MVP |
-| `stats.collectedCount` | Total items generated / fetched by the Agent |
-| `stats.deduplicatedCount` | Items skipped by the Agent before returning (Agent-side dedup) |
+| `stats.collectedCount` | Total raw postings fetched across all adapters (before dedup/filter) |
+| `stats.deduplicatedCount` | Items removed by Agent-side deduplication (3-level: URL → hash → title+company+deadline) |
+| `stats.jobPostingCount` | Final count returned after dedup and deadline filtering |
+| `warnings` | Non-fatal issues from adapters (timeouts, parse errors, HTTP errors) |
 
 **Error handling (backend side):** Log the failure and proceed; user briefing generation for the day may return empty results but should not fail hard.
 
