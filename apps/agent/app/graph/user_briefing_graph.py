@@ -516,32 +516,32 @@ def _empty_state_report(briefing_date: str) -> dict:
         "",
         "---",
         "",
-        "## 추천 공고 TOP 0",
+        "## 🏆 추천 공고 TOP 0",
         "",
         "오늘 추천할 공고가 없습니다.",
         "",
         "---",
         "",
-        "## 신규/마감 임박 공고",
+        "## ⏰ 신규/마감 임박 공고",
         "",
         "선별된 공고 중 7일 이내 마감 임박 공고가 없습니다.",
         "",
         "---",
         "",
-        "## 오늘의 지원 추천 액션",
+        "## 💡 오늘의 지원 추천 액션",
         "",
         "1. 선호 조건(역할, 기업, 스킬, 위치)을 다시 확인해 보세요.",
         "2. 내일 다시 브리핑을 확인해 주세요.",
         "",
         "---",
         "",
-        "## 오늘의 키워드",
+        "## 🔑 오늘의 키워드",
         "",
         "해당 사항 없습니다.",
         "",
         "---",
         "",
-        "## 한 줄 정리",
+        "## ✏️ 한 줄 정리",
         "",
         "내일은 더 많은 공고가 준비되어 있을 거예요.",
     ])
@@ -609,7 +609,7 @@ def _build_deterministic_report(
         "",
         "---",
         "",
-        f"## 추천 공고 TOP {n}",
+        f"## 🏆 추천 공고 TOP {n}",
         "",
     ]
 
@@ -634,7 +634,7 @@ def _build_deterministic_report(
         and 0 <= inp["days_until_deadline"] <= 7
     ]
 
-    lines += ["---", "", "## 신규/마감 임박 공고", ""]
+    lines += ["---", "", "## ⏰ 신규/마감 임박 공고", ""]
     if deadline_near:
         for inp in deadline_near:
             lines.append(
@@ -647,7 +647,7 @@ def _build_deterministic_report(
 
     # ── 오늘의 지원 추천 액션 ─────────────────────────────────────────────
     action_num = 1
-    action_lines = ["---", "", "## 오늘의 지원 추천 액션", ""]
+    action_lines = ["---", "", "## 💡 오늘의 지원 추천 액션", ""]
     action_lines.append(
         f"{action_num}. {top_company}의 공고를 "
         "확인하고 즉시 지원해 보세요."
@@ -691,13 +691,13 @@ def _build_deterministic_report(
     lines += [
         "---",
         "",
-        "## 오늘의 키워드",
+        "## 🔑 오늘의 키워드",
         "",
         " · ".join(all_keywords[:10]) if all_keywords else "채용 공고",
         "",
         "---",
         "",
-        "## 한 줄 정리",
+        "## ✏️ 한 줄 정리",
         "",
         (
             f"{primary_role} 포지션 중심으로 {co_display}{extra_str}에서 "
