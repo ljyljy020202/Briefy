@@ -51,12 +51,32 @@ public class DailyCollectionService {
 
   public DailyCollectionResult triggerDailyCollection(
       LocalDate collectDate, List<String> requestedCategories) {
+    return executeCollection(collectDate, requestedCategories, CollectionTriggerType.MANUAL);
+  }
+
+  public DailyCollectionResult triggerScheduledDailyCollection(LocalDate collectDate) {
+    if (collectionJobService.isAlreadyActiveForDate(collectDate)) {
+      log.info(
+          "Skipping scheduled collection for {} — already PROCESSING or COMPLETED", collectDate);
+      return new DailyCollectionResult(
+          null,
+          "SKIPPED",
+          collectDate,
+          0,
+          0,
+          0,
+          "Already PROCESSING or COMPLETED for " + collectDate);
+    }
+    return executeCollection(collectDate, null, CollectionTriggerType.SCHEDULED);
+  }
+
+  private DailyCollectionResult executeCollection(
+      LocalDate collectDate, List<String> requestedCategories, CollectionTriggerType triggerType) {
     List<String> categories = resolveCategories(requestedCategories);
     String categoriesJson = buildCategoriesJson(categories);
 
     CollectionJob job =
-        collectionJobService.createPending(
-            collectDate, categoriesJson, CollectionTriggerType.MANUAL);
+        collectionJobService.createPending(collectDate, categoriesJson, triggerType);
     collectionJobService.markProcessing(job.getId());
 
     try {

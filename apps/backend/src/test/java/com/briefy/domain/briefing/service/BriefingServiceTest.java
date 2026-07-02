@@ -16,7 +16,6 @@ import com.briefy.domain.briefing.client.dto.AgentBriefingResponse;
 import com.briefy.domain.briefing.client.dto.AgentCandidateJobPosting;
 import com.briefy.domain.briefing.dto.BriefingDetailResponse;
 import com.briefy.domain.briefing.dto.BriefingListItem;
-import com.briefy.domain.briefing.dto.GenerateBriefingRequest;
 import com.briefy.domain.briefing.dto.GenerateResult;
 import com.briefy.domain.briefing.entity.BriefingJob;
 import com.briefy.domain.briefing.entity.BriefingReport;
@@ -101,32 +100,11 @@ class BriefingServiceTest {
     when(mockReport.getId()).thenReturn(100L);
     when(briefingReportRepository.save(any(BriefingReport.class))).thenReturn(mockReport);
 
-    GenerateResult result = briefingService.generateBriefing(1L, new GenerateBriefingRequest(null));
+    GenerateResult result = briefingService.generateBriefing(1L);
 
     assertThat(result.briefingReportId()).isEqualTo(100L);
     assertThat(result.status()).isEqualTo("COMPLETED");
     verify(briefingReportRepository).save(any(BriefingReport.class));
-  }
-
-  @Test
-  void generateBriefing_defaultToneIsEasy_whenToneIsNull() {
-    when(userBriefingPreferenceRepository.findAllByUserIdAndActiveTrue(1L))
-        .thenReturn(List.of(mockPref));
-    when(briefingJobRepository.save(any(BriefingJob.class))).thenAnswer(inv -> inv.getArgument(0));
-    when(agentClient.generate(any(AgentBriefingRequest.class)))
-        .thenAnswer(
-            inv -> {
-              AgentBriefingRequest req = inv.getArgument(0);
-              assertThat(req.tone()).isEqualTo("easy");
-              return mockAgentResponse;
-            });
-    BriefingReport mockReport = mock(BriefingReport.class);
-    when(mockReport.getId()).thenReturn(1L);
-    when(briefingReportRepository.save(any())).thenReturn(mockReport);
-
-    briefingService.generateBriefing(1L, new GenerateBriefingRequest(null));
-
-    verify(agentClient).generate(any());
   }
 
   @Test
@@ -137,8 +115,7 @@ class BriefingServiceTest {
     when(agentClient.generate(any(AgentBriefingRequest.class)))
         .thenThrow(new BusinessException(ErrorCode.AGENT_SERVER_ERROR));
 
-    assertThatThrownBy(
-            () -> briefingService.generateBriefing(1L, new GenerateBriefingRequest(null)))
+    assertThatThrownBy(() -> briefingService.generateBriefing(1L))
         .isInstanceOf(BusinessException.class)
         .satisfies(
             e ->
@@ -242,7 +219,7 @@ class BriefingServiceTest {
     when(mockReport.getId()).thenReturn(1L);
     when(briefingReportRepository.save(any())).thenReturn(mockReport);
 
-    briefingService.generateBriefing(1L, new GenerateBriefingRequest(null));
+    briefingService.generateBriefing(1L);
 
     var pool = captor.getValue().candidatePool();
     assertThat(pool).isNotNull();
@@ -271,7 +248,7 @@ class BriefingServiceTest {
     when(mockReport.getId()).thenReturn(1L);
     when(briefingReportRepository.save(any())).thenReturn(mockReport);
 
-    briefingService.generateBriefing(1L, new GenerateBriefingRequest(null));
+    briefingService.generateBriefing(1L);
 
     assertThat(captor.getValue().candidatePool().jobPostings()).hasSize(30);
   }
@@ -288,7 +265,7 @@ class BriefingServiceTest {
     when(mockReport.getId()).thenReturn(1L);
     when(briefingReportRepository.save(any())).thenReturn(mockReport);
 
-    GenerateResult result = briefingService.generateBriefing(1L, new GenerateBriefingRequest(null));
+    GenerateResult result = briefingService.generateBriefing(1L);
 
     assertThat(result.status()).isEqualTo("COMPLETED");
     verify(agentClient).generate(argThat(req -> req.candidatePool().jobPostings().isEmpty()));
@@ -314,7 +291,7 @@ class BriefingServiceTest {
     when(mockReport.getId()).thenReturn(1L);
     when(briefingReportRepository.save(any())).thenReturn(mockReport);
 
-    briefingService.generateBriefing(1L, new GenerateBriefingRequest(null));
+    briefingService.generateBriefing(1L);
 
     List<AgentCandidateJobPosting> candidates = captor.getValue().candidatePool().jobPostings();
     assertThat(candidates).hasSize(2);

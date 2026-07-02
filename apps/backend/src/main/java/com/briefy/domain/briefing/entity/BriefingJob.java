@@ -64,6 +64,10 @@ public class BriefingJob extends BaseTimeEntity {
     return new BriefingJob(userId, BriefingTriggerType.MANUAL);
   }
 
+  public static BriefingJob createScheduled(Long userId) {
+    return new BriefingJob(userId, BriefingTriggerType.SCHEDULED);
+  }
+
   public void startProcessing() {
     this.status = BriefingJobStatus.PROCESSING;
     this.startedAt = LocalDateTime.now();

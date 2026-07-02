@@ -1,17 +1,12 @@
 package com.briefy.domain.briefing.controller;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.briefy.domain.briefing.dto.BriefingDetailResponse;
 import com.briefy.domain.briefing.dto.BriefingListItem;
-import com.briefy.domain.briefing.dto.GenerateBriefingRequest;
-import com.briefy.domain.briefing.dto.GenerateResult;
 import com.briefy.domain.briefing.service.BriefingService;
 import com.briefy.global.auth.AuthenticatedUser;
 import com.briefy.global.auth.CurrentUserProvider;
@@ -25,7 +20,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
@@ -49,61 +43,6 @@ class BriefingControllerTest {
             .setControllerAdvice(new GlobalExceptionHandler())
             .setValidator(validator)
             .build();
-  }
-
-  @Test
-  void generate_returns201_withGenerateResult() throws Exception {
-    when(currentUserProvider.getCurrentUser()).thenReturn(new AuthenticatedUser(1L));
-    when(briefingService.generateBriefing(eq(1L), any(GenerateBriefingRequest.class)))
-        .thenReturn(new GenerateResult(100L, 50L, "COMPLETED"));
-
-    mockMvc
-        .perform(
-            post("/api/briefings/generate")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"tone\":\"easy\"}"))
-        .andExpect(status().isCreated())
-        .andExpect(jsonPath("$.success").value(true))
-        .andExpect(jsonPath("$.data.briefingReportId").value(100))
-        .andExpect(jsonPath("$.data.jobId").value(50))
-        .andExpect(jsonPath("$.data.status").value("COMPLETED"));
-  }
-
-  @Test
-  void generate_withEmptyBody_returns201() throws Exception {
-    when(currentUserProvider.getCurrentUser()).thenReturn(new AuthenticatedUser(1L));
-    when(briefingService.generateBriefing(eq(1L), any(GenerateBriefingRequest.class)))
-        .thenReturn(new GenerateResult(101L, 51L, "COMPLETED"));
-
-    mockMvc
-        .perform(
-            post("/api/briefings/generate").contentType(MediaType.APPLICATION_JSON).content("{}"))
-        .andExpect(status().isCreated())
-        .andExpect(jsonPath("$.data.status").value("COMPLETED"));
-  }
-
-  @Test
-  void generate_toneExceedsMaxLength_returns400() throws Exception {
-    mockMvc
-        .perform(
-            post("/api/briefings/generate")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"tone\":\"" + "x".repeat(31) + "\"}"))
-        .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
-  }
-
-  @Test
-  void generate_agentError_returns502() throws Exception {
-    when(currentUserProvider.getCurrentUser()).thenReturn(new AuthenticatedUser(1L));
-    when(briefingService.generateBriefing(eq(1L), any(GenerateBriefingRequest.class)))
-        .thenThrow(new BusinessException(ErrorCode.AGENT_SERVER_ERROR));
-
-    mockMvc
-        .perform(
-            post("/api/briefings/generate").contentType(MediaType.APPLICATION_JSON).content("{}"))
-        .andExpect(status().isBadGateway())
-        .andExpect(jsonPath("$.error.code").value("AGENT_SERVER_ERROR"));
   }
 
   @Test

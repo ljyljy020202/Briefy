@@ -1,11 +1,13 @@
 package com.briefy.domain.collection.service;
 
 import com.briefy.domain.collection.entity.CollectionJob;
+import com.briefy.domain.collection.entity.CollectionJobStatus;
 import com.briefy.domain.collection.entity.CollectionTriggerType;
 import com.briefy.domain.collection.repository.CollectionJobRepository;
 import com.briefy.global.exception.BusinessException;
 import com.briefy.global.exception.ErrorCode;
 import java.time.LocalDate;
+import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,6 +44,12 @@ public class CollectionJobService {
     CollectionJob job = findOrThrow(jobId);
     job.fail(errorMessage);
     return job;
+  }
+
+  @Transactional(readOnly = true)
+  public boolean isAlreadyActiveForDate(LocalDate date) {
+    return collectionJobRepository.existsByCollectionDateAndStatusIn(
+        date, List.of(CollectionJobStatus.PROCESSING, CollectionJobStatus.COMPLETED));
   }
 
   private CollectionJob findOrThrow(Long jobId) {

@@ -573,7 +573,7 @@ GET /api/dashboard
 | Field | Notes |
 |---|---|
 | `briefingPreferences` | Active preferences only, one entry per active category |
-| `nextDeliveryTime` | `null` — scheduler not yet implemented; will be derived from `notification_settings.delivery_time` + `timezone` |
+| `nextDeliveryTime` | `null` — delivery-time personalization not yet implemented; scheduler runs at fixed 08:00 KST (`briefy.scheduler.enabled: false` by default) |
 | `latestBriefing` | Full `BriefingListItem` for the most recent report; `null` if no reports exist |
 | `latestDeliveryStatus` | `null` — email delivery not yet implemented; will be `SENT`, `PENDING`, or `FAILED` when delivery is wired |
 | `recentReports` | Up to 3 most recent `BriefingListItem` records, ordered by date descending; empty array if no reports exist |
@@ -613,14 +613,16 @@ Requires that the daily candidate pool (`job_postings`) has already been collect
 ```
 1. Load authenticated user
 2. Load active user_briefing_preferences for the user
-3. Create briefing_jobs row (status = PENDING, triggerType = MANUAL)
-4. Update job status → PROCESSING, set startedAt
-5. Call Agent: POST /briefings/generate with user preference JSON
-6. On success:
+3. Load today's job_postings candidate pool from DB
+4. Pre-score candidates against user preferences; select top 30
+5. Create briefing_jobs row (status = PENDING, triggerType = MANUAL)
+6. Update job status → PROCESSING, set startedAt
+7. Call Agent: POST /briefings/generate with preference + candidatePool
+8. On success:
    a. Insert briefing_reports row
    b. Insert briefing_articles rows
    c. Update job status → COMPLETED, set completedAt
-7. On failure:
+9. On failure:
    a. Update job status → FAILED, set errorMessage
    b. Return BRIEFING_JOB_FAILED or AGENT_SERVER_ERROR
 ```
@@ -849,7 +851,60 @@ GET /api/admin/briefing-jobs?status=FAILED&page=0&size=20
 
 ---
 
-### 8-2. Get Delivery Logs (Admin)
+### 8-2. Trigger Daily Collection (Admin)
+
+```
+POST /api/admin/collections/daily
+```
+
+**Auth:** Required, ADMIN only
+
+**Description:** Manually triggers the daily job-posting collection for a given date. The backend aggregates seed keywords from all active `user_briefing_preferences`, calls the Agent `POST /collections/daily`, and upserts the returned job postings into the `job_postings` candidate pool. Returns a summary of the collection run.
+
+**Request:**
+
+```json
+{
+  "collectDate": "2026-07-01",
+  "categories": ["JOB_POSTING"]
+}
+```
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `collectDate` | String (ISO-8601) | No | Date to collect for; defaults to today |
+| `categories` | Array\<String\> | No | Category codes to collect; defaults to `["JOB_POSTING"]` |
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "collectionJobId": 42,
+    "status": "COMPLETED",
+    "collectDate": "2026-07-01",
+    "collectedCount": 5,
+    "savedCount": 5,
+    "deduplicatedCount": 0,
+    "errorMessage": null
+  },
+  "error": null
+}
+```
+
+| Field | Notes |
+|---|---|
+| `collectedCount` | Total raw postings returned by the Agent |
+| `savedCount` | New rows inserted into `job_postings` (skips existing URLs) |
+| `deduplicatedCount` | Rows skipped due to URL already existing |
+| `status` | `COMPLETED`, `FAILED`, or `SKIPPED` (if already active for the date) |
+
+**Possible errors:** `UNAUTHORIZED`, `FORBIDDEN`, `AGENT_SERVER_ERROR`
+
+---
+
+### 8-4. Get Delivery Logs (Admin)
 
 ```
 GET /api/admin/delivery-logs?status=FAILED&page=0&size=20
@@ -937,42 +992,87 @@ POST /collections/daily
 
 **Auth:** None (internal network only; restrict via Docker network or security group in production)
 
-**Description:** Runs `DailyCollectWorkflow`. Aggregates seed keywords from all active `user_briefing_preferences`, fetches job postings from external sources, deduplicates by URL, and saves new rows to `job_postings`. Must complete before `POST /briefings/generate` is called for the day.
+**Description:** Accepts seed keywords aggregated by Spring, generates stub job postings (1st MVP — no real scraping), and returns the raw list to Spring. Spring then upserts them into `job_postings`. The Agent does not access the database.
+
+Must run before `POST /briefings/generate` so the candidate pool is populated.
 
 **Request:**
 
 ```json
 {
-  "collectDate": "2026-06-28",
-  "categories": ["JOB_POSTING"]
+  "collectionJobId": 42,
+  "collectDate": "2026-07-01",
+  "categories": ["JOB_POSTING"],
+  "seedKeywords": {
+    "roles": ["백엔드 개발자", "풀스택 개발자"],
+    "companies": ["네이버", "카카오", "라인"],
+    "skills": ["Spring Boot", "Java", "Kotlin"],
+    "locations": ["서울", "판교"],
+    "experienceLevels": ["신입", "3년 이상"],
+    "employmentTypes": ["정규직"],
+    "industries": [],
+    "keywords": []
+  },
+  "options": {
+    "lookbackDays": 3,
+    "deadlineWithinDays": 14,
+    "maxItemsPerSource": 50
+  }
 }
 ```
 
 | Field | Type | Notes |
 |---|---|---|
+| `collectionJobId` | Long | `collection_jobs.id`; echo'd in response for correlation |
 | `collectDate` | String | ISO-8601 date (`YYYY-MM-DD`); the date being collected for |
-| `categories` | Array\<String\> | Briefing category codes to collect for; defaults to all active categories |
+| `categories` | Array\<String\> | Briefing category codes to collect for |
+| `seedKeywords` | Object | Aggregated by Spring from all active `user_briefing_preferences` |
+| `options` | Object | Collection tuning parameters |
 
 **Response:**
 
 ```json
 {
-  "collectDate": "2026-06-28",
-  "savedCounts": {
-    "jobPostings": 120,
-    "companyIssues": 0,
-    "industryIssues": 0
+  "collectionJobId": 42,
+  "collectDate": "2026-07-01",
+  "jobPostings": [
+    {
+      "source": "원티드",
+      "sourceUrl": "https://www.wanted.co.kr/wd/00123",
+      "companyName": "네이버",
+      "title": "네이버 백엔드 개발자",
+      "position": "백엔드 개발자",
+      "employmentType": "정규직",
+      "experienceLevel": "신입",
+      "location": "서울",
+      "deadline": "2026-07-15",
+      "skills": ["Spring Boot", "Java"],
+      "roles": ["백엔드 개발자"],
+      "description": "채용 공고 설명",
+      "postedAt": "2026-07-01T09:00:00",
+      "contentHash": "a3f2...sha256hex...64chars"
+    }
+  ],
+  "companyIssues": [],
+  "industryIssues": [],
+  "stats": {
+    "collectedCount": 5,
+    "deduplicatedCount": 0,
+    "jobPostingCount": 5,
+    "companyIssueCount": 0,
+    "industryIssueCount": 0
   },
-  "durationMs": 45230
+  "warnings": []
 }
 ```
 
 | Field | Notes |
 |---|---|
-| `savedCounts.jobPostings` | Number of new `job_postings` rows inserted (skipped duplicates not counted) |
-| `savedCounts.companyIssues` | Always `0` during 1st MVP |
-| `savedCounts.industryIssues` | Always `0` during 1st MVP |
-| `durationMs` | Wall-clock time for the collection run |
+| `jobPostings` | Raw postings returned to Spring for upsert into `job_postings` |
+| `companyIssues` | Always `[]` in 1st MVP |
+| `industryIssues` | Always `[]` in 1st MVP |
+| `stats.collectedCount` | Total items generated / fetched by the Agent |
+| `stats.deduplicatedCount` | Items skipped by the Agent before returning (Agent-side dedup) |
 
 **Error handling (backend side):** Log the failure and proceed; user briefing generation for the day may return empty results but should not fail hard.
 
@@ -988,7 +1088,9 @@ POST /briefings/generate
 
 **Auth:** None (internal network only; restrict via Docker network or security group in production)
 
-**Description:** Runs `UserBriefingWorkflow`. Loads the candidate pool for `briefingDate`, filters and ranks candidates against the user's `preference`, generates summaries and matching reasons with LLM, and returns a Markdown briefing. Does **not** call external sources — it reads from the pre-collected pool.
+**Description:** Runs `UserBriefingWorkflow`. Receives a pre-scored `candidatePool` assembled by Spring, filters past-deadline / invalid postings, re-ranks by combined score, selects the top 10, and assembles a Markdown briefing. Does **not** call external sources or the database — all input data is in the request body.
+
+**Current 1st MVP:** Fully deterministic — no LLM calls. `tokenUsage` is always `{inputTokens: 0, outputTokens: 0}`.
 
 **Request:**
 
@@ -1004,8 +1106,33 @@ POST /briefings/generate
     "experienceLevels": ["신입", "3년 이상"],
     "employmentTypes": ["정규직"]
   },
-  "briefingDate": "2026-06-28",
-  "tone": "easy"
+  "briefingDate": "2026-07-01",
+  "tone": "easy",
+  "candidatePool": {
+    "jobPostings": [
+      {
+        "id": 1,
+        "source": "원티드",
+        "sourceUrl": "https://www.wanted.co.kr/wd/00001",
+        "companyName": "네이버",
+        "title": "네이버 백엔드 개발자",
+        "position": "백엔드 개발자",
+        "employmentType": "정규직",
+        "experienceLevel": "신입",
+        "location": "서울",
+        "deadline": "2026-07-15",
+        "skills": ["Spring Boot", "Java"],
+        "roles": ["백엔드 개발자"],
+        "description": "채용 공고 설명",
+        "postedAt": "2026-07-01T09:00:00",
+        "collectedDate": "2026-07-01",
+        "contentHash": "a3f2...sha256hex...64chars",
+        "preScore": 75
+      }
+    ],
+    "companyIssues": [],
+    "industryIssues": []
+  }
 }
 ```
 
@@ -1014,38 +1141,43 @@ POST /briefings/generate
 | `userId` | Long | For logging and tracing only; Agent does not persist it |
 | `category` | String | Briefing category code (e.g. `JOB_POSTING`) |
 | `preference` | Object | The user's `preference_json` from `user_briefing_preferences` |
-| `briefingDate` | String | ISO-8601 date (`YYYY-MM-DD`); the briefing covers this day |
-| `tone` | String | Passed through from the frontend or scheduler (e.g. `"easy"`, `"professional"`) |
+| `briefingDate` | String | ISO-8601 date (`YYYY-MM-DD`); used for deadline filtering |
+| `tone` | String | Forwarded from the frontend or scheduler; not used in current deterministic implementation |
+| `candidatePool.jobPostings` | Array | Top 30 pre-scored `job_postings` rows selected by Spring; sorted by `preScore` desc |
+| `candidatePool.jobPostings[].preScore` | Integer | Score assigned by Spring's preference-matching logic |
+| `candidatePool.companyIssues` | Array | Always `[]` in 1st MVP |
+| `candidatePool.industryIssues` | Array | Always `[]` in 1st MVP |
 
 **Response:**
 
 ```json
 {
-  "title": "오늘의 채용 브리핑 — 백엔드 개발자",
-  "summary": "오늘 네이버·카카오·라인에서 백엔드 포지션 3건이 신규 등록됐고, 마감 임박 공고 2건이 있습니다.",
-  "content": "## 오늘의 채용 요약\n\n### 신규 공고\n...\n\n### 마감 임박 공고\n...\n\n### 추천 액션\n...",
+  "title": "오늘의 채용 브리핑 — 백엔드 개발자 (2026-07-01)",
+  "summary": "2026-07-01 기준, 네이버·카카오에서 추천 공고 2건을 선별했습니다.",
+  "content": "## 오늘의 핵심 요약\n\n...\n\n## 🏆 추천 공고 TOP 2\n\n...\n\n## 💡 오늘의 지원 추천 액션\n\n...",
   "articles": [
     {
-      "title": "네이버 — 백엔드 개발자 (Spring Boot) 채용",
-      "source": "채용 플랫폼",
-      "url": "https://example.com/job/123",
-      "summary": "네이버 서치 플랫폼팀에서 Spring Boot · Java 경력 3년 이상 백엔드 개발자를 모집합니다.",
-      "whyItMatters": "목표 회사(네이버)이며 핵심 스킬(Spring Boot, Java)과 정확히 매칭됩니다.",
-      "publishedAt": "2026-06-28T00:00:00"
+      "title": "네이버 백엔드 개발자",
+      "source": "원티드",
+      "url": "https://www.wanted.co.kr/wd/00001",
+      "summary": "네이버 — 백엔드 개발자 채용",
+      "whyItMatters": "관심 기업(네이버) · 백엔드 개발자 포지션 매칭 · 스킬 매칭: Spring Boot, Java",
+      "publishedAt": "2026-07-01T09:00:00",
+      "companyName": "네이버"
     }
   ],
   "tokenUsage": {
-    "inputTokens": 8000,
-    "outputTokens": 1500
+    "inputTokens": 0,
+    "outputTokens": 0
   }
 }
 ```
 
 | Field | Notes |
 |---|---|
-| `content` | Full briefing in **Markdown**; must include sections for new postings, deadline-near postings, and recommended actions |
-| `articles` | Each element is one job posting selected for the report. May be empty if no postings matched. |
-| `tokenUsage` | Stored in `briefing_reports.token_input` / `token_output` for cost tracking |
+| `content` | Full briefing in **Markdown** |
+| `articles` | Each element is one job posting selected for the report. May be empty if `candidatePool` is empty or all postings are past-deadline. |
+| `tokenUsage` | Always `{inputTokens: 0, outputTokens: 0}` in current deterministic implementation; will reflect real LLM usage when summarization is added |
 
 **Error handling (backend side):** If the Agent returns a non-2xx status or is unreachable, the backend marks the job as `FAILED` with `errorMessage` and returns `AGENT_SERVER_ERROR` to the caller.
 

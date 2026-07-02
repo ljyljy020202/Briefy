@@ -5,7 +5,7 @@ AI 에이전트 기반 취업 준비생을 위한 맞춤형 일일 브리핑 서
 ## 주요 기능
 
 - **맞춤형 브리핑**: 브리핑 선호도(목표 직무·회사·스킬·지역·경력·고용 형태 등)를 직접 설정해 나만의 브리핑 구성
-- **AI 콘텐츠 생성**: LangGraph 워크플로우와 OpenAI 연동으로 핵심만 요약
+- **AI 콘텐츠 생성**: LangGraph 워크플로우 기반 필터·랭킹·요약 (1st MVP는 결정론적 구현; LLM 요약은 이후 단계에서 추가 예정)
 - **매일 아침 이메일 발송**: 지정한 시간에 받은편지함으로 자동 전달
 - **채용 공고 수집**: 목표 직무·회사·스킬·지역 기반으로 신규 공고와 마감 임박 공고 자동 수집
 - **웹 앱 지원**: 브리핑 열람 및 선호도 설정을 웹에서 관리
@@ -85,8 +85,9 @@ make db              # DB만 실행 (MySQL + Redis)
 ## 문서
 
 - [아키텍처](docs/architecture.md) — 시스템 설계 및 데이터 흐름
-- [API 레퍼런스](docs/api.md) — 백엔드 엔드포인트 목록
-- [에이전트 워크플로우](docs/agent-workflow.md) — LangGraph 및 LLM 워크플로우
+- [API 레퍼런스](docs/api.md) — 백엔드 엔드포인트 및 에이전트 API 계약
+- [데이터베이스](docs/database.md) — ERD 및 테이블 설계
+- [에이전트 워크플로우](docs/agent-workflow.md) — 수집·브리핑 생성 워크플로우 및 로컬 통합 테스트
 - [배포 가이드](docs/deployment.md) — AWS 프로덕션 배포
 
 ## 개발 명령어
@@ -113,6 +114,7 @@ briefy/
 ├── docs/
 │   ├── architecture.md
 │   ├── api.md
+│   ├── database.md
 │   ├── agent-workflow.md
 │   └── deployment.md
 │

@@ -202,6 +202,38 @@ class DailyCollectionServiceTest {
   }
 
   @Test
+  void triggerScheduledDailyCollection_skipsWhenAlreadyActive() {
+    when(collectionJobService.isAlreadyActiveForDate(TEST_DATE)).thenReturn(true);
+
+    DailyCollectionResult result =
+        dailyCollectionService.triggerScheduledDailyCollection(TEST_DATE);
+
+    assertThat(result.status()).isEqualTo("SKIPPED");
+    assertThat(result.collectionJobId()).isNull();
+    verify(collectionJobService, never()).createPending(any(), any(), any());
+  }
+
+  @Test
+  void triggerScheduledDailyCollection_executesWhenNotActive() {
+    when(collectionJobService.isAlreadyActiveForDate(TEST_DATE)).thenReturn(false);
+    CollectionJob job = pendingJob();
+    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+    when(userBriefingPreferenceRepository.findAllByCategoryCodeAndActiveTrue(
+            BriefingCategoryCode.JOB_POSTING))
+        .thenReturn(List.of());
+    when(agentClient.triggerDailyCollection(any())).thenReturn(agentResponse(List.of()));
+    when(candidatePoolService.upsertJobPostings(any(), any()))
+        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+
+    DailyCollectionResult result =
+        dailyCollectionService.triggerScheduledDailyCollection(TEST_DATE);
+
+    assertThat(result.status()).isEqualTo("COMPLETED");
+    verify(collectionJobService)
+        .createPending(eq(TEST_DATE), any(), eq(CollectionTriggerType.SCHEDULED));
+  }
+
+  @Test
   void triggerDailyCollection_emptyJobPostingsResponse_returnsZeroCounts() {
     CollectionJob job = pendingJob();
     when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
