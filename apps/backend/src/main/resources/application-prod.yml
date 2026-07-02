@@ -1,0 +1,20 @@
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+
+jwt:
+  cookie-secure: true
+  cookie-same-site: None
+
+briefy:
+  scheduler:
+    enabled: ${SCHEDULER_ENABLED:false}
+    daily-collection-cron: ${DAILY_COLLECTION_CRON:"0 0 6 * * *"}
+    daily-briefing-cron: ${DAILY_BRIEFING_CRON:"0 0 8 * * *"}
+  email:
+    mode: ${EMAIL_MODE:ses}
+    auto-send-enabled: ${EMAIL_AUTO_SEND_ENABLED:false}
+    from: ${SES_FROM_EMAIL:no-reply@briefy.com}
+    aws-region: ${AWS_REGION:ap-northeast-2}
