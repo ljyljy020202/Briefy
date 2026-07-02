@@ -44,8 +44,10 @@ class FixtureAdapter(JobBoardAdapter):
         self,
         seed_keywords: SeedKeywords,
         options: CollectionOptions,
+        collect_date: date | None = None,
     ) -> AdapterResult:
-        collect_date = date.today()
+        if collect_date is None:
+            collect_date = date.today()
         postings = _build_fixture_postings(seed_keywords, options, collect_date)
         return AdapterResult(postings=postings)
 

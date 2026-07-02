@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <!-- lastmod 2026-07-02: within lookback_days=3 from collect_date 2026-07-02 -->
+  <url>
+    <loc>https://jasoseol.com/recruit/104949</loc>
+    <lastmod>2026-07-02T16:39:30+09:00</lastmod>
+    <changefreq>hourly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <!-- lastmod 2026-07-01: within lookback -->
+  <url>
+    <loc>https://jasoseol.com/recruit/104948</loc>
+    <lastmod>2026-07-01T10:00:00+09:00</lastmod>
+    <changefreq>hourly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <!-- lastmod 2026-06-29: on the boundary (cutoff = collect_date - 3 = 2026-06-29), included -->
+  <url>
+    <loc>https://jasoseol.com/recruit/104940</loc>
+    <lastmod>2026-06-29T09:00:00+09:00</lastmod>
+    <changefreq>hourly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <!-- lastmod 2026-06-28: one day before cutoff, excluded -->
+  <url>
+    <loc>https://jasoseol.com/recruit/104930</loc>
+    <lastmod>2026-06-28T09:00:00+09:00</lastmod>
+    <changefreq>hourly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <!-- lastmod 2026-06-20: well outside lookback, excluded -->
+  <url>
+    <loc>https://jasoseol.com/recruit/104900</loc>
+    <lastmod>2026-06-20T09:00:00+09:00</lastmod>
+    <changefreq>hourly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <!-- no lastmod: included by conservative default -->
+  <url>
+    <loc>https://jasoseol.com/recruit/104801</loc>
+    <changefreq>hourly</changefreq>
+    <priority>0.5</priority>
+  </url>
+</urlset>

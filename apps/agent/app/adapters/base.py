@@ -38,4 +38,5 @@ class JobBoardAdapter(ABC):
         self,
         seed_keywords: SeedKeywords,
         options: CollectionOptions,
+        collect_date: date | None = None,
     ) -> AdapterResult: ...
