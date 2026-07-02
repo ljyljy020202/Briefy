@@ -13,5 +13,14 @@ class Settings(BaseSettings):
     job_collection_timeout_seconds: int = 10
     jasoseol_base_url: str = "https://jasoseol.com"
 
+    # LLM
+    llm_model: str = "gpt-4o-mini"
+    llm_temperature: float = 0.2
+    llm_timeout_seconds: int = 30
+
+    @property
+    def briefing_use_llm(self) -> bool:
+        return bool(self.openai_api_key)
+
 
 settings = Settings()
