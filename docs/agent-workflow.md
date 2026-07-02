@@ -22,7 +22,9 @@ The Agent is **stateless**. It does not connect to MySQL or any other database.
 
 | Feature | Status |
 |---|---|
-| Real job-board scraping | Not implemented — Agent returns deterministic stub data |
+| Daily Collection pipeline | Implemented — `DailyCollectionService` orchestrates adapter → normalize → deduplicate → filter |
+| FixtureAdapter (local dev) | Implemented — deterministic fixture postings, no network calls, enabled by default |
+| JasoseolAdapter (real source) | Implemented — sitemap-based enumeration + individual page scraping; opt-in via config flag |
 | LLM summarization / formatting | Not implemented — briefing generation is fully deterministic; `tokenUsage` is always `{inputTokens: 0, outputTokens: 0}` |
 | Job briefing filter + rank + Markdown | Implemented (deterministic, no LLM) |
 | Scheduler (06:00 KST collection, 08:00 KST briefing) | Implemented, disabled by default (`briefy.scheduler.enabled: false`) |
@@ -119,34 +121,139 @@ Triggered by the Spring Boot scheduler (`DailyCollectionScheduler`) or the admin
 
 After receiving this response, Spring upserts all items in `jobPostings` into the `job_postings` table via `CandidatePoolService.upsertJobPostings`. Rows with a URL that already exists are skipped.
 
-### Graph structure (current stub)
+### Pipeline structure (implemented)
 
-The current agent implementation for `POST /collections/daily` is a deterministic stub in `app/services/dummy_collection.py`. It generates stable fake postings from the seed keywords without making external HTTP requests. There is no real graph / LangGraph pipeline yet.
-
-When real scraping is implemented, the graph will be:
+`POST /collections/daily` is handled by `DailyCollectionService` (`app/services/daily_collection.py`). It is a sequential pipeline — no LangGraph, no LLM.
 
 ```
-(planned)
-load_seed_keywords_node       ← validate request, parse seed keywords
-      ↓
-collect_job_postings_node     ← fetch from job boards (Wanted, 사람인, LinkedIn, etc.)
-collect_company_issues_node   ← [1.5 MVP] fetch company news
-collect_industry_issues_node  ← [2nd MVP] fetch industry trends
-      ↓
-deduplicate_node              ← SHA-256 hash deduplication
-      ↓
-return_postings_node          ← return raw jobPostings list to Spring
+DailyCollectRequest
+      │
+      ├─ [gate] JOB_POSTING not in categories → return empty response
+      │
+      ├─ build adapter list from config flags
+      │     JOB_COLLECTION_USE_FIXTURE=true  → add FixtureAdapter
+      │     JOB_COLLECTION_ENABLE_REAL_SOURCES=true → add JasoseolAdapter
+      │     both false → FixtureAdapter (safe fallback)
+      │
+      ├─ fetch raw postings from each adapter (sequential)
+      │
+      ├─ normalize (clean whitespace, compute SHA-256 content hash)
+      │
+      ├─ deduplicate (3-level: source_url → content_hash → company+title+deadline triple)
+      │
+      └─ filter (remove expired deadlines; remove posted_at older than lookback window)
+            │
+            └─ DailyCollectResponse (jobPostings, stats, warnings)
 ```
 
-Spring (not the Agent) owns the save step.
+Spring (not the Agent) owns the save step after receiving the response.
 
-### Tools — DailyCollectWorkflow (planned)
+---
 
-| Tool | Phase | Purpose |
+## Adapter Architecture
+
+Adapters live in `app/adapters/`. Each adapter implements the `JobBoardAdapter` ABC:
+
+```python
+class JobBoardAdapter(ABC):
+    @property
+    @abstractmethod
+    def source_name(self) -> str: ...
+
+    @abstractmethod
+    async def fetch(
+        self,
+        seed_keywords: SeedKeywords,
+        options: CollectionOptions,
+        collect_date: date | None = None,
+    ) -> AdapterResult: ...
+```
+
+`AdapterResult` contains a list of `RawJobPosting` objects and an accumulated `warnings` list. Adapters never raise to the caller — all per-item failures are caught and appended to `warnings`.
+
+### FixtureAdapter
+
+**File:** `app/adapters/fixture.py`  
+**Source name:** `fixture`  
+**Default:** active when `JOB_COLLECTION_USE_FIXTURE=true` (default)
+
+- Generates 3–5 deterministic job postings from seed keywords; no network calls.
+- Output is stable across calls for the same `collect_date` — identical content hashes every run.
+- Safe for local development, CI, and offline testing.
+- Postings use `source="fixture"` and `source_url="https://fixture.local/jobs/{id}"` so they are identifiable in the DB.
+
+### JasoseolAdapter
+
+**File:** `app/adapters/jasoseol.py`  
+**Source name:** `jasoseol`  
+**Default:** inactive; enabled when `JOB_COLLECTION_ENABLE_REAL_SOURCES=true`
+
+#### Strategy
+
+1. Fetch two sitemap XMLs from jasoseol.com:
+   - `/sitemap/employment_companies.xml` (정규직/계약직 공고)
+   - `/sitemap/intern_employment_companies.xml` (인턴 공고)
+2. Parse `<lastmod>` dates; keep only URLs where `lastmod >= collect_date - lookback_days`.
+   URLs without `<lastmod>` are included conservatively.
+3. Sort by `lastmod` descending; cap at `options.max_items_per_source` per sitemap.
+4. Fetch individual `/recruit/{id}` pages concurrently (max 5 at a time via `asyncio.Semaphore`).
+5. Parse each page HTML for posting data.
+
+#### HTML parsing
+
+Jasoseol.com is a Next.js app. Listing pages are client-side rendered and carry no data; individual posting pages have server-rendered HTML. CSS class names are hashed modules — the parser uses semantic selectors instead:
+
+| Field | Extraction method |
+|---|---|
+| `company_name` | `img[alt*="기업 아이콘"]` → strip suffix "기업 아이콘" |
+| `title` | First `<h1>` or `<h2>` element |
+| `deadline` | Last Korean date match in page text (`YYYY년 MM월 DD일`) |
+| `employment_type` | Keyword search for 정규직/계약직/인턴/파견직/프리랜서 |
+
+#### Known limitations
+
+| Field | Status |
+|---|---|
+| `position` | Not reliably extractable — falls back to `title` |
+| `location` | Not reliably extractable — `None` |
+| `experience_level` | Not reliably extractable — `None` |
+| `skills` | Not reliably extractable — `[]` |
+| `roles` | Not reliably extractable — `[]` |
+| `description` | Not extracted — `None` |
+| `posted_at` | Not available in page HTML — `None` |
+
+Fields left as `None`/`[]` are not fabricated. Spring and the briefing workflow handle missing fields gracefully.
+
+#### Robots.txt
+
+jasoseol.com allows all paths under `/`. No login, no CAPTCHA bypass, no browser automation is used or needed.
+
+#### Error handling
+
+All per-operation failures (network timeout, HTTP error, XML parse error, HTML parse error) are caught, logged, and appended to `AdapterResult.warnings`. The adapter never raises to `DailyCollectionService`.
+
+### Config flags
+
+Set in `apps/agent/.env` (or environment variables):
+
+| Variable | Default | Effect |
 |---|---|---|
-| `job_posting_fetcher` | 1st MVP | Fetch job postings from external job boards |
-| `company_news_fetcher` | 1.5 MVP | Fetch news and hiring signals for target companies |
-| `industry_news_fetcher` | 2nd MVP | Fetch industry/market news (information-only) |
+| `JOB_COLLECTION_USE_FIXTURE` | `true` | Include FixtureAdapter in the pipeline |
+| `JOB_COLLECTION_ENABLE_REAL_SOURCES` | `false` | Include JasoseolAdapter (and future real adapters) |
+| `JOB_COLLECTION_TIMEOUT_SECONDS` | `10` | Per-request HTTP timeout for real adapters |
+| `JASOSEOL_BASE_URL` | `https://jasoseol.com` | Override base URL for testing |
+
+Both flags can be `true` simultaneously — postings from all active adapters are merged before deduplication.  
+If both are `false`, `FixtureAdapter` is used as a safe fallback so the pipeline never returns nothing unexpectedly.
+
+### Tools — future adapters (planned)
+
+| Adapter | Phase | Purpose |
+|---|---|---|
+| `WantedAdapter` | 1st MVP (future) | Wanted.co.kr public API or RSS |
+| `SaraminAdapter` | 1st MVP (future) | 사람인 public listings |
+| `company_news_fetcher` | 1.5 MVP | Company news and hiring changes |
+| `industry_news_fetcher` | 2nd MVP | Industry/market news (information-only) |
 
 ---
 
@@ -347,11 +454,17 @@ poetry run uvicorn app.main:app --reload --port 8000
 # Collection endpoint tests
 poetry run pytest tests/test_collections.py -v
 
-# Briefing generation tests (basic)
-poetry run pytest tests/test_briefings.py -v
+# DailyCollectionService unit tests
+poetry run pytest tests/test_daily_collection.py -v
 
-# Briefing generation tests (candidatePool-based workflow)
-poetry run pytest tests/test_user_briefing.py -v
+# Adapter tests (FixtureAdapter, JasoseolAdapter — all offline, no real network)
+poetry run pytest tests/adapters/ -v
+
+# Normalization and deduplication tests
+poetry run pytest tests/test_normalization.py tests/test_deduplication.py -v
+
+# Briefing generation tests
+poetry run pytest tests/test_briefings.py tests/test_user_briefing.py -v
 
 # All tests
 poetry run pytest
@@ -360,27 +473,142 @@ poetry run pytest
 poetry run ruff check .
 ```
 
-### Local Integration Test (end-to-end)
+### Manual Verification — Daily Collection
+
+#### 1. Fixture mode (default — no network calls)
+
+No `.env` changes needed. Start the agent and send a request directly:
+
+```bash
+cd apps/agent
+poetry run uvicorn app.main:app --reload --port 8000
+```
+
+```bash
+curl -s -X POST http://localhost:8000/collections/daily \
+  -H "Content-Type: application/json" \
+  -d '{
+    "collectionJobId": 1,
+    "collectDate": "2026-07-02",
+    "categories": ["JOB_POSTING"],
+    "seedKeywords": {
+      "roles": ["백엔드 개발자", "서버 개발자"],
+      "companies": ["삼성", "현대", "LG", "SK"],
+      "skills": ["Java", "Spring Boot", "SQL"],
+      "locations": ["서울", "경기"],
+      "experienceLevels": ["신입", "인턴"],
+      "employmentTypes": ["정규직", "인턴"],
+      "industries": [],
+      "keywords": []
+    },
+    "options": {
+      "lookbackDays": 7,
+      "deadlineWithinDays": 14,
+      "maxItemsPerSource": 25
+    }
+  }' | jq .
+```
+
+Expected: `jobPostings` contains 3–5 entries with `"source": "fixture"`. `warnings` is `[]`.
+
+#### 2. Real source mode (JasoseolAdapter — live network)
+
+Add the following to `apps/agent/.env` (create the file if it does not exist):
+
+```
+JOB_COLLECTION_USE_FIXTURE=false
+JOB_COLLECTION_ENABLE_REAL_SOURCES=true
+```
+
+Restart the agent, then send the same request above.
+
+Expected:
+- `jobPostings` contains entries with `"source": "jasoseol"` and real `sourceUrl` values from jasoseol.com.
+- `skills`, `roles`, `location`, `experience_level` may be `null`/`[]` — these fields are not reliably available from the page HTML.
+- First run may take several seconds (network + concurrent page fetches).
+- `warnings` may contain timeout or HTTP error messages for individual pages; these are non-fatal.
+
+#### 3. Both adapters active
+
+```
+JOB_COLLECTION_USE_FIXTURE=true
+JOB_COLLECTION_ENABLE_REAL_SOURCES=true
+```
+
+Postings from both sources are merged, deduplicated, and returned together.
+
+#### 4. Category gate — non-JOB_POSTING request
+
+```bash
+curl -s -X POST http://localhost:8000/collections/daily \
+  -H "Content-Type: application/json" \
+  -d '{"collectDate": "2026-07-02", "categories": ["COMPANY_NEWS"]}' | jq .
+```
+
+Expected: `jobPostings: []`, `stats.jobPostingCount: 0`.
+
+### Local Integration Test (end-to-end with Spring backend)
 
 Requires both backend (`./gradlew bootRun --args='--spring.profiles.active=local'`) and agent (`poetry run uvicorn app.main:app --reload --port 8000`) running.
 
+#### Step 1 — Trigger daily collection via admin endpoint
+
 ```bash
-# 1. Trigger daily collection (admin endpoint)
 curl -s -X POST http://localhost:8080/api/admin/collections/daily \
   -H "Content-Type: application/json" \
-  -d '{"collectDate": "2026-07-01", "categories": ["JOB_POSTING"]}' | jq .
+  -d '{"collectDate": "2026-07-02", "categories": ["JOB_POSTING"]}' | jq .
+```
 
-# 2. Generate briefing (requires auth cookie; use browser session or Postman)
+Spring calls the Agent, receives `jobPostings`, and upserts them into the `job_postings` table.
+
+Expected response from Spring:
+
+```json
+{
+  "success": true,
+  "data": {
+    "collectionJobId": 1,
+    "status": "COMPLETED",
+    "collectDate": "2026-07-02",
+    "collectedCount": 3,
+    "savedCount": 3,
+    "deduplicatedCount": 0,
+    "errorMessage": null
+  }
+}
+```
+
+#### Step 2 — Verify job_postings in DB (via backend API)
+
+There is no direct read API for `job_postings` in 1st MVP. Confirm indirectly by proceeding to briefing generation (Step 3) — if the candidate pool is empty, the briefing will have 0 articles.
+
+Alternatively, query the DB directly while running locally:
+
+```sql
+SELECT id, source, company_name, title, deadline, content_hash
+FROM job_postings
+WHERE collected_date = '2026-07-02'
+ORDER BY id DESC
+LIMIT 20;
+```
+
+#### Step 3 — Generate briefing (requires auth cookie)
+
+```bash
 curl -s -X POST http://localhost:8080/api/briefings/generate \
   -H "Content-Type: application/json" \
   -H "Cookie: briefy_access_token=<your-jwt>" \
   -d '{"tone": "easy"}' | jq .
+```
 
-# 3. List briefing reports
+#### Step 4 — List and view briefing reports
+
+```bash
+# List briefing reports
 curl -s http://localhost:8080/api/briefings \
   -H "Cookie: briefy_access_token=<your-jwt>" | jq .
 
-# 4. Get briefing detail
+# View a specific report
 curl -s http://localhost:8080/api/briefings/<reportId> \
   -H "Cookie: briefy_access_token=<your-jwt>" | jq .
 ```
@@ -394,22 +622,21 @@ poetry run uvicorn app.main:app --reload --log-level debug
 
 ---
 
-## Future: Adding Real Scraping and LLM
+## Future: Adding More Sources and LLM
 
-When the stub is replaced with real scraping and LLM summarization:
-
-1. **DailyCollectWorkflow** — implement `collect_job_postings_node` using `@tool`-decorated scrapers for Wanted, 사람인, LinkedIn, etc.
+1. **Adding more job-board adapters** — implement new `JobBoardAdapter` subclasses (e.g. `WantedAdapter`, `SaraminAdapter`) in `app/adapters/`. Register them in `DailyCollectionService._build_adapters()` behind the `job_collection_enable_real_sources` flag or a new per-source flag.
 2. **UserBriefingWorkflow** — add `summarize_candidates_node` (LLM call per posting for `whyItMatters`) and `format_briefing_node` (LLM for final Markdown assembly). Update `tokenUsage` fields with real counts.
 3. **Do not add DB access to the Agent** — keep Spring as the single DB owner. Pass data in request bodies.
-4. **Do not mix future phases into current graphs** — create `company_briefing_graph.py` (1.5 MVP) and `industry_briefing_graph.py` (2nd MVP) as new files.
+4. **Do not mix future phases into current code** — create `company_briefing_graph.py` (1.5 MVP) and `industry_briefing_graph.py` (2nd MVP) as new files.
 
 **Phase guidance:**
 
-| Graph file | Phase | Notes |
+| File | Phase | Notes |
 |---|---|---|
-| `dummy_collection.py` (via `/collections/daily`) | 1st MVP (current) | Active; deterministic stub |
+| `daily_collection.py` + `FixtureAdapter` | 1st MVP (current) | Active; fixture mode default |
+| `daily_collection.py` + `JasoseolAdapter` | 1st MVP (current) | Active; opt-in via config flag |
 | `user_briefing_graph.py` (via `/briefings/generate`) | 1st MVP (current) | Active; deterministic, no LLM |
-| Real `daily_collect_graph.py` | 1st MVP (future) | Replace stub with real scrapers |
+| More real adapters (Wanted, 사람인, …) | 1st MVP (future) | Add to adapter package |
 | LLM-based `user_briefing_graph.py` | 1st MVP (future) | Add LLM summarization nodes |
 | `company_briefing_graph.py` | 1.5 MVP | Company news, hiring changes, earnings summaries |
 | `industry_briefing_graph.py` | 2nd MVP | IT/AI, semiconductor, platform, finance; information-only |
