@@ -25,8 +25,8 @@ The Agent is **stateless**. It does not connect to MySQL or any other database.
 | Daily Collection pipeline | Implemented — `DailyCollectionService` orchestrates adapter → normalize → deduplicate → filter |
 | FixtureAdapter (local dev) | Implemented — deterministic fixture postings, no network calls, enabled by default |
 | JasoseolAdapter (real source) | Implemented — sitemap-based enumeration + individual page scraping; opt-in via config flag |
-| LLM summarization / formatting | Not implemented — briefing generation is fully deterministic; `tokenUsage` is always `{inputTokens: 0, outputTokens: 0}` |
-| Job briefing filter + rank + Markdown | Implemented (deterministic, no LLM) |
+| LLM summarization / formatting | Implemented — 2-call strategy (enrichment + synthesis) via `gpt-4o-mini`; deterministic fallback when `OPENAI_API_KEY` is absent or LLM fails |
+| Job briefing filter + rank + Markdown | Implemented — deterministic filter/rank/select + LLM-enhanced enrichment and synthesis (with deterministic fallback) |
 | Scheduler (06:00 KST collection, 08:00 KST briefing) | Implemented, disabled by default (`briefy.scheduler.enabled: false`) |
 | Company news briefing (1.5 MVP) | Not implemented; `companyIssues` is always `[]` |
 | Industry / market briefing (2nd MVP) | Not implemented; `industryIssues` is always `[]` |
@@ -259,7 +259,7 @@ If both are `false`, `FixtureAdapter` is used as a safe fallback so the pipeline
 
 ## UserBriefingWorkflow
 
-Triggered per user by Spring (`BriefingService.generateBriefing` or `generateScheduledBriefing`). Spring loads the user's preferences and today's `job_postings` from DB, pre-scores candidates, and sends the top 30 as a `candidatePool` in the request. The Agent filters, re-ranks, selects the top 10, and assembles a Markdown briefing — all deterministically.
+Triggered per user by Spring (`BriefingService.generateBriefing` or `generateScheduledBriefing`). Spring loads the user's preferences and today's `job_postings` from DB, pre-scores candidates, and sends the top 30 as a `candidatePool` in the request. The Agent filters, re-ranks, selects the top 7, enriches them via LLM, and synthesizes a Markdown briefing. Both LLM nodes fall back to deterministic equivalents when `OPENAI_API_KEY` is absent or any LLM call fails — the pipeline never returns HTTP 500.
 
 **The Agent does not call external sources and does not access the database.**
 
@@ -273,8 +273,10 @@ Triggered per user by Spring (`BriefingService.generateBriefing` or `generateSch
 | Send top 30 pre-scored candidates to Agent | Spring (`AgentClient`) |
 | Filter (past-deadline, missing title/URL) | Agent (`filter_job_postings_node`) |
 | Re-rank by `preScore + agentScore` | Agent (`rank_job_postings_node`) |
-| Select top 10 | Agent (`select_top_items_node`) |
-| Write Markdown report and article list | Agent (`write_markdown_report_node`) |
+| Select top 7 | Agent (`select_top_items_node`) |
+| Enrich postings — LLM batch summary + matching reason (or deterministic fallback) | Agent (`enrich_selected_node`) |
+| Synthesize Markdown report — LLM full report + summary line (or deterministic fallback) | Agent (`synthesize_report_node`) |
+| Quality check (log-only guardrail) | Agent (`quality_check_node`) |
 | Save `briefing_reports` and `briefing_articles` rows | Spring |
 
 ### Agent request (Spring → Agent)
@@ -328,7 +330,7 @@ Triggered per user by Spring (`BriefingService.generateBriefing` or `generateSch
 | `candidatePool.companyIssues` | Always `[]` in 1st MVP |
 | `candidatePool.industryIssues` | Always `[]` in 1st MVP |
 | `userId` | Forwarded for logging/tracing only; Agent does not persist it |
-| `tone` | Forwarded from the frontend or scheduler; not used in current deterministic implementation |
+| `tone` | Forwarded from the frontend or scheduler; not yet used in LLM prompts |
 
 ### Pre-scoring logic (Spring side)
 
@@ -360,49 +362,62 @@ Inside the Agent, each candidate is scored again (`agentScore`) using the same d
 | Experience level match | +10 |
 | Employment type match | +5 |
 | Deadline within 7 days | +10 |
+| Collected within last 3 days | +5 |
 
 ### Graph structure (implemented)
 
 ```python
-load_request_node
-      ↓
-filter_job_postings_node      ← remove past-deadline or missing title/sourceUrl
+filter_job_postings_node      ← remove past-deadline or missing title/company_name/sourceUrl
       ↓
 rank_job_postings_node        ← totalScore = preScore + agentScore; sort desc
       ↓
-select_top_items_node         ← top 10
+select_top_items_node         ← top 7  (_TOP_N = 7)
       ↓
-write_markdown_report_node    ← build title, summary, Markdown content, articles list
+enrich_selected_node          ← LLM Call 1: batch enrichment (summary, matchingReason, matchedKeywords)
+                                  on failure / no key → enrichments = {}
       ↓
-quality_check_node            ← no-op; hook for future validation
+synthesize_report_node        ← merge enrichment + deterministic fallback per posting
+                                  if empty selected → _empty_state_report()
+                                  LLM Call 2: Markdown report + overallSummary
+                                  on failure → _build_deterministic_report()
+      ↓
+quality_check_node            ← log-only guardrail; never modifies state or raises
 ```
 
-All nodes are deterministic — no LLM calls. `tokenUsage` is always `{inputTokens: 0, outputTokens: 0}` in the current implementation.
+`enrich_selected_node` and `synthesize_report_node` are async. All other nodes are synchronous and deterministic. `tokenUsage` accumulates Call 1 + Call 2 token counts; it is `{inputTokens: 0, outputTokens: 0}` when LLM is skipped or both calls fail.
 
 ### Agent response (Agent → Spring)
 
 ```json
 {
   "title": "오늘의 채용 브리핑 — 백엔드 개발자 (2026-07-01)",
-  "summary": "2026-07-01 기준, 네이버·카카오에서 추천 공고 3건을 선별했습니다.",
-  "content": "## 오늘의 핵심 요약\n\n...\n\n## 🏆 추천 공고 TOP 3\n\n...\n\n## ⏰ 마감 임박 공고\n\n...\n\n## 💡 오늘의 지원 추천 액션\n\n...",
+  "summary": "네이버·카카오·라인 등 3건의 Spring Boot 백엔드 공고를 선별했습니다.",
+  "content": "# 오늘의 채용 브리핑\n\n## 오늘의 핵심 요약\n\n...\n\n## 🏆 추천 공고 TOP 3\n\n...\n\n## ⏰ 신규/마감 임박 공고\n\n...\n\n## 💡 오늘의 지원 추천 액션\n\n...\n\n## 🔑 오늘의 키워드\n\n...\n\n## ✏️ 한 줄 정리\n\n...",
   "articles": [
     {
       "title": "네이버 백엔드 개발자",
       "source": "원티드",
       "url": "https://www.wanted.co.kr/wd/00001",
-      "summary": "네이버 — 백엔드 개발자 채용",
-      "whyItMatters": "관심 기업(네이버) · 백엔드 개발자 포지션 매칭 · 스킬 매칭: Spring Boot, Java",
+      "summary": "네이버 서버 플랫폼팀에서 Java/Spring Boot 기반 백엔드 개발자를 모집합니다.",
+      "whyItMatters": "관심 기업 네이버 · 백엔드 개발자 역할 일치 · Spring Boot, Java 스킬 매칭",
       "publishedAt": "2026-07-01T09:00:00",
       "companyName": "네이버"
     }
   ],
   "tokenUsage": {
-    "inputTokens": 0,
-    "outputTokens": 0
+    "inputTokens": 320,
+    "outputTokens": 850
   }
 }
 ```
+
+| Field | Notes |
+|---|---|
+| `summary` | LLM 경로: `overallSummary` (한 문장). Fallback: `{date} 기준, {companies}에서 추천 공고 {n}건을 선별했습니다.` |
+| `content` | `# 오늘의 채용 브리핑` 헤딩으로 시작. 6개 필수 섹션 포함 Markdown (LLM 경로 또는 템플릿 fallback 모두 동일 구조) |
+| `articles[].publishedAt` | 항상 `"{briefingDate}T09:00:00"` — Spring `LocalDateTime.parse()` 호환 |
+| `articles[].companyName` | Agent 전용 필드; Spring `AgentBriefingResponse.AgentArticle`에 없으므로 Jackson이 무시 |
+| `tokenUsage` | LLM 없으면 `{inputTokens: 0, outputTokens: 0}` |
 
 Spring saves `title`, `summary`, `content`, `tokenUsage` to `briefing_reports`, and each `articles` item to `briefing_articles`.
 
@@ -429,7 +444,7 @@ User POST /api/briefings/generate  OR  Spring BriefingScheduler
     ├─ Spring: pre-score candidates; take top 30
     ├─ Spring: create briefing_jobs row (PENDING → PROCESSING)
     ├─ Spring → Agent: POST /briefings/generate (with candidatePool)
-    ├─ Agent: filter → re-rank → select top 10 → write Markdown
+    ├─ Agent: filter → re-rank → select top 7 → enrich (LLM/fallback) → synthesize (LLM/fallback) → quality check
     ├─ Spring: save briefing_reports + briefing_articles
     └─ Spring: mark briefing_jobs COMPLETED (or FAILED)
 ```
@@ -622,12 +637,11 @@ poetry run uvicorn app.main:app --reload --log-level debug
 
 ---
 
-## Future: Adding More Sources and LLM
+## Future: Adding More Sources
 
 1. **Adding more job-board adapters** — implement new `JobBoardAdapter` subclasses (e.g. `WantedAdapter`, `SaraminAdapter`) in `app/adapters/`. Register them in `DailyCollectionService._build_adapters()` behind the `job_collection_enable_real_sources` flag or a new per-source flag.
-2. **UserBriefingWorkflow** — add `summarize_candidates_node` (LLM call per posting for `whyItMatters`) and `format_briefing_node` (LLM for final Markdown assembly). Update `tokenUsage` fields with real counts.
-3. **Do not add DB access to the Agent** — keep Spring as the single DB owner. Pass data in request bodies.
-4. **Do not mix future phases into current code** — create `company_briefing_graph.py` (1.5 MVP) and `industry_briefing_graph.py` (2nd MVP) as new files.
+2. **Do not add DB access to the Agent** — keep Spring as the single DB owner. Pass data in request bodies.
+3. **Do not mix future phases into current code** — create `company_briefing_graph.py` (1.5 MVP) and `industry_briefing_graph.py` (2nd MVP) as new files.
 
 **Phase guidance:**
 
@@ -635,8 +649,7 @@ poetry run uvicorn app.main:app --reload --log-level debug
 |---|---|---|
 | `daily_collection.py` + `FixtureAdapter` | 1st MVP (current) | Active; fixture mode default |
 | `daily_collection.py` + `JasoseolAdapter` | 1st MVP (current) | Active; opt-in via config flag |
-| `user_briefing_graph.py` (via `/briefings/generate`) | 1st MVP (current) | Active; deterministic, no LLM |
+| `user_briefing_graph.py` (via `/briefings/generate`) | 1st MVP (current) | Active; LLM enrichment + synthesis with deterministic fallback |
 | More real adapters (Wanted, 사람인, …) | 1st MVP (future) | Add to adapter package |
-| LLM-based `user_briefing_graph.py` | 1st MVP (future) | Add LLM summarization nodes |
 | `company_briefing_graph.py` | 1.5 MVP | Company news, hiring changes, earnings summaries |
 | `industry_briefing_graph.py` | 2nd MVP | IT/AI, semiconductor, platform, finance; information-only |
