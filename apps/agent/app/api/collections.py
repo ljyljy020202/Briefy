@@ -1,9 +1,11 @@
 from fastapi import APIRouter
 
 from app.schemas.collection import DailyCollectRequest, DailyCollectResponse
-from app.services import dummy_collection
+from app.services.daily_collection import DailyCollectionService
 
 router = APIRouter()
+
+_service = DailyCollectionService()
 
 
 @router.post(
@@ -12,4 +14,4 @@ router = APIRouter()
     response_model_by_alias=True,
 )
 async def collect_daily(request: DailyCollectRequest) -> DailyCollectResponse:
-    return dummy_collection.collect(request)
+    return await _service.collect(request)

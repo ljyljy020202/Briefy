@@ -1,3 +1,8 @@
+from datetime import date
+from unittest.mock import AsyncMock, patch
+
+from app.schemas.collection import CollectionStats, DailyCollectResponse
+
 COLLECT_REQUEST = {
     "collectDate": "2026-06-30",
     "categories": ["JOB_POSTING"],
@@ -89,3 +94,27 @@ async def test_collect_daily_content_hash_is_stable_across_calls(client):
     hashes_1 = [p["contentHash"] for p in r1["jobPostings"]]
     hashes_2 = [p["contentHash"] for p in r2["jobPostings"]]
     assert hashes_1 == hashes_2
+
+
+async def test_collect_daily_uses_daily_collection_service(client):
+    """Route must delegate to DailyCollectionService, not dummy_collection."""
+    stub = DailyCollectResponse(
+        collect_date=date(2026, 6, 30),
+        stats=CollectionStats(),
+    )
+    with patch(
+        "app.api.collections._service.collect",
+        new_callable=AsyncMock,
+        return_value=stub,
+    ) as mock_collect:
+        response = await client.post("/collections/daily", json=COLLECT_REQUEST)
+
+    assert response.status_code == 200
+    mock_collect.assert_called_once()
+
+
+async def test_collect_daily_no_real_network_calls_in_fixture_mode(client):
+    """Default fixture mode returns source='fixture' — no external adapters run."""
+    response = await client.post("/collections/daily", json=COLLECT_REQUEST)
+    postings = response.json()["jobPostings"]
+    assert all(p["source"] == "fixture" for p in postings)
