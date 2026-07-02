@@ -1,17 +1,24 @@
-"""Deterministic user briefing workflow (no LLM).
+"""LLM-enhanced user briefing workflow with deterministic fallback.
 
 Pipeline:
-  load_request_node
-    → filter_job_postings_node   (remove past-deadline / invalid postings)
-    → rank_job_postings_node     (preScore + preference-match re-score)
-    → select_top_items_node      (top N)
-    → write_markdown_report_node (build title, summary, Markdown content, articles)
-    → quality_check_node         (no-op; hook for future validation)
+  filter_job_postings_node   (deterministic: remove invalid/expired)
+    → rank_job_postings_node (deterministic: preScore + preference scoring)
+    → select_top_items_node  (deterministic: top _TOP_N candidates)
+    → enrich_selected_node   (async: LLM batch summary + matching reason)
+    → synthesize_report_node (async: LLM Markdown report + summary line)
+    → quality_check_node     (deterministic: log-only guardrail)
+
+Both LLM nodes fall back to deterministic equivalents on any failure or when
+OPENAI_API_KEY is not configured. The pipeline never raises HTTP 500 due to
+LLM error.
 """
 
+import logging
 from datetime import date as date_cls
 from typing import TypedDict
 
+from app.prompts import briefing_synthesis, job_enrichment
+from app.prompts.briefing_synthesis import EnrichedArticleInput
 from app.schemas.briefing import (
     BriefingGenerateRequest,
     BriefingGenerateResponse,
@@ -20,8 +27,37 @@ from app.schemas.briefing import (
     JobPostingPreference,
     TokenUsage,
 )
+from app.schemas.llm import JobPostingEnrichment
+from app.services.llm_client import (
+    LLMClientError,
+    LLMUnavailableError,
+    llm_client,
+)
 
-_TOP_N = 10
+logger = logging.getLogger(__name__)
+
+_TOP_N = 7
+
+_INVESTMENT_ADVICE_PATTERNS = [
+    "매수",
+    "매도",
+    "추천 종목",
+    "투자 추천",
+    "수익률 보장",
+]
+_UNSUPPORTED_CLAIM_PATTERNS = [
+    "합격 가능성이 높다",
+    "합격 보장",
+    "반드시 합격",
+]
+_REQUIRED_SECTIONS = [
+    "오늘의 핵심 요약",
+    "추천 공고",
+    "신규/마감 임박",
+    "오늘의 지원 추천 액션",
+    "오늘의 키워드",
+    "한 줄 정리",
+]
 
 
 class UserBriefingState(TypedDict):
@@ -29,19 +65,24 @@ class UserBriefingState(TypedDict):
     filtered: list[CandidateJobPosting]
     ranked: list[CandidateJobPosting]
     selected: list[CandidateJobPosting]
+    enrichments: dict[str, JobPostingEnrichment]
     articles: list[JobArticle]
     title: str
     summary: str
     content: str
+    token_usage: TokenUsage
 
 
-def load_request_node(state: UserBriefingState) -> dict:
-    return {}
+# ---------------------------------------------------------------------------
+# Deterministic nodes
+# ---------------------------------------------------------------------------
 
 
 def filter_job_postings_node(state: UserBriefingState) -> dict:
     req = state["request"]
-    postings = req.candidate_pool.job_postings
+
+    if req.category != "JOB_POSTING":
+        return {"filtered": []}
 
     try:
         today = date_cls.fromisoformat(req.briefing_date)
@@ -49,8 +90,10 @@ def filter_job_postings_node(state: UserBriefingState) -> dict:
         today = date_cls.today()
 
     filtered = []
-    for p in postings:
-        if not p.title or not p.source_url:
+    for p in req.candidate_pool.job_postings:
+        if not p.title or not p.company_name:
+            continue
+        if not p.source_url:
             continue
         if p.deadline:
             try:
@@ -114,6 +157,15 @@ def _agent_score(
         except ValueError:
             pass
 
+    # Recency bonus: collected within the last 3 days
+    if posting.collected_date:
+        try:
+            collected = date_cls.fromisoformat(posting.collected_date)
+            if (today - collected).days <= 3:
+                score += 5
+        except ValueError:
+            pass
+
     return score
 
 
@@ -135,6 +187,250 @@ def rank_job_postings_node(state: UserBriefingState) -> dict:
 
 def select_top_items_node(state: UserBriefingState) -> dict:
     return {"selected": state["ranked"][:_TOP_N]}
+
+
+# ---------------------------------------------------------------------------
+# Async: LLM enrichment (per-posting summary + matching reason)
+# ---------------------------------------------------------------------------
+
+
+async def enrich_selected_node(state: UserBriefingState) -> dict:
+    """Call LLM once to enrich all selected postings in a single batch.
+
+    Falls back to an empty enrichment dict — deterministic summaries are
+    applied in the synthesis node.
+    """
+    selected = state["selected"]
+    if not selected or not llm_client.enabled:
+        return {"enrichments": {}, "token_usage": TokenUsage()}
+
+    try:
+        raw, usage = await llm_client.call_json(
+            job_enrichment.get_system_prompt(),
+            job_enrichment.build_user_prompt(state["request"].preference, selected),
+        )
+        enrichment_list = job_enrichment.parse_response(raw)
+        enrichments: dict[str, JobPostingEnrichment] = {
+            e.id: e for e in enrichment_list
+        }
+        logger.info(
+            "LLM enrichment: %d/%d postings enriched",
+            len(enrichments),
+            len(selected),
+        )
+        return {
+            "enrichments": enrichments,
+            "token_usage": TokenUsage(
+                input_tokens=usage.input_tokens,
+                output_tokens=usage.output_tokens,
+            ),
+        }
+    except (LLMUnavailableError, LLMClientError) as exc:
+        logger.warning(
+            "LLM enrichment failed (%s); using deterministic fallback", exc
+        )
+        return {"enrichments": {}, "token_usage": TokenUsage()}
+
+
+# ---------------------------------------------------------------------------
+# Async: report synthesis (LLM Markdown or deterministic template)
+# ---------------------------------------------------------------------------
+
+
+async def synthesize_report_node(state: UserBriefingState) -> dict:
+    """Write the final briefing report.
+
+    Merges LLM enrichment results with deterministic fallbacks, then calls
+    LLM to synthesise the Markdown report. Falls back to a template report
+    if LLM synthesis is unavailable or fails.
+    """
+    req = state["request"]
+    pref = req.preference
+    selected = state["selected"]
+    enrichments = state["enrichments"]
+    enrich_token_usage = state["token_usage"]
+
+    try:
+        today = date_cls.fromisoformat(req.briefing_date)
+    except ValueError:
+        today = date_cls.today()
+
+    if not selected:
+        return _empty_state_report(req.briefing_date)
+
+    # Merge LLM enrichment with deterministic fallback per posting.
+    # Deterministic helpers fill in any posting not covered by LLM.
+    enriched_inputs = _build_enriched_inputs(selected, enrichments, pref, today)
+    articles = _build_articles_from_inputs(enriched_inputs, req.briefing_date)
+
+    if llm_client.enabled:
+        try:
+            raw, usage = await llm_client.call_json(
+                briefing_synthesis.get_system_prompt(),
+                briefing_synthesis.build_user_prompt(
+                    req.briefing_date, pref, enriched_inputs
+                ),
+            )
+            result = briefing_synthesis.parse_response(raw)
+            total_usage = TokenUsage(
+                input_tokens=enrich_token_usage.input_tokens + usage.input_tokens,
+                output_tokens=enrich_token_usage.output_tokens + usage.output_tokens,
+            )
+            primary_role = pref.roles[0] if pref.roles else "개발자"
+            return {
+                "articles": articles,
+                "title": (
+                    f"오늘의 채용 브리핑 — {primary_role} ({req.briefing_date})"
+                ),
+                "summary": result.overall_summary,
+                "content": result.markdown_content,
+                "token_usage": total_usage,
+            }
+        except (LLMUnavailableError, LLMClientError) as exc:
+            logger.warning(
+                "LLM synthesis failed (%s); using deterministic fallback", exc
+            )
+        except Exception as exc:
+            # Pydantic ValidationError or other processing errors
+            logger.warning(
+                "LLM synthesis response invalid (%s: %s); "
+                "using deterministic fallback",
+                type(exc).__name__,
+                exc,
+            )
+
+    return _build_deterministic_report(
+        enriched_inputs, pref, req.briefing_date, articles, enrich_token_usage
+    )
+
+
+# ---------------------------------------------------------------------------
+# Quality check (log-only guardrail, never crashes the pipeline)
+# ---------------------------------------------------------------------------
+
+
+def quality_check_node(state: UserBriefingState) -> dict:
+    content = state.get("content", "")
+    articles = state.get("articles", [])
+    selected = state.get("selected", [])
+
+    for section in _REQUIRED_SECTIONS:
+        if section not in content:
+            logger.warning(
+                "[quality_check] required section missing: %s", section
+            )
+
+    for phrase in _INVESTMENT_ADVICE_PATTERNS:
+        if phrase in content:
+            logger.warning(
+                "[quality_check] investment advice phrase detected: %r", phrase
+            )
+
+    for phrase in _UNSUPPORTED_CLAIM_PATTERNS:
+        if phrase in content:
+            logger.warning(
+                "[quality_check] unsupported claim detected: %r", phrase
+            )
+
+    for i, article in enumerate(articles):
+        if not article.summary:
+            logger.warning("[quality_check] article[%d] has no summary", i)
+        if not article.why_it_matters:
+            logger.warning(
+                "[quality_check] article[%d] has no whyItMatters", i
+            )
+
+    if selected and len(articles) != len(selected):
+        logger.warning(
+            "[quality_check] article count (%d) != selected count (%d)",
+            len(articles),
+            len(selected),
+        )
+
+    if len(content) > 15000:
+        logger.warning(
+            "[quality_check] content very long: %d chars", len(content)
+        )
+
+    return {}
+
+
+# ---------------------------------------------------------------------------
+# Deterministic helpers
+# ---------------------------------------------------------------------------
+
+
+def _build_enriched_inputs(
+    selected: list[CandidateJobPosting],
+    enrichments: dict[str, JobPostingEnrichment],
+    pref: JobPostingPreference,
+    today: date_cls,
+) -> list[EnrichedArticleInput]:
+    result = []
+    for i, posting in enumerate(selected):
+        post_id = str(posting.id or "")
+        enrichment = enrichments.get(post_id)
+
+        if enrichment:
+            summary = enrichment.summary
+            matching_reason = enrichment.matching_reason or _build_why_it_matters(
+                posting, pref
+            )
+            matched_keywords = enrichment.matched_keywords
+        else:
+            summary = _deterministic_summary(posting)
+            matching_reason = _build_why_it_matters(posting, pref)
+            posting_skills_lower = [s.lower() for s in posting.skills]
+            matched_keywords = [
+                s for s in pref.skills
+                if s.lower() in posting_skills_lower
+            ]
+
+        days_until = (
+            _safe_days_until(posting.deadline, today)
+            if posting.deadline
+            else None
+        )
+
+        result.append(
+            EnrichedArticleInput(
+                id=post_id,
+                title=posting.title or "채용 공고",
+                company_name=posting.company_name or "",
+                url=posting.source_url,
+                source=posting.source,
+                summary=summary,
+                matching_reason=matching_reason,
+                matched_keywords=matched_keywords,
+                deadline=posting.deadline,
+                days_until_deadline=days_until,
+                display_order=i + 1,
+            )
+        )
+    return result
+
+
+def _build_articles_from_inputs(
+    inputs: list[EnrichedArticleInput],
+    briefing_date: str,
+) -> list[JobArticle]:
+    published_at = f"{briefing_date}T09:00:00"
+    return [
+        JobArticle(
+            title=inp["title"],
+            source=inp.get("source"),
+            url=inp.get("url"),
+            summary=inp["summary"],
+            why_it_matters=inp["matching_reason"],
+            company_name=inp["company_name"],
+            published_at=published_at,
+        )
+        for inp in inputs
+    ]
+
+
+def _deterministic_summary(posting: CandidateJobPosting) -> str:
+    return f"{posting.company_name} — {posting.position or posting.title} 채용"
 
 
 def _build_why_it_matters(
@@ -161,116 +457,115 @@ def _build_why_it_matters(
     return " · ".join(reasons) if reasons else "선호도 기반 추천 공고"
 
 
-def write_markdown_report_node(state: UserBriefingState) -> dict:
-    req = state["request"]
-    pref = req.preference
-    selected = state["selected"]
-    briefing_date = req.briefing_date
+def _empty_state_report(briefing_date: str) -> dict:
+    content = "\n".join([
+        "## 오늘의 핵심 요약",
+        "",
+        f"{briefing_date} 기준, 선호도에 맞는 채용 공고가 오늘은 없습니다.",
+        "",
+        "---",
+        "",
+        "## 🏆 추천 공고 TOP 0",
+        "",
+        "오늘 추천할 공고가 없습니다.",
+        "",
+        "---",
+        "",
+        "## ⏰ 신규/마감 임박 공고",
+        "",
+        "해당 사항 없습니다.",
+        "",
+        "---",
+        "",
+        "## 💡 오늘의 지원 추천 액션",
+        "",
+        "1. 선호 조건을 다시 확인해 보세요.",
+        "2. 내일 다시 브리핑을 확인해 주세요.",
+        "",
+        "---",
+        "",
+        "## 🔑 오늘의 키워드",
+        "",
+        "해당 사항 없습니다.",
+        "",
+        "---",
+        "",
+        "## ✏️ 한 줄 정리",
+        "",
+        "내일은 더 많은 공고가 준비되어 있을 거예요.",
+    ])
+    return {
+        "articles": [],
+        "title": f"오늘의 채용 브리핑 ({briefing_date})",
+        "summary": "오늘은 설정하신 조건에 맞는 채용 공고가 없습니다.",
+        "content": content,
+        "token_usage": TokenUsage(),
+    }
 
-    if not selected:
-        title = f"오늘의 채용 브리핑 ({briefing_date})"
-        summary = "오늘은 설정하신 조건에 맞는 채용 공고가 없습니다."
-        content = "\n".join(
-            [
-                "## 오늘의 채용 브리핑",
-                "",
-                (
-                    f"{briefing_date} 기준, 설정하신 선호도에 맞는 "
-                    "채용 공고가 오늘은 없습니다."
-                ),
-                "",
-                "내일 다시 확인해 주세요.",
-            ]
-        )
-        return {
-            "articles": [],
-            "title": title,
-            "summary": summary,
-            "content": content,
-        }
 
-    try:
-        today = date_cls.fromisoformat(briefing_date)
-    except ValueError:
-        today = date_cls.today()
-
-    articles = [
-        JobArticle(
-            title=p.title or "채용 공고",
-            source=p.source,
-            url=p.source_url,
-            summary=(
-                f"{p.company_name} — "
-                f"{p.position or p.title} 채용"
-            ),
-            why_it_matters=_build_why_it_matters(p, pref),
-            company_name=p.company_name,
-            published_at=p.posted_at,
-        )
-        for p in selected
-    ]
-
+def _build_deterministic_report(
+    enriched_inputs: list[EnrichedArticleInput],
+    pref: JobPostingPreference,
+    briefing_date: str,
+    articles: list[JobArticle],
+    token_usage: TokenUsage,
+) -> dict:
+    n = len(enriched_inputs)
     primary_role = pref.roles[0] if pref.roles else "개발자"
     title = f"오늘의 채용 브리핑 — {primary_role} ({briefing_date})"
 
     unique_companies = list(
-        dict.fromkeys(p.company_name for p in selected if p.company_name)
+        dict.fromkeys(
+            inp["company_name"] for inp in enriched_inputs if inp["company_name"]
+        )
     )
-    co_display = "·".join(unique_companies[:3])
+    co_display = " · ".join(unique_companies[:3])
     extra = len(unique_companies) - 3
     extra_str = f" 외 {extra}개 기업" if extra > 0 else ""
-    total = len(selected)
     summary = (
         f"{briefing_date} 기준, {co_display}{extra_str}에서 "
-        f"추천 공고 {total}건을 선별했습니다."
+        f"추천 공고 {n}건을 선별했습니다."
     )
-
-    deadline_near = [
-        p
-        for p in selected
-        if p.deadline
-        and _safe_days_until(p.deadline, today) is not None
-        and 0 <= _safe_days_until(p.deadline, today) <= 7  # type: ignore[operator]
-    ]
 
     lines = [
         "## 오늘의 핵심 요약",
         "",
-        (
-            f"{briefing_date} 기준, 선호 조건에 맞는 추천 공고 "
-            f"**{total}건**이 선별되었습니다."
-        ),
+        f"{briefing_date} 기준, 선호 조건에 맞는 추천 공고 **{n}건**이 선별되었습니다.",
         "",
         "---",
         "",
-        f"## 🏆 추천 공고 TOP {total}",
+        f"## 🏆 추천 공고 TOP {n}",
         "",
     ]
 
-    for i, p in enumerate(selected, 1):
-        why = _build_why_it_matters(p, pref)
-        source_label = p.source or "채용 사이트"
+    for i, inp in enumerate(enriched_inputs, 1):
+        source_label = inp.get("source") or "채용 사이트"
+        url = inp.get("url") or ""
+        link = f"[{source_label}]({url})" if url else source_label
         lines += [
-            f"### {i}. {p.title}",
-            f"- **기업**: {p.company_name}",
-            f"- **출처**: [{source_label}]({p.source_url})",
-            f"- **포지션**: {p.position or p.title}",
-            f"- **추천 이유**: {why}",
+            f"### {i}. {inp['title']}",
+            f"- **기업**: {inp['company_name']}",
+            f"- **출처**: {link}",
+            f"- **추천 이유**: {inp['matching_reason']}",
             "",
         ]
 
+    deadline_near = [
+        inp for inp in enriched_inputs
+        if inp.get("days_until_deadline") is not None
+        and 0 <= inp["days_until_deadline"] <= 7
+    ]
+
+    lines += ["---", "", "## ⏰ 신규/마감 임박 공고", ""]
     if deadline_near:
-        lines += [
-            "---",
-            "",
-            "## ⏰ 마감 임박 공고 (7일 이내)",
-            "",
-        ]
-        for p in deadline_near:
+        for inp in deadline_near:
             lines.append(
-                f"- **{p.title}** ({p.company_name}) — 마감: {p.deadline}"
+                f"- **{inp['title']}** ({inp['company_name']}) — "
+                f"마감: {inp.get('deadline', '')}"
             )
-        lines.append("")
+    else:
+        lines.append("이번 주 마감 임박 공고가 없습니다.")
+    lines.append("")
 
     action_company = unique_companies[0] if unique_companies else "관심 기업"
     action_skill = pref.skills[0] if pref.skills else "핵심 기술"
@@ -286,26 +581,27 @@ def write_markdown_report_node(state: UserBriefingState) -> dict:
         "",
     ]
 
-    all_skills: list[str] = []
-    for p in selected:
-        for s in p.skills:
-            if s not in all_skills:
-                all_skills.append(s)
-    keywords = all_skills[:10] if all_skills else pref.skills[:10]
+    all_keywords: list[str] = []
+    for inp in enriched_inputs:
+        for kw in inp.get("matched_keywords", []):
+            if kw not in all_keywords:
+                all_keywords.append(kw)
+    if not all_keywords:
+        all_keywords = list(pref.skills[:10])
 
     lines += [
         "---",
         "",
         "## 🔑 오늘의 키워드",
         "",
-        " · ".join(keywords) if keywords else "채용 공고",
+        " · ".join(all_keywords[:10]) if all_keywords else "채용 공고",
         "",
         "---",
         "",
         "## ✏️ 한 줄 정리",
         "",
         (
-            f"{primary_role} 포지션을 중심으로 {total}건의 공고가 확인되었습니다. "
+            f"{primary_role} 포지션을 중심으로 {n}건의 공고가 확인되었습니다. "
             "지금 바로 지원해 보세요!"
         ),
     ]
@@ -315,6 +611,7 @@ def write_markdown_report_node(state: UserBriefingState) -> dict:
         "title": title,
         "summary": summary,
         "content": "\n".join(lines),
+        "token_usage": token_usage,
     }
 
 
@@ -325,33 +622,40 @@ def _safe_days_until(deadline: str, today: date_cls) -> int | None:
         return None
 
 
-def quality_check_node(state: UserBriefingState) -> dict:
-    return {}
+# ---------------------------------------------------------------------------
+# Pipeline entry point
+# ---------------------------------------------------------------------------
 
 
-def run(request: BriefingGenerateRequest) -> BriefingGenerateResponse:
+async def run(request: BriefingGenerateRequest) -> BriefingGenerateResponse:
     state: UserBriefingState = {
         "request": request,
         "filtered": [],
         "ranked": [],
         "selected": [],
+        "enrichments": {},
         "articles": [],
         "title": "",
         "summary": "",
         "content": "",
+        "token_usage": TokenUsage(),
     }
 
-    state.update(load_request_node(state))
     state.update(filter_job_postings_node(state))
     state.update(rank_job_postings_node(state))
     state.update(select_top_items_node(state))
-    state.update(write_markdown_report_node(state))
+    state.update(await enrich_selected_node(state))
+    state.update(await synthesize_report_node(state))
     state.update(quality_check_node(state))
 
+    token = state["token_usage"]
     return BriefingGenerateResponse(
         title=state["title"],
         summary=state["summary"],
         content=state["content"],
         articles=state["articles"],
-        token_usage=TokenUsage(input_tokens=0, output_tokens=0),
+        token_usage=TokenUsage(
+            input_tokens=token.input_tokens,
+            output_tokens=token.output_tokens,
+        ),
     )
