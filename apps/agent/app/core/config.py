@@ -1,8 +1,14 @@
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Reads from the monorepo root .env for both native (poetry run) and Docker runs.
+# In Docker, environment variables injected via docker-compose.yml take precedence over this file.
+_ROOT_ENV = Path(__file__).resolve().parents[4] / ".env"
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=str(_ROOT_ENV), extra="ignore")
 
     openai_api_key: str = ""
     backend_url: str = "http://localhost:8080"
