@@ -45,7 +45,17 @@ const PREFERENCE_FIELDS: {
   {
     key: 'companies',
     label: '관심 기업',
-    description: '지원을 고려하는 기업명을 입력하세요.',
+    description: '지원을 고려하는 기업명을 자유롭게 입력하세요.',
+  },
+  {
+    key: 'companySizes',
+    label: '선호 기업 규모',
+    description: '선호하는 회사 규모를 선택하세요.',
+  },
+  {
+    key: 'industries',
+    label: '관심 산업',
+    description: '관심 있는 산업 분야를 입력하세요.',
   },
   {
     key: 'skills',
@@ -72,6 +82,8 @@ const PREFERENCE_FIELDS: {
 const EMPTY_PREFERENCE: Required<JobPostingPreference> = {
   roles: [],
   companies: [],
+  companySizes: [],
+  industries: [],
   skills: [],
   locations: [],
   experienceLevels: [],
@@ -81,6 +93,8 @@ const EMPTY_PREFERENCE: Required<JobPostingPreference> = {
 const EMPTY_INPUTS: Record<PreferenceKey, string> = {
   roles: '',
   companies: '',
+  companySizes: '',
+  industries: '',
   skills: '',
   locations: '',
   experienceLevels: '',

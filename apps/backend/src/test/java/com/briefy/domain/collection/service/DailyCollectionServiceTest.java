@@ -234,6 +234,109 @@ class DailyCollectionServiceTest {
   }
 
   @Test
+  void aggregateSeedKeywords_oldSixFieldPreference_newFieldsDefaultToEmpty() {
+    CollectionJob job = pendingJob();
+    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+
+    UserBriefingPreference mockPref = mock(UserBriefingPreference.class);
+    when(mockPref.getPreference())
+        .thenReturn(
+            Map.of(
+                "roles", List.of("백엔드 개발자"),
+                "companies", List.of("네이버"),
+                "skills", List.of("Spring Boot"),
+                "locations", List.of("서울"),
+                "experienceLevels", List.of("신입"),
+                "employmentTypes", List.of("정규직")));
+    when(userBriefingPreferenceRepository.findAllByCategoryCodeAndActiveTrue(
+            BriefingCategoryCode.JOB_POSTING))
+        .thenReturn(List.of(mockPref));
+
+    ArgumentCaptor<AgentCollectionRequest> captor =
+        ArgumentCaptor.forClass(AgentCollectionRequest.class);
+    when(agentClient.triggerDailyCollection(captor.capture())).thenReturn(agentResponse(List.of()));
+    when(candidatePoolService.upsertJobPostings(any(), any()))
+        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+
+    dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
+
+    AgentCollectionRequest sent = captor.getValue();
+    assertThat(sent.seedKeywords().companySizes()).isEmpty();
+    assertThat(sent.seedKeywords().industries()).isEmpty();
+    assertThat(sent.seedKeywords().roles()).containsExactly("백엔드 개발자");
+  }
+
+  @Test
+  void aggregateSeedKeywords_newEightFieldPreference_companySizesAndIndustriesAggregated() {
+    CollectionJob job = pendingJob();
+    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+
+    UserBriefingPreference mockPref = mock(UserBriefingPreference.class);
+    when(mockPref.getPreference())
+        .thenReturn(
+            Map.of(
+                "roles", List.of("백엔드 개발자"),
+                "companies", List.of("네이버"),
+                "companySizes", List.of("대기업", "중견기업"),
+                "industries", List.of("IT/소프트웨어"),
+                "skills", List.of("Spring Boot"),
+                "locations", List.of("서울"),
+                "experienceLevels", List.of("신입"),
+                "employmentTypes", List.of("정규직")));
+    when(userBriefingPreferenceRepository.findAllByCategoryCodeAndActiveTrue(
+            BriefingCategoryCode.JOB_POSTING))
+        .thenReturn(List.of(mockPref));
+
+    ArgumentCaptor<AgentCollectionRequest> captor =
+        ArgumentCaptor.forClass(AgentCollectionRequest.class);
+    when(agentClient.triggerDailyCollection(captor.capture())).thenReturn(agentResponse(List.of()));
+    when(candidatePoolService.upsertJobPostings(any(), any()))
+        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+
+    dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
+
+    AgentCollectionRequest sent = captor.getValue();
+    assertThat(sent.seedKeywords().companySizes()).containsExactlyInAnyOrder("대기업", "중견기업");
+    assertThat(sent.seedKeywords().industries()).containsExactly("IT/소프트웨어");
+  }
+
+  @Test
+  void aggregateSeedKeywords_deduplicatesCompanySizesAndIndustriesAcrossPreferences() {
+    CollectionJob job = pendingJob();
+    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+
+    UserBriefingPreference pref1 = mock(UserBriefingPreference.class);
+    when(pref1.getPreference())
+        .thenReturn(
+            Map.of(
+                "companySizes", List.of("대기업", "스타트업"),
+                "industries", List.of("IT/소프트웨어", "핀테크")));
+
+    UserBriefingPreference pref2 = mock(UserBriefingPreference.class);
+    when(pref2.getPreference())
+        .thenReturn(
+            Map.of(
+                "companySizes", List.of("대기업"),
+                "industries", List.of("IT/소프트웨어", "게임")));
+
+    when(userBriefingPreferenceRepository.findAllByCategoryCodeAndActiveTrue(
+            BriefingCategoryCode.JOB_POSTING))
+        .thenReturn(List.of(pref1, pref2));
+
+    ArgumentCaptor<AgentCollectionRequest> captor =
+        ArgumentCaptor.forClass(AgentCollectionRequest.class);
+    when(agentClient.triggerDailyCollection(captor.capture())).thenReturn(agentResponse(List.of()));
+    when(candidatePoolService.upsertJobPostings(any(), any()))
+        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+
+    dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
+
+    AgentCollectionRequest sent = captor.getValue();
+    assertThat(sent.seedKeywords().companySizes()).containsExactlyInAnyOrder("대기업", "스타트업");
+    assertThat(sent.seedKeywords().industries()).containsExactlyInAnyOrder("IT/소프트웨어", "핀테크", "게임");
+  }
+
+  @Test
   void triggerDailyCollection_emptyJobPostingsResponse_returnsZeroCounts() {
     CollectionJob job = pendingJob();
     when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);

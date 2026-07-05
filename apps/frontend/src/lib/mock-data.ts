@@ -43,6 +43,8 @@ export const JOB_KEYWORD_SUGGESTIONS: Record<string, string[]> = {
     '배달의민족',
     '크래프톤',
   ],
+  companySizes: ['스타트업', '중소기업', '중견기업', '대기업', '외국계'],
+  industries: ['IT/소프트웨어', '게임', '핀테크', '이커머스', '의료/헬스케어', '교육'],
   skills: [
     'Spring Boot',
     'Python',
