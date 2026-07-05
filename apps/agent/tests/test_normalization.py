@@ -166,10 +166,17 @@ def test_normalize_content_hash_is_stable():
     assert r1.content_hash == r2.content_hash
 
 
-def test_normalize_content_hash_differs_for_different_source_url():
+def test_normalize_content_hash_same_for_same_content_different_urls():
+    # content_hash no longer includes source URL — same content → same hash
     r1 = normalize(_raw(source_url="https://fixture.local/jobs/00001"))
     r2 = normalize(_raw(source_url="https://fixture.local/jobs/00002"))
-    assert r1.content_hash != r2.content_hash
+    assert r1.content_hash == r2.content_hash
+
+
+def test_normalize_source_record_key_differs_for_different_source_url():
+    r1 = normalize(_raw(source_url="https://fixture.local/jobs/00001"))
+    r2 = normalize(_raw(source_url="https://fixture.local/jobs/00002"))
+    assert r1.source_record_key != r2.source_record_key
 
 
 def test_normalize_content_hash_differs_for_different_company():
@@ -196,10 +203,32 @@ def test_normalize_content_hash_differs_for_none_vs_set_deadline():
     assert r1.content_hash != r2.content_hash
 
 
-def test_normalize_content_hash_differs_for_different_source():
+def test_normalize_content_hash_same_for_same_content_different_sources():
+    # content_hash no longer includes source — same content → same hash
     r1 = normalize(_raw(source="wanted"))
     r2 = normalize(_raw(source="jasoseol"))
-    assert r1.content_hash != r2.content_hash
+    assert r1.content_hash == r2.content_hash
+
+
+def test_normalize_source_record_key_differs_for_different_source():
+    r1 = normalize(_raw(source="wanted"))
+    r2 = normalize(_raw(source="jasoseol"))
+    assert r1.source_record_key != r2.source_record_key
+
+
+def test_normalize_canonical_fingerprint_is_64_hex_chars():
+    result = normalize(_raw())
+    assert result.canonical_fingerprint is not None
+    assert len(result.canonical_fingerprint) == 64
+    assert all(c in "0123456789abcdef" for c in result.canonical_fingerprint)
+
+
+def test_normalize_source_refs_has_one_entry():
+    result = normalize(_raw())
+    assert len(result.source_refs) == 1
+    assert result.source_refs[0].source == "fixture"
+    assert result.source_refs[0].source_url == "https://fixture.local/jobs/00001"
+    assert result.source_refs[0].source_record_key == result.source_record_key
 
 
 # ── output type ───────────────────────────────────────────────────────────────

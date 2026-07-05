@@ -111,7 +111,7 @@ async def _collect_recent_urls(
             warnings.append(msg)
 
     candidates.sort(key=lambda t: t[0], reverse=True)
-    return [u for _, u in candidates[: options.max_items_per_source]]
+    return [u for _, u in candidates[: options.discovery_limit_per_source]]
 
 
 def _parse_sitemap(xml_text: str, cutoff: date) -> list[tuple[date, str]]:
@@ -137,7 +137,8 @@ def _parse_sitemap(xml_text: str, cutoff: date) -> list[tuple[date, str]]:
         lastmod = _parse_lastmod(lastmod_el.text if lastmod_el is not None else None)
 
         if lastmod is None or lastmod >= cutoff:
-            results.append((lastmod or date.max, loc))
+            # Use date.min for unknown lastmod so these sort LAST, not first
+            results.append((lastmod or date.min, loc))
 
     return results
 

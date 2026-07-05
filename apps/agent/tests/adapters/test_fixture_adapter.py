@@ -156,10 +156,10 @@ async def test_fixture_adapter_works_with_empty_seed_keywords(monkeypatch):
         assert posting.title
 
 
-async def test_fixture_adapter_respects_max_items_per_source(monkeypatch):
+async def test_fixture_adapter_respects_discovery_limit_per_source(monkeypatch):
     monkeypatch.setattr("app.adapters.fixture.date", _MockDate)
     adapter = FixtureAdapter()
-    options = CollectionOptions(max_items_per_source=2)
+    options = CollectionOptions(discovery_limit_per_source=2)
     result = await adapter.fetch(_FULL_KEYWORDS, options)
     assert len(result.postings) <= 2
 

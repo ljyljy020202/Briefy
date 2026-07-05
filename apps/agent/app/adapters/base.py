@@ -20,6 +20,7 @@ class RawJobPosting:
     roles: list[str] = field(default_factory=list)
     description: str | None = None
     posted_at: datetime | None = None
+    source_external_id: str | None = None
 
 
 @dataclass

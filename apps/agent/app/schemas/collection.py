@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 from pydantic.alias_generators import to_camel
 
 
@@ -22,7 +22,16 @@ class CollectionOptions(BaseModel):
 
     lookback_days: int = 3
     deadline_within_days: int = 14
-    max_items_per_source: int = 50
+
+    # Budget controls (replace the single max_items_per_source)
+    discovery_limit_per_source: int = 50
+    detail_fetch_limit_per_source: int = 50
+    max_results_per_source: int = 50
+    max_total_results: int = 200
+
+    # Collection window
+    collect_from: date | None = None
+    max_lookback_days: int = 30
 
 
 class DailyCollectRequest(BaseModel):
@@ -57,11 +66,32 @@ class CollectedJobPosting(BaseModel):
 class CollectionStats(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
-    collected_count: int = 0
-    deduplicated_count: int = 0
-    job_posting_count: int = 0
-    company_issue_count: int = 0
-    industry_issue_count: int = 0
+    # V2 fields
+    discovered: int = 0
+    fetched: int = 0
+    parsed: int = 0
+    exact_duplicates: int = 0
+    cross_source_merged: int = 0
+    expired_filtered: int = 0
+    stale_filtered: int = 0
+    truncated: int = 0
+    final: int = 0
+
+    # Backward-compat aliases (also appear in serialized JSON as camelCase)
+    @computed_field
+    @property
+    def collected_count(self) -> int:
+        return self.discovered
+
+    @computed_field
+    @property
+    def deduplicated_count(self) -> int:
+        return self.exact_duplicates
+
+    @computed_field
+    @property
+    def job_posting_count(self) -> int:
+        return self.final
 
 
 class DailyCollectResponse(BaseModel):

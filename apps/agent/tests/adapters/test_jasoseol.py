@@ -374,7 +374,7 @@ async def test_adapter_page_parse_fail_returns_empty_not_raises(monkeypatch):
     assert result.warnings == []
 
 
-async def test_adapter_respects_max_items_per_source(monkeypatch):
+async def test_adapter_respects_discovery_limit_per_source(monkeypatch):
     # Build a sitemap with 3 URLs
     urls = [f"{_BASE}/recruit/{i}" for i in [104949, 104948, 104947]]
     items = "".join(
@@ -398,9 +398,46 @@ async def test_adapter_respects_max_items_per_source(monkeypatch):
         lambda **kw: _MockAsyncClient(responses),
     )
     adapter = JasoseolAdapter()
-    options = CollectionOptions(max_items_per_source=2)
+    options = CollectionOptions(discovery_limit_per_source=2)
     result = await adapter.fetch(SeedKeywords(), options, _COLLECT_DATE)
     assert len(result.postings) <= 2
+
+
+def test_parse_sitemap_unknown_lastmod_not_date_max():
+    """Unknown lastmod must not use date.max (which would put it first in sort)."""
+    from datetime import date as date_cls
+
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        "<url><loc>https://jasoseol.com/recruit/99999</loc></url>"
+        "</urlset>"
+    )
+    results = _parse_sitemap(xml, date_cls.min)
+    assert len(results) == 1
+    lastmod, _ = results[0]
+    # date.max would put it first in a descending sort — that is the bug we fixed
+    assert lastmod != date_cls.max
+
+
+def test_parse_sitemap_unknown_lastmod_sorts_after_known_date():
+    """URLs without lastmod must appear after URLs with a known recent lastmod."""
+    from datetime import date as date_cls
+
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        "<url><loc>https://jasoseol.com/recruit/111</loc>"
+        "<lastmod>2026-07-02T10:00:00+09:00</lastmod></url>"
+        "<url><loc>https://jasoseol.com/recruit/222</loc></url>"
+        "</urlset>"
+    )
+    results = _parse_sitemap(xml, date_cls.min)
+    sorted_results = sorted(results, key=lambda t: t[0], reverse=True)
+    urls_in_order = [u for _, u in sorted_results]
+    known_idx = urls_in_order.index("https://jasoseol.com/recruit/111")
+    unknown_idx = urls_in_order.index("https://jasoseol.com/recruit/222")
+    assert known_idx < unknown_idx
 
 
 async def test_adapter_collect_date_none_uses_today(monkeypatch):

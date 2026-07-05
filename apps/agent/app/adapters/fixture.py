@@ -70,7 +70,7 @@ def _build_fixture_postings(
         + len(seed_keywords.skills)
     )
     count = _MIN_POSTINGS + (total_kw % (_MAX_POSTINGS - _MIN_POSTINGS + 1))
-    count = min(count, options.max_items_per_source)
+    count = min(count, options.discovery_limit_per_source)
 
     seed = _stable_seed(collect_date)
     postings: list[RawJobPosting] = []
