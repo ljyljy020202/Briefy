@@ -33,7 +33,7 @@ export function MarketingNav() {
 
         <div className="flex items-center gap-2">
           <Link
-            href="/onboarding"
+            href="/login"
             className={cn(buttonVariants({ variant: 'ghost', size: 'default' }))}
           >
             로그인
