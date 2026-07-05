@@ -44,6 +44,8 @@ class JobPostingTest {
     assertThat(jp.getEmploymentType()).isEqualTo("정규직");
     assertThat(jp.getExperienceLevel()).isEqualTo("신입");
     assertThat(jp.getContentHash()).isEqualTo("abc123");
+    assertThat(jp.getCanonicalFingerprint()).isEqualTo("abc123");
+    assertThat(jp.getLinkedCompany()).isNull();
     assertThat(jp.getCollectedDate()).isEqualTo(COLLECTED);
     assertThat(jp.getPublishedAt()).isEqualTo(LocalDateTime.of(2026, 6, 30, 9, 0));
     assertThat(jp.getId()).isNull();
