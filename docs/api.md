@@ -217,6 +217,7 @@ GET /api/users/me
     "id": 1,
     "email": "user@gmail.com",
     "nickname": "Jiye",
+    "reportEmail": "user@gmail.com",
     "profileImageUrl": "https://lh3.googleusercontent.com/...",
     "role": "USER",
     "onboardingCompleted": true
@@ -243,13 +244,15 @@ PATCH /api/users/me/onboarding
 
 ```json
 {
-  "nickname": "Jiye"
+  "nickname": "Jiye",
+  "reportEmail": "user@gmail.com"
 }
 ```
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `nickname` | String | No | Max 100 chars |
+| `reportEmail` | String | No | Email address for briefing delivery |
 
 **Response:**
 
@@ -290,11 +293,9 @@ GET /api/briefing-categories
     {
       "id": 1,
       "code": "JOB_POSTING",
-      "name": "채용 공고 브리핑",
-      "description": "목표 직무·회사·스킬·지역 등을 설정하면, 신규 채용 공고와 마감 임박 공고를 매일 정리해 드립니다.",
+      "displayName": "채용 공고 브리핑",
       "phase": "FIRST",
-      "isActive": true,
-      "displayOrder": 1
+      "active": true
     }
   ],
   "error": null
@@ -335,10 +336,9 @@ GET /api/me/briefing-preferences
   "data": [
     {
       "id": 10,
-      "categoryId": 1,
       "categoryCode": "JOB_POSTING",
-      "categoryName": "채용 공고 브리핑",
-      "isActive": true,
+      "categoryDisplayName": "채용 공고 브리핑",
+      "active": true,
       "preference": {
         "roles": ["백엔드 개발자", "풀스택 개발자"],
         "companies": ["네이버", "카카오", "라인"],
@@ -347,6 +347,7 @@ GET /api/me/briefing-preferences
         "experienceLevels": ["신입", "3년 이상"],
         "employmentTypes": ["정규직"]
       },
+      "createdAt": "2026-06-28T09:00:00",
       "updatedAt": "2026-06-28T10:00:00"
     }
   ],
@@ -404,10 +405,9 @@ At least one preference field must be non-empty.
   "success": true,
   "data": {
     "id": 10,
-    "categoryId": 1,
     "categoryCode": "JOB_POSTING",
-    "categoryName": "채용 공고 브리핑",
-    "isActive": true,
+    "categoryDisplayName": "채용 공고 브리핑",
+    "active": true,
     "preference": {
       "roles": ["백엔드 개발자", "풀스택 개발자"],
       "companies": ["네이버", "카카오", "라인"],
@@ -416,6 +416,7 @@ At least one preference field must be non-empty.
       "experienceLevels": ["신입", "3년 이상"],
       "employmentTypes": ["정규직"]
     },
+    "createdAt": "2026-06-28T10:00:00",
     "updatedAt": "2026-06-28T10:00:00"
   },
   "error": null
@@ -460,10 +461,9 @@ All `preference` fields are optional. Only the fields provided are merged into t
   "success": true,
   "data": {
     "id": 10,
-    "categoryId": 1,
     "categoryCode": "JOB_POSTING",
-    "categoryName": "채용 공고 브리핑",
-    "isActive": true,
+    "categoryDisplayName": "채용 공고 브리핑",
+    "active": true,
     "preference": {
       "roles": ["백엔드 개발자", "풀스택 개발자", "DevOps 엔지니어"],
       "companies": ["네이버", "카카오", "라인"],
@@ -472,6 +472,7 @@ All `preference` fields are optional. Only the fields provided are merged into t
       "experienceLevels": ["신입", "3년 이상"],
       "employmentTypes": ["정규직"]
     },
+    "createdAt": "2026-06-28T10:00:00",
     "updatedAt": "2026-06-28T11:30:00"
   },
   "error": null
@@ -534,7 +535,7 @@ GET /api/dashboard
     "briefingPreferences": [
       {
         "categoryCode": "JOB_POSTING",
-        "categoryName": "채용 공고 브리핑",
+        "categoryDisplayName": "채용 공고 브리핑",
         "preference": {
           "roles": ["백엔드 개발자", "풀스택 개발자"],
           "companies": ["네이버", "카카오", "라인"],
@@ -1243,11 +1244,12 @@ Do **not** store the JWT or any user session data in `localStorage` or `sessionS
 
 | Route | Description | APIs called |
 |---|---|---|
-| `/onboarding` | First-time setup (unauthenticated or pre-onboarding). Redirects to `/dashboard` if already completed. | `GET /api/users/me`, `GET /api/briefing-categories`, `POST /api/me/briefing-preferences`, `PATCH /api/users/me/onboarding` |
-| `/dashboard` | Main landing after login. | `GET /api/dashboard` |
-| `/reports` | Paginated briefing list. | `GET /api/briefings` |
-| `/reports/[id]` | Briefing detail view. | `GET /api/briefings/{id}` |
-| `/mypage` | Account info and briefing preference management. Logout and account deletion are accessible here only. | `GET /api/me/briefing-preferences`, `GET /api/briefing-categories`, `PATCH /api/users/me/onboarding`, `POST /api/me/briefing-preferences`, `PATCH /api/me/briefing-preferences/{id}`, `DELETE /api/me/briefing-preferences/{id}`, `POST /api/auth/logout`, `DELETE /api/users/me` |
+| `/login` | Google 로그인. 이미 인증된 기존 회원은 `/dashboard`로, 온보딩 미완료 회원은 `/onboarding`으로 리디렉션. | `GET /api/users/me` |
+| `/onboarding` | 신규 회원 온보딩 (미인증 또는 온보딩 미완료). 온보딩이 이미 완료된 경우 `/dashboard`로 리디렉션. | `GET /api/users/me`, `GET /api/briefing-categories`, `POST /api/me/briefing-preferences`, `PATCH /api/users/me/onboarding` |
+| `/dashboard` | 로그인 후 메인 화면. | `GET /api/dashboard` |
+| `/reports` | 브리핑 목록 (페이지네이션). | `GET /api/briefings` |
+| `/reports/[id]` | 브리핑 상세 보기. | `GET /api/briefings/{id}` |
+| `/mypage` | 계정 정보 및 브리핑 선호도 관리. 로그아웃 및 계정 삭제는 이 페이지에서만 가능. | `GET /api/me/briefing-preferences`, `GET /api/briefing-categories`, `PATCH /api/users/me/onboarding`, `POST /api/me/briefing-preferences`, `PATCH /api/me/briefing-preferences/{id}`, `DELETE /api/me/briefing-preferences/{id}`, `POST /api/auth/logout`, `DELETE /api/users/me` |
 
 ---
 
