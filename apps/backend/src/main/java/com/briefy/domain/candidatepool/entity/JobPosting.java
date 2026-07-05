@@ -1,24 +1,29 @@
 package com.briefy.domain.candidatepool.entity;
 
+import com.briefy.domain.company.entity.Company;
 import com.briefy.global.entity.BaseTimeEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.ForeignKey;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
 @Table(
     name = "job_postings",
-    uniqueConstraints = {@UniqueConstraint(name = "uq_job_postings_url", columnNames = "url")},
     indexes = {
       @Index(name = "idx_job_postings_collected_date", columnList = "collected_date"),
-      @Index(name = "idx_job_postings_content_hash", columnList = "content_hash")
+      @Index(name = "idx_job_postings_content_hash", columnList = "content_hash"),
+      @Index(name = "idx_job_postings_canonical_fingerprint", columnList = "canonical_fingerprint"),
+      @Index(name = "idx_job_postings_company_id", columnList = "company_id")
     })
 public class JobPosting extends BaseTimeEntity {
 
@@ -31,6 +36,10 @@ public class JobPosting extends BaseTimeEntity {
 
   @Column(nullable = false, length = 100)
   private String company;
+
+  @ManyToOne(fetch = FetchType.LAZY)
+  @JoinColumn(name = "company_id", foreignKey = @ForeignKey(name = "fk_job_postings_company"))
+  private Company linkedCompany;
 
   @Column(length = 255)
   private String source;
@@ -60,6 +69,9 @@ public class JobPosting extends BaseTimeEntity {
 
   @Column(name = "content_hash", length = 64)
   private String contentHash;
+
+  @Column(name = "canonical_fingerprint", length = 64)
+  private String canonicalFingerprint;
 
   @Column(name = "collected_date", nullable = false)
   private LocalDate collectedDate;
@@ -97,6 +109,7 @@ public class JobPosting extends BaseTimeEntity {
     jp.employmentType = employmentType;
     jp.experienceLevel = experienceLevel;
     jp.contentHash = contentHash;
+    jp.canonicalFingerprint = contentHash;
     jp.collectedDate = collectedDate;
     jp.publishedAt = publishedAt;
     return jp;
@@ -129,6 +142,14 @@ public class JobPosting extends BaseTimeEntity {
 
   public String getCompany() {
     return company;
+  }
+
+  public Company getLinkedCompany() {
+    return linkedCompany;
+  }
+
+  public void linkCompany(Company company) {
+    this.linkedCompany = company;
   }
 
   public String getSource() {
@@ -169,6 +190,10 @@ public class JobPosting extends BaseTimeEntity {
 
   public String getContentHash() {
     return contentHash;
+  }
+
+  public String getCanonicalFingerprint() {
+    return canonicalFingerprint;
   }
 
   public LocalDate getCollectedDate() {

@@ -10,7 +10,9 @@ import static org.mockito.Mockito.when;
 import com.briefy.domain.candidatepool.dto.CandidatePoolUpsertResult;
 import com.briefy.domain.candidatepool.dto.CollectedJobPostingData;
 import com.briefy.domain.candidatepool.entity.JobPosting;
+import com.briefy.domain.candidatepool.entity.JobPostingSource;
 import com.briefy.domain.candidatepool.repository.JobPostingRepository;
+import com.briefy.domain.candidatepool.repository.JobPostingSourceRepository;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -24,6 +26,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class CandidatePoolServiceTest {
 
   @Mock private JobPostingRepository jobPostingRepository;
+  @Mock private JobPostingSourceRepository jobPostingSourceRepository;
 
   @InjectMocks private CandidatePoolService candidatePoolService;
 
@@ -67,8 +70,11 @@ class CandidatePoolServiceTest {
   @Test
   void upsertJobPostings_newPosting_savedAndCountsAreCorrect() {
     CollectedJobPostingData posting = data("https://example.com/job/1", "hash1");
-    when(jobPostingRepository.findByUrl(posting.url())).thenReturn(Optional.empty());
-    when(jobPostingRepository.existsByContentHash(posting.contentHash())).thenReturn(false);
+    stubSourceNotFound("원티드", "https://example.com/job/1");
+    when(jobPostingRepository.findFirstByCanonicalFingerprint("hash1"))
+        .thenReturn(Optional.empty());
+    when(jobPostingRepository.findFirstByUrl("https://example.com/job/1"))
+        .thenReturn(Optional.empty());
     when(jobPostingRepository.save(any(JobPosting.class))).thenAnswer(inv -> inv.getArgument(0));
 
     CandidatePoolUpsertResult result =
@@ -81,8 +87,25 @@ class CandidatePoolServiceTest {
   }
 
   @Test
-  void upsertJobPostings_duplicateByUrl_refreshesMutableFieldsAndSkipsSave() {
+  void upsertJobPostings_exactSourceRecord_touchedAndCountedAsDuplicate() {
     String url = "https://example.com/job/2";
+    String sourceKey = CandidatePoolService.buildSourceRecordKey("원티드", url);
+    JobPostingSource existingSource = buildMockSource();
+    when(jobPostingSourceRepository.findBySourceRecordKey(sourceKey))
+        .thenReturn(Optional.of(existingSource));
+
+    CollectedJobPostingData incoming = data(url, "newhash");
+    CandidatePoolUpsertResult result =
+        candidatePoolService.upsertJobPostings(List.of(incoming), COLLECTED_DATE);
+
+    assertThat(result.savedCount()).isEqualTo(0);
+    assertThat(result.duplicateCount()).isEqualTo(1);
+    verify(jobPostingRepository, never()).save(any());
+  }
+
+  @Test
+  void upsertJobPostings_canonicalByUrl_attachesNewSource() {
+    String url = "https://example.com/job/3";
     JobPosting existing = existingPosting(url);
     LocalDate newDeadline = LocalDate.of(2026, 7, 20);
 
@@ -102,12 +125,14 @@ class CandidatePoolServiceTest {
             "newhash",
             null);
 
-    when(jobPostingRepository.findByUrl(url)).thenReturn(Optional.of(existing));
+    stubSourceNotFound("원티드", url);
+    when(jobPostingRepository.findFirstByCanonicalFingerprint("newhash"))
+        .thenReturn(Optional.empty());
+    when(jobPostingRepository.findFirstByUrl(url)).thenReturn(Optional.of(existing));
 
     CandidatePoolUpsertResult result =
         candidatePoolService.upsertJobPostings(List.of(incoming), COLLECTED_DATE);
 
-    assertThat(result.collectedCount()).isEqualTo(1);
     assertThat(result.savedCount()).isEqualTo(0);
     assertThat(result.duplicateCount()).isEqualTo(1);
     assertThat(existing.getDeadline()).isEqualTo(newDeadline);
@@ -115,42 +140,57 @@ class CandidatePoolServiceTest {
     assertThat(existing.getContentHash()).isEqualTo("newhash");
     assertThat(existing.getCollectedDate()).isEqualTo(COLLECTED_DATE);
     verify(jobPostingRepository, never()).save(any());
+    verify(jobPostingSourceRepository).save(any(JobPostingSource.class));
   }
 
   @Test
-  void upsertJobPostings_duplicateByContentHash_skippedWithoutSave() {
-    CollectedJobPostingData posting = data("https://example.com/job/3", "duplicatehash");
-    when(jobPostingRepository.findByUrl(posting.url())).thenReturn(Optional.empty());
-    when(jobPostingRepository.existsByContentHash("duplicatehash")).thenReturn(true);
+  void upsertJobPostings_canonicalByFingerprint_attachesNewSource() {
+    String url = "https://example.com/job/4";
+    String contentHash = "duplicatehash";
+    JobPosting existing = existingPosting("https://example.com/original-url");
 
+    stubSourceNotFound("원티드", url);
+    when(jobPostingRepository.findFirstByCanonicalFingerprint(contentHash))
+        .thenReturn(Optional.of(existing));
+
+    CollectedJobPostingData incoming = data(url, contentHash);
     CandidatePoolUpsertResult result =
-        candidatePoolService.upsertJobPostings(List.of(posting), COLLECTED_DATE);
+        candidatePoolService.upsertJobPostings(List.of(incoming), COLLECTED_DATE);
 
-    assertThat(result.collectedCount()).isEqualTo(1);
     assertThat(result.savedCount()).isEqualTo(0);
     assertThat(result.duplicateCount()).isEqualTo(1);
     verify(jobPostingRepository, never()).save(any());
+    verify(jobPostingSourceRepository).save(any(JobPostingSource.class));
   }
 
   @Test
   void upsertJobPostings_mixedBatch_correctCountsAndSaveCallCount() {
-    CollectedJobPostingData newPosting = data("https://example.com/job/4", "hash4");
-    CollectedJobPostingData urlDup = data("https://example.com/job/5", "hash5");
-    CollectedJobPostingData hashDup = data("https://example.com/job/6", "hash6");
+    CollectedJobPostingData newPosting = data("https://example.com/job/5", "hash5");
+    CollectedJobPostingData sourceDup = data("https://example.com/job/6", "hash6");
+    CollectedJobPostingData fingerprintDup = data("https://example.com/job/7", "hash7");
 
-    when(jobPostingRepository.findByUrl("https://example.com/job/4")).thenReturn(Optional.empty());
-    when(jobPostingRepository.existsByContentHash("hash4")).thenReturn(false);
+    // new posting: no source, no canonical
+    stubSourceNotFound("원티드", "https://example.com/job/5");
+    when(jobPostingRepository.findFirstByCanonicalFingerprint("hash5"))
+        .thenReturn(Optional.empty());
+    when(jobPostingRepository.findFirstByUrl("https://example.com/job/5"))
+        .thenReturn(Optional.empty());
     when(jobPostingRepository.save(any(JobPosting.class))).thenAnswer(inv -> inv.getArgument(0));
 
-    when(jobPostingRepository.findByUrl("https://example.com/job/5"))
-        .thenReturn(Optional.of(existingPosting("https://example.com/job/5")));
+    // source dup: exact source record found
+    String sourceKey6 =
+        CandidatePoolService.buildSourceRecordKey("원티드", "https://example.com/job/6");
+    when(jobPostingSourceRepository.findBySourceRecordKey(sourceKey6))
+        .thenReturn(Optional.of(buildMockSource()));
 
-    when(jobPostingRepository.findByUrl("https://example.com/job/6")).thenReturn(Optional.empty());
-    when(jobPostingRepository.existsByContentHash("hash6")).thenReturn(true);
+    // fingerprint dup: no source, but canonical by fingerprint
+    stubSourceNotFound("원티드", "https://example.com/job/7");
+    when(jobPostingRepository.findFirstByCanonicalFingerprint("hash7"))
+        .thenReturn(Optional.of(existingPosting("https://example.com/other")));
 
     CandidatePoolUpsertResult result =
         candidatePoolService.upsertJobPostings(
-            List.of(newPosting, urlDup, hashDup), COLLECTED_DATE);
+            List.of(newPosting, sourceDup, fingerprintDup), COLLECTED_DATE);
 
     assertThat(result.collectedCount()).isEqualTo(3);
     assertThat(result.savedCount()).isEqualTo(1);
@@ -170,6 +210,37 @@ class CandidatePoolServiceTest {
   }
 
   @Test
+  void upsertJobPostings_nullUrl_createsPostingWithoutSourceRecord() {
+    CollectedJobPostingData noUrl =
+        new CollectedJobPostingData(
+            "백엔드 개발자",
+            "네이버",
+            "원티드",
+            null,
+            "서울",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "hashNoUrl",
+            null);
+
+    // No source lookup when url is null (sourceRecordKey is null)
+    when(jobPostingRepository.findFirstByCanonicalFingerprint("hashNoUrl"))
+        .thenReturn(Optional.empty());
+    // No url lookup either (url is null)
+    when(jobPostingRepository.save(any(JobPosting.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    CandidatePoolUpsertResult result =
+        candidatePoolService.upsertJobPostings(List.of(noUrl), COLLECTED_DATE);
+
+    assertThat(result.savedCount()).isEqualTo(1);
+    verify(jobPostingSourceRepository, never()).save(any());
+  }
+
+  @Test
   void findJobPostingsByDate_delegatesToRepository() {
     List<JobPosting> expected =
         List.of(
@@ -177,7 +248,7 @@ class CandidatePoolServiceTest {
                 "풀스택 개발자",
                 "카카오",
                 null,
-                "https://example.com/job/7",
+                "https://example.com/job/8",
                 null,
                 null,
                 null,
@@ -195,5 +266,57 @@ class CandidatePoolServiceTest {
     assertThat(result).hasSize(1);
     assertThat(result.get(0).getCompany()).isEqualTo("카카오");
     verify(jobPostingRepository).findAllByCollectedDate(COLLECTED_DATE);
+  }
+
+  @Test
+  void buildSourceRecordKey_nullUrl_returnsNull() {
+    assertThat(CandidatePoolService.buildSourceRecordKey("원티드", null)).isNull();
+  }
+
+  @Test
+  void buildSourceRecordKey_sameInputs_returnsStableKey() {
+    String key1 = CandidatePoolService.buildSourceRecordKey("원티드", "https://example.com");
+    String key2 = CandidatePoolService.buildSourceRecordKey("원티드", "https://example.com");
+    assertThat(key1).isEqualTo(key2).hasSize(64);
+  }
+
+  @Test
+  void buildSourceRecordKey_differentSources_returnsDifferentKeys() {
+    String wanted = CandidatePoolService.buildSourceRecordKey("원티드", "https://example.com");
+    String saramin = CandidatePoolService.buildSourceRecordKey("사람인", "https://example.com");
+    assertThat(wanted).isNotEqualTo(saramin);
+  }
+
+  @Test
+  void buildSourceRecordKey_nullSource_returnsDifferentKeyFromNamedSource() {
+    String noSource = CandidatePoolService.buildSourceRecordKey(null, "https://example.com");
+    String withSource = CandidatePoolService.buildSourceRecordKey("원티드", "https://example.com");
+    assertThat(noSource).isNotNull().hasSize(64).isNotEqualTo(withSource);
+  }
+
+  private void stubSourceNotFound(String source, String url) {
+    String key = CandidatePoolService.buildSourceRecordKey(source, url);
+    when(jobPostingSourceRepository.findBySourceRecordKey(key)).thenReturn(Optional.empty());
+  }
+
+  private JobPostingSource buildMockSource() {
+    JobPosting jp =
+        JobPosting.create(
+            "백엔드",
+            "네이버",
+            "원티드",
+            "https://x.com",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            COLLECTED_DATE,
+            null);
+    return JobPostingSource.create(
+        jp, "원티드", null, "https://x.com", "key", null, null, COLLECTED_DATE);
   }
 }
