@@ -79,8 +79,19 @@ export default function DashboardPage() {
 
   const latestBriefing = summary?.latestBriefing ?? null
   const recentReports = summary?.recentReports ?? []
-  const nextDeliveryTime = summary?.nextDeliveryTime ?? null
   const preferences = summary?.briefingPreferences ?? []
+
+  const nextDeliveryTime = (() => {
+    const now = new Date()
+    const target = new Date(now)
+    target.setHours(8, 0, 0, 0)
+    if (now >= target) target.setDate(target.getDate() + 1)
+    return target.toLocaleDateString('ko-KR', {
+      month: 'long',
+      day: 'numeric',
+      weekday: 'short',
+    }) + ' 오전 8:00'
+  })()
 
   const displayName =
     summary?.user?.nickname ??
