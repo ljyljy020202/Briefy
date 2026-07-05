@@ -6,7 +6,6 @@ import { BriefyLogo } from '@/components/briefy/BriefyLogo'
 
 const LINKS = [
   { href: '#features', label: '기능' },
-  { href: '#how', label: '작동 방식' },
   { href: '#sample', label: '브리핑 예시' },
   { href: '#pricing', label: '요금' },
 ]
@@ -14,12 +13,12 @@ const LINKS = [
 export function MarketingNav() {
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto grid h-16 max-w-6xl grid-cols-3 items-center px-4 sm:px-6 lg:px-8">
         <Link href="/" aria-label="Briefy 홈">
           <BriefyLogo />
         </Link>
 
-        <nav className="hidden items-center gap-8 md:flex">
+        <nav className="hidden items-center justify-center gap-8 md:flex">
           {LINKS.map((link) => (
             <a
               key={link.href}
@@ -31,7 +30,7 @@ export function MarketingNav() {
           ))}
         </nav>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center justify-end gap-2">
           <Link
             href="/login"
             className={cn(buttonVariants({ variant: 'ghost', size: 'default' }))}

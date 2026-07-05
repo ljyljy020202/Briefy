@@ -40,24 +40,6 @@ const FEATURES = [
   },
 ]
 
-const STEPS = [
-  {
-    step: '01',
-    title: '선호도를 설정하세요',
-    desc: '희망 직무, 관심 기업, 핵심 스킬 등 채용 선호도를 항목별로 입력합니다.',
-  },
-  {
-    step: '02',
-    title: '시간을 정하세요',
-    desc: '오전 6시부터 점심까지, 받고 싶은 시간을 지정합니다.',
-  },
-  {
-    step: '03',
-    title: '아침마다 받아보세요',
-    desc: '매일 정해진 시간, AI가 정리한 맞춤 브리핑이 도착합니다.',
-  },
-]
-
 export default function LandingPage() {
   const sample = MOCK_REPORTS[0]
 
@@ -79,9 +61,9 @@ export default function LandingPage() {
               <span className="text-primary">매일 아침 AI 브리핑</span>으로
               받아보세요.
             </h1>
-            <p className="mx-auto mt-6 max-w-md text-pretty text-base leading-relaxed text-muted-foreground sm:text-lg">
-              Briefy는 당신이 고른 주제와 키워드를 바탕으로, AI가 정리한 하루치
-              브리핑을 매일 아침 이메일로 보내드립니다.
+            <p className="mx-auto mt-6 max-w-xl text-pretty text-lg leading-relaxed text-muted-foreground sm:text-xl">
+              Briefy는 관심 직무와 기업을 등록하면, 매일 확인해야 할 채용 공고와
+              기업 이슈를 AI가 요약해주는 개인 맞춤 데일리 브리핑 서비스입니다.
             </p>
             <p className="mx-auto mt-3 max-w-sm text-sm text-muted-foreground/80">
               지금은{' '}
@@ -143,37 +125,6 @@ export default function LandingPage() {
               </CardContent>
             </Card>
           ))}
-        </div>
-      </section>
-
-      {/* How it works */}
-      <section id="how" className="border-y border-border bg-secondary/40">
-        <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6 lg:px-8">
-          <div className="mx-auto max-w-2xl text-center">
-            <h2 className="text-balance text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-              세 단계면 충분합니다
-            </h2>
-            <p className="mt-4 text-pretty text-muted-foreground">
-              설정은 1분, 효과는 매일 아침.
-            </p>
-          </div>
-          <div className="mt-12 grid gap-6 md:grid-cols-3">
-            {STEPS.map((s) => (
-              <Card key={s.step} className="h-full">
-                <CardContent className="p-6">
-                  <span className="font-mono text-sm font-semibold text-primary">
-                    {s.step}
-                  </span>
-                  <h3 className="mt-3 text-lg font-semibold text-foreground">
-                    {s.title}
-                  </h3>
-                  <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                    {s.desc}
-                  </p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
         </div>
       </section>
 
@@ -245,7 +196,10 @@ export default function LandingPage() {
                 무료 플랜으로 매일 한 통의 맞춤 브리핑을 받아보세요. 설정은
                 1분이면 끝납니다.
               </p>
-              <ul className="mt-6 space-y-2 text-sm text-primary-foreground/90">
+              <p className="mt-4 max-w-md text-pretty leading-relaxed text-primary-foreground/80">
+                현재 베타 운영 중으로, 모든 기능을 무료로 이용하실 수 있습니다.
+              </p>
+              <ul className="mt-4 space-y-2 text-sm text-primary-foreground/90">
                 {['채용 선호도 설정 (직무·기업·스킬)', '매일 아침 1회 발송', '언제든 해지 가능'].map(
                   (item) => (
                     <li key={item} className="flex items-center gap-2">

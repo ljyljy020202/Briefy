@@ -50,8 +50,8 @@ export default function LoginPage() {
         </div>
       </header>
 
-      <main className="mx-auto flex max-w-sm flex-col items-center px-4 py-20 sm:px-6">
-        <Card className="w-full">
+      <main className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
+        <Card>
           <CardContent className="p-6 sm:p-8">
             <h1 className="text-2xl font-bold tracking-tight text-foreground">
               로그인
@@ -59,7 +59,7 @@ export default function LoginPage() {
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
               Google 계정으로 로그인하세요.
             </p>
-            <div className="mt-6">
+            <div className="mt-6 max-w-sm">
               <GoogleLoginButton label="Google 로그인" />
             </div>
             <p className="mt-6 text-center text-sm text-muted-foreground">
