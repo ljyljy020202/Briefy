@@ -12,6 +12,7 @@ import type {
   GenerateResult,
   FeedbackType,
   FeedbackResult,
+  CompanySearchResult,
 } from "@/types/api";
 
 export class ApiError extends Error {
@@ -93,6 +94,13 @@ export const briefingPreferences = {
 export const dashboard = {
   getSummary: (): Promise<DashboardSummary> =>
     apiFetch<DashboardSummary>("/dashboard"),
+};
+
+export const companies = {
+  search: (q: string, limit = 10): Promise<CompanySearchResult[]> =>
+    apiFetch<CompanySearchResult[]>(
+      `/companies/search?q=${encodeURIComponent(q)}&limit=${limit}`
+    ),
 };
 
 export const briefings = {

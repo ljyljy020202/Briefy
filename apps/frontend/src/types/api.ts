@@ -112,6 +112,13 @@ export interface GenerateResult {
   status: string;
 }
 
+export interface CompanySearchResult {
+  id: number;
+  canonicalName: string;
+  companySize: string | null;
+  industryCodes: string[];
+}
+
 export type FeedbackType = "USEFUL" | "NOT_USEFUL" | "WANT_MORE" | "LESS_LIKE_THIS";
 
 export interface FeedbackResult {
