@@ -20,6 +20,7 @@ import { briefings } from '@/lib/api'
 import type { BriefingDetail } from '@/types/api'
 import { FeedbackButtons } from '@/components/reports/FeedbackButtons'
 
+
 export default function ReportDetailPage() {
   const { id } = useParams<{ id: string }>()
   const numericId = Number(id)
@@ -221,7 +222,8 @@ export default function ReportDetailPage() {
             </section>
           )}
 
-          <div className="mt-10 border-t pt-8">
+          {/* 피드백: 미구현, 추후 활성화 */}
+          <div className="mt-10 hidden border-t pt-8">
             <FeedbackButtons reportId={numericId} />
           </div>
         </div>
@@ -237,7 +239,8 @@ export default function ReportDetailPage() {
                   {deadlinePostings.length}건
                 </p>
               )}
-              <div className="mt-4 space-y-2">
+              {/* 저장하기·공유하기: 미구현, 추후 활성화 */}
+              <div className="mt-4 hidden space-y-2">
                 <button
                   type="button"
                   className={cn(
@@ -265,7 +268,7 @@ export default function ReportDetailPage() {
           <Card className="mt-4 bg-secondary/40">
             <CardContent className="p-5">
               <p className="text-sm font-medium text-foreground">
-                내일도 받아보세요
+                더 정확한 리포트 받기
               </p>
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
                 선호 기업·스킬을 추가하면 브리핑이 더 정확해집니다.
