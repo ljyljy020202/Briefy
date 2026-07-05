@@ -31,6 +31,8 @@ dependencies {
     runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.12.6")
     runtimeOnly("com.mysql:mysql-connector-j")
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.0")
+    implementation(platform("software.amazon.awssdk:bom:2.26.0"))
+    implementation("software.amazon.awssdk:ses")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.springframework.security:spring-security-test")
 }

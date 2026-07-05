@@ -1,11 +1,13 @@
 package com.briefy.scheduler;
 
+import com.briefy.config.EmailProperties;
 import com.briefy.domain.briefing.dto.GenerateResult;
 import com.briefy.domain.briefing.repository.BriefingReportRepository;
 import com.briefy.domain.briefing.service.BriefingService;
 import com.briefy.domain.briefingpreference.entity.BriefingCategoryCode;
 import com.briefy.domain.briefingpreference.entity.UserBriefingPreference;
 import com.briefy.domain.briefingpreference.repository.UserBriefingPreferenceRepository;
+import com.briefy.domain.delivery.service.EmailDeliveryService;
 import java.time.LocalDate;
 import java.util.List;
 import org.slf4j.Logger;
@@ -23,14 +25,20 @@ public class BriefingScheduler {
   private final BriefingService briefingService;
   private final UserBriefingPreferenceRepository userBriefingPreferenceRepository;
   private final BriefingReportRepository briefingReportRepository;
+  private final EmailDeliveryService emailDeliveryService;
+  private final EmailProperties emailProperties;
 
   public BriefingScheduler(
       BriefingService briefingService,
       UserBriefingPreferenceRepository userBriefingPreferenceRepository,
-      BriefingReportRepository briefingReportRepository) {
+      BriefingReportRepository briefingReportRepository,
+      EmailDeliveryService emailDeliveryService,
+      EmailProperties emailProperties) {
     this.briefingService = briefingService;
     this.userBriefingPreferenceRepository = userBriefingPreferenceRepository;
     this.briefingReportRepository = briefingReportRepository;
+    this.emailDeliveryService = emailDeliveryService;
+    this.emailProperties = emailProperties;
   }
 
   @Scheduled(
@@ -56,6 +64,15 @@ public class BriefingScheduler {
       try {
         GenerateResult result = briefingService.generateScheduledBriefing(userId);
         log.info("Briefing generated for user {}: reportId={}", userId, result.briefingReportId());
+
+        if (emailProperties.autoSendEnabled()) {
+          try {
+            emailDeliveryService.deliverBriefingReport(result.briefingReportId());
+            log.info("Email delivered for user {}: reportId={}", userId, result.briefingReportId());
+          } catch (Exception e) {
+            log.error("Failed to deliver email for user {}: {}", userId, e.getMessage(), e);
+          }
+        }
       } catch (Exception e) {
         log.error("Failed to generate briefing for user {}: {}", userId, e.getMessage(), e);
       }

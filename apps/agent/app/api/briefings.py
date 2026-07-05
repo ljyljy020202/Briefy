@@ -14,4 +14,4 @@ router = APIRouter()
 async def generate_briefing(
     request: BriefingGenerateRequest,
 ) -> BriefingGenerateResponse:
-    return user_briefing_graph.run(request)
+    return await user_briefing_graph.run(request)

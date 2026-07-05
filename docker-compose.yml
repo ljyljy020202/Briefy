@@ -45,7 +45,11 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       JWT_SECRET: ${JWT_SECRET}
-      AGENT_URL: ${AGENT_URL:-http://agent:8000}
+      AGENT_URL: http://agent:8000
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost:8080/api/oauth2/callback/google}
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:3000}
     ports:
       - "8080:8080"
     depends_on:
@@ -62,7 +66,13 @@ services:
       dockerfile: Dockerfile
     environment:
       OPENAI_API_KEY: ${OPENAI_API_KEY}
-      BACKEND_URL: ${BACKEND_URL:-http://backend:8080}
+      BACKEND_URL: http://backend:8080
+      JOB_COLLECTION_USE_FIXTURE: ${JOB_COLLECTION_USE_FIXTURE:-false}
+      JOB_COLLECTION_ENABLE_REAL_SOURCES: ${JOB_COLLECTION_ENABLE_REAL_SOURCES:-false}
+      JOB_COLLECTION_TIMEOUT_SECONDS: ${JOB_COLLECTION_TIMEOUT_SECONDS:-10}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+      LLM_TEMPERATURE: ${LLM_TEMPERATURE:-0.2}
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-30}
     ports:
       - "8000:8000"
     networks:
