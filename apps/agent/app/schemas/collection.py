@@ -9,11 +9,12 @@ class SeedKeywords(BaseModel):
 
     roles: list[str] = []
     companies: list[str] = []
+    company_sizes: list[str] = []
+    industries: list[str] = []
     skills: list[str] = []
     locations: list[str] = []
     experience_levels: list[str] = []
     employment_types: list[str] = []
-    industries: list[str] = []
     keywords: list[str] = []
 
 
@@ -34,6 +35,25 @@ class CollectionOptions(BaseModel):
     max_lookback_days: int = 30
 
 
+class CompanyProfile(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    id: int
+    canonical_name: str
+    normalized_name: str
+    company_size: str | None = None
+    industry_codes: list[str] = []
+
+
+class OfficialCompanySource(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    company_id: int
+    source_type: str
+    adapter_type: str | None = None
+    config_json: str | None = None
+
+
 class DailyCollectRequest(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
@@ -42,6 +62,17 @@ class DailyCollectRequest(BaseModel):
     categories: list[str]
     seed_keywords: SeedKeywords = Field(default_factory=SeedKeywords)
     options: CollectionOptions = Field(default_factory=CollectionOptions)
+    company_profiles: list[CompanyProfile] = []
+    official_company_sources: list[OfficialCompanySource] = []
+
+
+class SourceRef(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    source: str
+    source_external_id: str | None = None
+    source_url: str
+    source_record_key: str | None = None
 
 
 class CollectedJobPosting(BaseModel):
@@ -61,6 +92,10 @@ class CollectedJobPosting(BaseModel):
     description: str | None = None
     posted_at: datetime | None = None
     content_hash: str
+    source_external_id: str | None = None
+    source_record_key: str | None = None
+    canonical_fingerprint: str | None = None
+    source_refs: list[SourceRef] = []
 
 
 class CollectionStats(BaseModel):
