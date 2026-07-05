@@ -9,11 +9,12 @@ class SeedKeywords(BaseModel):
 
     roles: list[str] = []
     companies: list[str] = []
+    company_sizes: list[str] = []
+    industries: list[str] = []
     skills: list[str] = []
     locations: list[str] = []
     experience_levels: list[str] = []
     employment_types: list[str] = []
-    industries: list[str] = []
     keywords: list[str] = []
 
 

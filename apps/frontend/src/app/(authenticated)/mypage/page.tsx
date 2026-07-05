@@ -24,7 +24,9 @@ type PreferenceKey = keyof Required<JobPostingPreference>
 
 const PREFERENCE_FIELDS: { key: PreferenceKey; label: string; description: string }[] = [
   { key: 'roles', label: '목표 직무', description: '지원하려는 직무명을 입력하세요.' },
-  { key: 'companies', label: '관심 기업', description: '지원을 고려하는 기업명을 입력하세요.' },
+  { key: 'companies', label: '관심 기업', description: '지원을 고려하는 기업명을 자유롭게 입력하세요.' },
+  { key: 'companySizes', label: '선호 기업 규모', description: '선호하는 회사 규모를 선택하세요.' },
+  { key: 'industries', label: '관심 산업', description: '관심 있는 산업 분야를 입력하세요.' },
   { key: 'skills', label: '기술/역량', description: '보유하거나 원하는 기술 스택을 입력하세요.' },
   { key: 'locations', label: '선호 지역', description: '선호하는 근무 지역을 입력하세요.' },
   { key: 'experienceLevels', label: '경력 수준', description: '해당하는 경력 조건을 선택하세요.' },
@@ -34,6 +36,8 @@ const PREFERENCE_FIELDS: { key: PreferenceKey; label: string; description: strin
 const EMPTY_PREFERENCE: Required<JobPostingPreference> = {
   roles: [],
   companies: [],
+  companySizes: [],
+  industries: [],
   skills: [],
   locations: [],
   experienceLevels: [],
@@ -43,6 +47,8 @@ const EMPTY_PREFERENCE: Required<JobPostingPreference> = {
 const EMPTY_INPUTS: Record<PreferenceKey, string> = {
   roles: '',
   companies: '',
+  companySizes: '',
+  industries: '',
   skills: '',
   locations: '',
   experienceLevels: '',
@@ -111,6 +117,8 @@ export default function MyPage() {
         ? {
             roles: existingPref.preference.roles ?? [],
             companies: existingPref.preference.companies ?? [],
+            companySizes: existingPref.preference.companySizes ?? [],
+            industries: existingPref.preference.industries ?? [],
             skills: existingPref.preference.skills ?? [],
             locations: existingPref.preference.locations ?? [],
             experienceLevels: existingPref.preference.experienceLevels ?? [],

@@ -140,6 +140,8 @@ public class DailyCollectionService {
 
     Set<String> roles = new LinkedHashSet<>();
     Set<String> companies = new LinkedHashSet<>();
+    Set<String> companySizes = new LinkedHashSet<>();
+    Set<String> industries = new LinkedHashSet<>();
     Set<String> skills = new LinkedHashSet<>();
     Set<String> locations = new LinkedHashSet<>();
     Set<String> experienceLevels = new LinkedHashSet<>();
@@ -150,6 +152,8 @@ public class DailyCollectionService {
       if (prefMap == null) continue;
       roles.addAll(extractStringList(prefMap, "roles"));
       companies.addAll(extractStringList(prefMap, "companies"));
+      companySizes.addAll(extractStringList(prefMap, "companySizes"));
+      industries.addAll(extractStringList(prefMap, "industries"));
       skills.addAll(extractStringList(prefMap, "skills"));
       locations.addAll(extractStringList(prefMap, "locations"));
       experienceLevels.addAll(extractStringList(prefMap, "experienceLevels"));
@@ -159,11 +163,12 @@ public class DailyCollectionService {
     return new AgentSeedKeywords(
         new ArrayList<>(roles),
         new ArrayList<>(companies),
+        new ArrayList<>(companySizes),
+        new ArrayList<>(industries),
         new ArrayList<>(skills),
         new ArrayList<>(locations),
         new ArrayList<>(experienceLevels),
         new ArrayList<>(employmentTypes),
-        List.of(),
         List.of());
   }
 
@@ -240,6 +245,7 @@ public class DailyCollectionService {
 
   private static AgentSeedKeywords emptyKeywords() {
     return new AgentSeedKeywords(
-        List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of());
+        List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
+        List.of());
   }
 }

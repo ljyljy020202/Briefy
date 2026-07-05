@@ -21,6 +21,8 @@ export interface BriefingCategory {
 export interface JobPostingPreference {
   roles?: string[];
   companies?: string[];
+  companySizes?: string[];
+  industries?: string[];
   skills?: string[];
   locations?: string[];
   experienceLevels?: string[];
