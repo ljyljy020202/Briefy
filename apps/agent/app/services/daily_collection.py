@@ -20,6 +20,7 @@ import logging
 from app.adapters.base import JobBoardAdapter, RawJobPosting
 from app.adapters.fixture import FixtureAdapter
 from app.adapters.jasoseol import JasoseolAdapter
+from app.adapters.saramin import SaraminAdapter
 from app.core.config import settings
 from app.schemas.collection import (
     CollectedJobPosting,
@@ -48,6 +49,8 @@ def _build_adapters() -> list[JobBoardAdapter]:
         adapters.append(FixtureAdapter())
     if settings.job_collection_enable_real_sources:
         adapters.append(JasoseolAdapter())
+    if settings.job_collection_enable_saramin:
+        adapters.append(SaraminAdapter())
     if not adapters:
         log.info("daily_collection: both flags off — using FixtureAdapter as fallback")
         adapters.append(FixtureAdapter())
