@@ -22,9 +22,11 @@ The Agent is **stateless**. It does not connect to MySQL or any other database.
 
 | Feature | Status |
 |---|---|
-| Daily Collection pipeline | Implemented — `DailyCollectionService` orchestrates adapter → normalize → deduplicate → filter |
+| Daily Collection pipeline (V2) | Implemented — 10-stage deterministic pipeline; `DailyCollectionService` orchestrates adapter → normalize → dedup → filter → budget select |
 | FixtureAdapter (local dev) | Implemented — deterministic fixture postings, no network calls, enabled by default |
-| JasoseolAdapter (real source) | Implemented — sitemap-based enumeration + individual page scraping; opt-in via config flag |
+| JasoseolAdapter (real source) | Implemented — sitemap-based enumeration + concurrent page scraping; opt-in via config flag |
+| SaraminAdapter (real source) | Implemented — official Saramin public API; opt-in via `JOB_COLLECTION_ENABLE_SARAMIN=true` and `SARAMIN_ACCESS_KEY` |
+| OfficialCompanyAdapter | Implemented — dispatches per-company sources from `officialCompanySources`; supports `SITEMAP`, `RSS`, `CUSTOM` adapter types |
 | LLM summarization / formatting | Implemented — 2-call strategy (enrichment + synthesis) via `gpt-4o-mini`; deterministic fallback when `OPENAI_API_KEY` is absent or LLM fails |
 | Job briefing filter + rank + Markdown | Implemented — deterministic filter/rank/select + LLM-enhanced enrichment and synthesis (with deterministic fallback) |
 | Scheduler (06:00 KST collection, 08:00 KST briefing) | Implemented, disabled by default (`briefy.scheduler.enabled: false`) |
@@ -42,11 +44,13 @@ Triggered by the Spring Boot scheduler (`DailyCollectionScheduler`) or the admin
 | Step | Owner |
 |---|---|
 | Aggregate seed keywords from active user preferences | Spring (`DailyCollectionService`) |
+| Resolve company names → `companies` rows (`companyProfiles`) | Spring (`DailyCollectionService.resolveCompanyProfiles`) |
+| Resolve company sources → `company_sources` rows (`officialCompanySources`) | Spring (`DailyCollectionService.resolveOfficialSources`) |
 | Create `collection_jobs` row and track lifecycle | Spring (`CollectionJobService`) |
 | Call `POST /collections/daily` | Spring (`AgentClient`) |
-| Generate / scrape raw job postings | Agent (`DailyCollectWorkflow`) |
-| Deduplicate by content hash and URL | Agent (in response) + Spring (upsert ignores existing URLs) |
-| Upsert `job_postings` rows | Spring (`CandidatePoolService`) |
+| Generate / scrape raw job postings (Pipeline V2) | Agent (`DailyCollectionService`) |
+| Deduplicate and merge across sources (10-stage pipeline) | Agent |
+| Upsert `job_postings` and `job_posting_sources` rows | Spring (`CandidatePoolService`) |
 | Mark `collection_jobs` COMPLETED / FAILED | Spring |
 
 ### Agent request (Spring → Agent)
@@ -59,18 +63,40 @@ Triggered by the Spring Boot scheduler (`DailyCollectionScheduler`) or the admin
   "seedKeywords": {
     "roles": ["백엔드 개발자", "풀스택 개발자"],
     "companies": ["네이버", "카카오", "라인"],
+    "companySizes": ["대기업", "중견기업"],
+    "industries": ["IT/인터넷", "게임"],
     "skills": ["Spring Boot", "Java", "Kotlin"],
     "locations": ["서울", "판교"],
     "experienceLevels": ["신입", "3년 이상"],
     "employmentTypes": ["정규직"],
-    "industries": [],
     "keywords": []
   },
   "options": {
     "lookbackDays": 3,
     "deadlineWithinDays": 14,
-    "maxItemsPerSource": 50
-  }
+    "discoveryLimitPerSource": 50,
+    "detailFetchLimitPerSource": 50,
+    "maxResultsPerSource": 50,
+    "maxTotalResults": 200
+  },
+  "companyProfiles": [
+    {
+      "id": 1,
+      "canonicalName": "네이버",
+      "normalizedName": "네이버",
+      "companySize": "대기업",
+      "industryCodes": ["IT/인터넷"]
+    }
+  ],
+  "officialCompanySources": [
+    {
+      "companyId": 1,
+      "sourceType": "CAREERS_PAGE",
+      "sourceUrl": "https://recruit.navercorp.com/sitemap.xml",
+      "adapterType": "SITEMAP",
+      "configJson": null
+    }
+  ]
 }
 ```
 
@@ -78,9 +104,16 @@ Triggered by the Spring Boot scheduler (`DailyCollectionScheduler`) or the admin
 |---|---|
 | `collectionJobId` | Echo'd back in the response so Spring can correlate |
 | `seedKeywords` | Aggregated by Spring from all active `user_briefing_preferences` for each category |
-| `options.lookbackDays` | Collect postings published within the last N days |
-| `options.deadlineWithinDays` | Flag postings with deadline within N days |
-| `options.maxItemsPerSource` | Max items to return per external source |
+| `seedKeywords.companySizes` | Aggregated from `preference_json.companySizes` |
+| `seedKeywords.industries` | Aggregated from `preference_json.industries` |
+| `options.lookbackDays` | Collect postings published within the last N days (default: 3) |
+| `options.deadlineWithinDays` | Flag postings with deadline within N days (default: 14) |
+| `options.discoveryLimitPerSource` | Max URLs to enumerate per source (default: 50) |
+| `options.detailFetchLimitPerSource` | Max detail page fetches per source (default: 50) |
+| `options.maxResultsPerSource` | Max postings selected per source after pipeline (default: 50) |
+| `options.maxTotalResults` | Hard cap on total postings returned (default: 200) |
+| `companyProfiles` | Company Registry rows resolved by Spring for the companies in `seedKeywords.companies` |
+| `officialCompanySources` | Active `company_sources` rows for those companies; used by `OfficialCompanyAdapter` |
 
 ### Agent response (Agent → Spring)
 
@@ -90,8 +123,8 @@ Triggered by the Spring Boot scheduler (`DailyCollectionScheduler`) or the admin
   "collectDate": "2026-07-01",
   "jobPostings": [
     {
-      "source": "원티드",
-      "sourceUrl": "https://www.wanted.co.kr/wd/00123",
+      "source": "jasoseol",
+      "sourceUrl": "https://jasoseol.com/recruit/12345",
       "companyName": "네이버",
       "title": "네이버 백엔드 개발자",
       "position": "백엔드 개발자",
@@ -103,47 +136,97 @@ Triggered by the Spring Boot scheduler (`DailyCollectionScheduler`) or the admin
       "roles": ["백엔드 개발자"],
       "description": "채용 공고 설명",
       "postedAt": "2026-07-01T09:00:00",
-      "contentHash": "a3f2...sha256hex...64chars"
+      "contentHash": "a3f2...sha256hex...64chars",
+      "sourceRecordKey": "b1c2...sha256hex...64chars",
+      "canonicalFingerprint": "c3d4...sha256hex...64chars",
+      "sourceRefs": [
+        {
+          "source": "jasoseol",
+          "sourceExternalId": null,
+          "sourceUrl": "https://jasoseol.com/recruit/12345",
+          "sourceRecordKey": "b1c2...sha256hex...64chars"
+        }
+      ]
     }
   ],
   "companyIssues": [],
   "industryIssues": [],
   "stats": {
-    "collectedCount": 5,
-    "deduplicatedCount": 0,
-    "jobPostingCount": 5,
-    "companyIssueCount": 0,
-    "industryIssueCount": 0
+    "discovered": 80,
+    "fetched": 50,
+    "parsed": 48,
+    "exactDuplicates": 3,
+    "crossSourceMerged": 2,
+    "expiredFiltered": 5,
+    "staleFiltered": 1,
+    "truncated": 0,
+    "final": 37,
+    "collectedCount": 80,
+    "deduplicatedCount": 3,
+    "jobPostingCount": 37
   },
   "warnings": []
 }
 ```
 
-After receiving this response, Spring upserts all items in `jobPostings` into the `job_postings` table via `CandidatePoolService.upsertJobPostings`. Rows with a URL that already exists are skipped.
+| Field | Notes |
+|---|---|
+| `jobPostings[].sourceRecordKey` | SHA-256 identity key for this source record; stored in `job_posting_sources.source_record_key` |
+| `jobPostings[].canonicalFingerprint` | SHA-256(norm_company + norm_title + deadline); cross-source merge key |
+| `jobPostings[].sourceRefs` | All source records that were merged into this canonical posting |
+| `stats.discovered` | URLs enumerated across all adapters before any fetching |
+| `stats.fetched` | Detail pages actually fetched (bounded by `detailFetchLimitPerSource`) |
+| `stats.parsed` | Postings successfully parsed from fetched pages |
+| `stats.exactDuplicates` | Items removed by same-source `source_record_key` dedup |
+| `stats.crossSourceMerged` | Items merged across sources by `canonical_fingerprint` |
+| `stats.expiredFiltered` | Items removed because `deadline < collect_date` |
+| `stats.staleFiltered` | Items removed because `posted_at < collect_date - lookback_days` |
+| `stats.truncated` | Items cut by budget selection (`maxTotalResults`) |
+| `stats.final` | Final count of returned postings |
+| `stats.collectedCount` | Alias for `discovered` (backward compat) |
+| `stats.deduplicatedCount` | Alias for `exactDuplicates` (backward compat) |
+| `stats.jobPostingCount` | Alias for `final` (backward compat) |
 
-### Pipeline structure (implemented)
+After receiving this response, Spring upserts all items in `jobPostings` into `job_postings` and `job_posting_sources` via `CandidatePoolService.upsertJobPostings`.
 
-`POST /collections/daily` is handled by `DailyCollectionService` (`app/services/daily_collection.py`). It is a sequential pipeline — no LangGraph, no LLM.
+### Pipeline structure — V2 (implemented)
+
+`POST /collections/daily` is handled by `DailyCollectionService` (`app/services/daily_collection.py`). It is a sequential 10-stage deterministic pipeline — no LangGraph, no LLM.
 
 ```
 DailyCollectRequest
       │
-      ├─ [gate] JOB_POSTING not in categories → return empty response
+      ├─ [1] Category gate: JOB_POSTING not in categories → return empty response
       │
-      ├─ build adapter list from config flags
-      │     JOB_COLLECTION_USE_FIXTURE=true  → add FixtureAdapter
-      │     JOB_COLLECTION_ENABLE_REAL_SOURCES=true → add JasoseolAdapter
-      │     both false → FixtureAdapter (safe fallback)
+      ├─ [2] Build adapter list from config flags
+      │         JOB_COLLECTION_USE_FIXTURE=true         → add FixtureAdapter
+      │         JOB_COLLECTION_ENABLE_REAL_SOURCES=true → add JasoseolAdapter
+      │         JOB_COLLECTION_ENABLE_SARAMIN=true      → add SaraminAdapter
+      │         officialCompanySources present          → add OfficialCompanyAdapter
+      │         all false / empty → FixtureAdapter (safe fallback)
       │
-      ├─ fetch raw postings from each adapter (sequential)
+      ├─ [3] Collect: fetch raw postings from each adapter; accumulate AdapterSourceStats
       │
-      ├─ normalize (clean whitespace, compute SHA-256 content hash)
+      ├─ [4] Normalize: clean whitespace, lower-case fields, compute content_hash and
+      │         canonical_fingerprint per posting
       │
-      ├─ deduplicate (3-level: source_url → content_hash → company+title+deadline triple)
+      ├─ [5] Source dedup: drop exact duplicates by source_record_key within each adapter
       │
-      └─ filter (remove expired deadlines; remove posted_at older than lookback window)
-            │
-            └─ DailyCollectResponse (jobPostings, stats, warnings)
+      ├─ [6] Deadline filter: remove postings where deadline < collect_date
+      │
+      ├─ [7] Company canonicalization: match normalized company name against
+      │         companyProfiles; attach canonical_fingerprint using Company Registry data
+      │
+      ├─ [8] Cross-source dedup: group by canonical_fingerprint; keep one canonical posting,
+      │         collect all source URLs into source_refs
+      │
+      ├─ [9] Score & sort: deterministic relevance score (no LLM)
+      │
+      └─ [10] Budget select: apply discoveryLimitPerSource / maxResultsPerSource /
+                maxTotalResults; reserve _EXPLORATION_RATIO (0.2) of budget for
+                lower-scored postings to avoid over-fitting to top companies
+                    │
+                    └─ DailyCollectResponse (jobPostings, stats, warnings)
 ```
 
 Spring (not the Agent) owns the save step after receiving the response.
@@ -169,7 +252,7 @@ class JobBoardAdapter(ABC):
     ) -> AdapterResult: ...
 ```
 
-`AdapterResult` contains a list of `RawJobPosting` objects and an accumulated `warnings` list. Adapters never raise to the caller — all per-item failures are caught and appended to `warnings`.
+`AdapterResult` contains a list of `RawJobPosting` objects, an accumulated `warnings` list, and an `AdapterSourceStats` dataclass (`discovered`, `fetched`, `parsed`, `selected`). Adapters never raise to the caller — all per-item failures are caught and appended to `warnings`.
 
 ### FixtureAdapter
 
@@ -195,7 +278,7 @@ class JobBoardAdapter(ABC):
    - `/sitemap/intern_employment_companies.xml` (인턴 공고)
 2. Parse `<lastmod>` dates; keep only URLs where `lastmod >= collect_date - lookback_days`.
    URLs without `<lastmod>` are included conservatively.
-3. Sort by `lastmod` descending; cap at `options.max_items_per_source` per sitemap.
+3. Sort by `lastmod` descending; cap at `options.discovery_limit_per_source` per sitemap.
 4. Fetch individual `/recruit/{id}` pages concurrently (max 5 at a time via `asyncio.Semaphore`).
 5. Parse each page HTML for posting data.
 
@@ -232,6 +315,53 @@ jasoseol.com allows all paths under `/`. No login, no CAPTCHA bypass, no browser
 
 All per-operation failures (network timeout, HTTP error, XML parse error, HTML parse error) are caught, logged, and appended to `AdapterResult.warnings`. The adapter never raises to `DailyCollectionService`.
 
+### SaraminAdapter
+
+**File:** `app/adapters/saramin.py`  
+**Source name:** `saramin`  
+**Default:** inactive; enabled when `JOB_COLLECTION_ENABLE_SARAMIN=true` and `SARAMIN_ACCESS_KEY` is set
+
+#### Strategy
+
+1. Build a bounded query plan from `seed_keywords` — one query per (role, location) combination, capped at `SARAMIN_MAX_QUERIES_PER_COLLECT` (default: 10).
+2. For each query, call the official Saramin public API (`GET /job-search`) with pagination, advancing `start` by the number of results returned each page.
+3. Deduplicates job keys using a `frozenset` within the adapter run to avoid re-fetching.
+4. No HTML scraping — all data comes from the structured API response.
+
+#### Known limitations
+
+| Field | Status |
+|---|---|
+| `description` | Not returned by the API; `None` |
+| `roles` | Not returned by the API; `[]` |
+
+#### API credentials
+
+Requires a free-tier Saramin developer API key from `https://oapi.saramin.co.kr`. Set `SARAMIN_ACCESS_KEY` in `apps/agent/.env`.
+
+---
+
+### OfficialCompanyAdapter
+
+**File:** `app/adapters/official_company.py`  
+**Source name:** varies (uses `source_type` from the `CompanySource` row)  
+**Default:** active when `officialCompanySources` in the collection request is non-empty
+
+#### Strategy
+
+For each `OfficialCompanySource` in the request, dispatches based on `adapter_type`:
+
+| `adapter_type` | Handler | Description |
+|---|---|---|
+| `SITEMAP` | `_handle_sitemap` | Fetches the sitemap XML, parses `<loc>` URLs, fetches each job page and extracts fields |
+| `RSS` | `_handle_rss` | Fetches the RSS feed, parses `<item>` elements for title/link/description/pubDate |
+| `CUSTOM` | `_handle_custom` | Looks up a custom parser by `company_id` in `_CUSTOM_REGISTRY`; calls its `parse()` method |
+
+- `source_url` is optional — a missing URL triggers a warning and the source is skipped rather than raising.
+- All per-source failures (HTTP errors, parse errors, timeouts) are caught and appended to `AdapterResult.warnings`.
+
+---
+
 ### Config flags
 
 Set in `apps/agent/.env` (or environment variables):
@@ -239,19 +369,22 @@ Set in `apps/agent/.env` (or environment variables):
 | Variable | Default | Effect |
 |---|---|---|
 | `JOB_COLLECTION_USE_FIXTURE` | `true` | Include FixtureAdapter in the pipeline |
-| `JOB_COLLECTION_ENABLE_REAL_SOURCES` | `false` | Include JasoseolAdapter (and future real adapters) |
+| `JOB_COLLECTION_ENABLE_REAL_SOURCES` | `false` | Include JasoseolAdapter |
+| `JOB_COLLECTION_ENABLE_SARAMIN` | `false` | Include SaraminAdapter |
 | `JOB_COLLECTION_TIMEOUT_SECONDS` | `10` | Per-request HTTP timeout for real adapters |
-| `JASOSEOL_BASE_URL` | `https://jasoseol.com` | Override base URL for testing |
+| `JASOSEOL_BASE_URL` | `https://jasoseol.com` | Override Jasoseol base URL for testing |
+| `SARAMIN_ACCESS_KEY` | _(required)_ | Saramin public API access key |
+| `SARAMIN_API_BASE_URL` | `https://oapi.saramin.co.kr` | Override Saramin API base URL for testing |
+| `SARAMIN_MAX_QUERIES_PER_COLLECT` | `10` | Max (role × location) query combinations per run |
 
-Both flags can be `true` simultaneously — postings from all active adapters are merged before deduplication.  
-If both are `false`, `FixtureAdapter` is used as a safe fallback so the pipeline never returns nothing unexpectedly.
+All real-source flags can be `true` simultaneously — postings from all active adapters are merged and deduplicated.  
+If all real-source flags are `false`, `FixtureAdapter` is used as a safe fallback so the pipeline never returns nothing unexpectedly.
 
-### Tools — future adapters (planned)
+### Future adapters (planned)
 
 | Adapter | Phase | Purpose |
 |---|---|---|
 | `WantedAdapter` | 1st MVP (future) | Wanted.co.kr public API or RSS |
-| `SaraminAdapter` | 1st MVP (future) | 사람인 public listings |
 | `company_news_fetcher` | 1.5 MVP | Company news and hiring changes |
 | `industry_news_fetcher` | 2nd MVP | Industry/market news (information-only) |
 
@@ -509,18 +642,24 @@ curl -s -X POST http://localhost:8000/collections/daily \
     "seedKeywords": {
       "roles": ["백엔드 개발자", "서버 개발자"],
       "companies": ["삼성", "현대", "LG", "SK"],
+      "companySizes": ["대기업"],
+      "industries": ["IT/인터넷", "반도체"],
       "skills": ["Java", "Spring Boot", "SQL"],
       "locations": ["서울", "경기"],
       "experienceLevels": ["신입", "인턴"],
       "employmentTypes": ["정규직", "인턴"],
-      "industries": [],
       "keywords": []
     },
     "options": {
       "lookbackDays": 7,
       "deadlineWithinDays": 14,
-      "maxItemsPerSource": 25
-    }
+      "discoveryLimitPerSource": 25,
+      "detailFetchLimitPerSource": 25,
+      "maxResultsPerSource": 25,
+      "maxTotalResults": 100
+    },
+    "companyProfiles": [],
+    "officialCompanySources": []
   }' | jq .
 ```
 
@@ -639,7 +778,7 @@ poetry run uvicorn app.main:app --reload --log-level debug
 
 ## Future: Adding More Sources
 
-1. **Adding more job-board adapters** — implement new `JobBoardAdapter` subclasses (e.g. `WantedAdapter`, `SaraminAdapter`) in `app/adapters/`. Register them in `DailyCollectionService._build_adapters()` behind the `job_collection_enable_real_sources` flag or a new per-source flag.
+1. **Adding more job-board adapters** — implement new `JobBoardAdapter` subclasses (e.g. `WantedAdapter`) in `app/adapters/`. Register them in `DailyCollectionService._build_adapters()` behind a per-source config flag.
 2. **Do not add DB access to the Agent** — keep Spring as the single DB owner. Pass data in request bodies.
 3. **Do not mix future phases into current code** — create `company_briefing_graph.py` (1.5 MVP) and `industry_briefing_graph.py` (2nd MVP) as new files.
 
@@ -648,8 +787,10 @@ poetry run uvicorn app.main:app --reload --log-level debug
 | File | Phase | Notes |
 |---|---|---|
 | `daily_collection.py` + `FixtureAdapter` | 1st MVP (current) | Active; fixture mode default |
-| `daily_collection.py` + `JasoseolAdapter` | 1st MVP (current) | Active; opt-in via config flag |
+| `daily_collection.py` + `JasoseolAdapter` | 1st MVP (current) | Active; opt-in via `JOB_COLLECTION_ENABLE_REAL_SOURCES` |
+| `daily_collection.py` + `SaraminAdapter` | 1st MVP (current) | Active; opt-in via `JOB_COLLECTION_ENABLE_SARAMIN` + `SARAMIN_ACCESS_KEY` |
+| `daily_collection.py` + `OfficialCompanyAdapter` | 1st MVP (current) | Active when `officialCompanySources` non-empty in request |
 | `user_briefing_graph.py` (via `/briefings/generate`) | 1st MVP (current) | Active; LLM enrichment + synthesis with deterministic fallback |
-| More real adapters (Wanted, 사람인, …) | 1st MVP (future) | Add to adapter package |
+| More real adapters (Wanted, …) | 1st MVP (future) | Add to adapter package |
 | `company_briefing_graph.py` | 1.5 MVP | Company news, hiring changes, earnings summaries |
 | `industry_briefing_graph.py` | 2nd MVP | IT/AI, semiconductor, platform, finance; information-only |
