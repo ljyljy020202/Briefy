@@ -120,7 +120,7 @@ async def test_collect_daily_no_real_network_calls_in_fixture_mode(client, monke
 
     monkeypatch.setattr(
         "app.services.daily_collection._build_adapters",
-        lambda: [FixtureAdapter()],
+        lambda _req: [FixtureAdapter()],
     )
     response = await client.post("/collections/daily", json=COLLECT_REQUEST)
     postings = response.json()["jobPostings"]

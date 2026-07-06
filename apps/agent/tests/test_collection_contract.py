@@ -42,7 +42,29 @@ def test_official_company_source_serializes_to_camel_case():
     assert data["sourceType"] == "WANTED"
     assert data["adapterType"] == "WantedAdapter"
     assert data["configJson"] is None
+    assert data["sourceUrl"] is None
     assert "company_id" not in data
+
+
+def test_official_company_source_source_url_round_trips():
+    source = OfficialCompanySource(
+        company_id=42,
+        source_type="CAREERS_PAGE",
+        adapter_type="SITEMAP",
+        source_url="https://careers.example.com/sitemap.xml",
+    )
+    data = source.model_dump(by_alias=True)
+    assert data["sourceUrl"] == "https://careers.example.com/sitemap.xml"
+    assert "source_url" not in data
+
+    restored = OfficialCompanySource.model_validate(data)
+    assert restored.source_url == "https://careers.example.com/sitemap.xml"
+
+
+def test_official_company_source_no_source_url_backward_compat():
+    old_json = {"companyId": 5, "sourceType": "FEED", "adapterType": "RSS"}
+    source = OfficialCompanySource.model_validate(old_json)
+    assert source.source_url is None
 
 
 def test_source_ref_serializes_to_camel_case():

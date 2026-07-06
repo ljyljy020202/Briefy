@@ -1,6 +1,7 @@
 package com.briefy.domain.company.repository;
 
 import com.briefy.domain.company.entity.Company;
+import java.util.Collection;
 import java.util.List;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -24,4 +25,7 @@ public interface CompanyRepository extends JpaRepository<Company, Long> {
       ORDER BY c.canonicalName ASC
       """)
   List<Company> searchByQuery(@Param("q") String q, Pageable pageable);
+
+  @Query("SELECT c FROM Company c WHERE c.active = true AND c.normalizedName IN :names")
+  List<Company> findActiveByNormalizedNames(@Param("names") Collection<String> names);
 }
