@@ -23,6 +23,7 @@ import com.briefy.domain.company.repository.CompanySourceRepository;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -214,7 +215,10 @@ public class DailyCollectionService {
                     p.employmentType(),
                     p.experienceLevel(),
                     p.contentHash(),
-                    parseDateTime(p.postedAt())))
+                    parseDateTime(p.postedAt()),
+                    p.sourceRecordKey(),
+                    p.sourceExternalId(),
+                    p.canonicalFingerprint()))
         .toList();
   }
 
@@ -264,13 +268,22 @@ public class DailyCollectionService {
         companyNames.stream().map(n -> n.toLowerCase().trim()).distinct().toList();
     return companyRepository.findActiveByNormalizedNames(normalized).stream()
         .map(
-            c ->
-                new AgentCompanyProfile(
-                    c.getId(),
-                    c.getCanonicalName(),
-                    c.getNormalizedName(),
-                    c.getCompanySize(),
-                    List.of()))
+            c -> {
+              String codes = c.getIndustryCodes();
+              List<String> industryCodes =
+                  (codes == null || codes.isBlank())
+                      ? List.of()
+                      : Arrays.stream(codes.split(","))
+                          .map(String::strip)
+                          .filter(s -> !s.isEmpty())
+                          .toList();
+              return new AgentCompanyProfile(
+                  c.getId(),
+                  c.getCanonicalName(),
+                  c.getNormalizedName(),
+                  c.getCompanySize(),
+                  industryCodes);
+            })
         .toList();
   }
 

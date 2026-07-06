@@ -44,7 +44,22 @@ class CandidatePoolServiceIntegrationTest {
   private CollectedJobPostingData posting(
       String source, String url, String contentHash, String title) {
     return new CollectedJobPostingData(
-        title, "네이버", source, url, "서울", null, "설명", null, null, null, null, contentHash, null);
+        title,
+        "네이버",
+        source,
+        url,
+        "서울",
+        null,
+        "설명",
+        null,
+        null,
+        null,
+        null,
+        contentHash,
+        null,
+        null,
+        null,
+        null);
   }
 
   private CollectedJobPostingData posting(String source, String url, String contentHash) {
@@ -100,9 +115,26 @@ class CandidatePoolServiceIntegrationTest {
     em.flush();
     em.clear();
 
-    // Same content arrives from a different source — different URL, same contentHash.
+    // Same content from a different source — different URL, but the Agent has computed
+    // the same canonicalFingerprint, allowing Spring to attach a second source record.
     CollectedJobPostingData jumpitPosting =
-        posting("점핏", "https://jumpit.com/job/99", "fingerprint1");
+        new CollectedJobPostingData(
+            "백엔드 개발자",
+            "네이버",
+            "점핏",
+            "https://jumpit.com/job/99",
+            "서울",
+            null,
+            "설명",
+            null,
+            null,
+            null,
+            null,
+            "fingerprint1",
+            null,
+            null,
+            null,
+            "fingerprint1"); // canonicalFingerprint matches the existing DB row
     CandidatePoolUpsertResult result =
         candidatePoolService.upsertJobPostings(List.of(jumpitPosting), DATE_2);
     em.flush();
@@ -138,6 +170,9 @@ class CandidatePoolServiceIntegrationTest {
             null,
             null,
             "hash-unknown",
+            null,
+            null,
+            null,
             null);
 
     CandidatePoolUpsertResult result =
@@ -164,7 +199,7 @@ class CandidatePoolServiceIntegrationTest {
         new CollectedJobPostingData(
             null, // NOT NULL title → constraint violation on flush
             "네이버", null, null, // null url → no source record, no url lookup, falls through to save
-            null, null, null, null, null, null, null, null, null);
+            null, null, null, null, null, null, null, null, null, null, null, null);
 
     assertThatThrownBy(() -> candidatePoolService.upsertJobPostings(List.of(good, bad), DATE_1))
         .isInstanceOf(Exception.class);

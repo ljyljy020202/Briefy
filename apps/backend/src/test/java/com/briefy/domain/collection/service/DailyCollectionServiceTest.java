@@ -83,7 +83,10 @@ class DailyCollectionServiceTest {
         List.of("백엔드 개발자"),
         "채용 공고 설명",
         "2026-06-30T09:00:00",
-        "a".repeat(64));
+        "a".repeat(64),
+        null,
+        null,
+        null);
   }
 
   private AgentCollectionResponse agentResponse(List<AgentCollectedJobPosting> postings) {
@@ -383,6 +386,7 @@ class DailyCollectionServiceTest {
     when(naver.getCanonicalName()).thenReturn("네이버");
     when(naver.getNormalizedName()).thenReturn("네이버");
     when(naver.getCompanySize()).thenReturn("대기업");
+    when(naver.getIndustryCodes()).thenReturn(null);
     when(companyRepository.findActiveByNormalizedNames(any())).thenReturn(List.of(naver));
 
     ArgumentCaptor<AgentCollectionRequest> captor =
@@ -399,6 +403,40 @@ class DailyCollectionServiceTest {
     assertThat(sent.companyProfiles().get(0).canonicalName()).isEqualTo("네이버");
     assertThat(sent.companyProfiles().get(0).normalizedName()).isEqualTo("네이버");
     assertThat(sent.companyProfiles().get(0).companySize()).isEqualTo("대기업");
+    assertThat(sent.companyProfiles().get(0).industryCodes()).isEmpty();
+  }
+
+  @Test
+  void resolveCompanyProfiles_populatesIndustryCodes() {
+    CollectionJob job = pendingJob();
+    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+
+    UserBriefingPreference pref = mock(UserBriefingPreference.class);
+    when(pref.getPreference()).thenReturn(Map.of("companies", List.of("카카오")));
+    when(userBriefingPreferenceRepository.findAllByCategoryCodeAndActiveTrue(
+            BriefingCategoryCode.JOB_POSTING))
+        .thenReturn(List.of(pref));
+
+    Company kakao = mock(Company.class);
+    when(kakao.getId()).thenReturn(2L);
+    when(kakao.getCanonicalName()).thenReturn("카카오");
+    when(kakao.getNormalizedName()).thenReturn("카카오");
+    when(kakao.getCompanySize()).thenReturn(null);
+    when(kakao.getIndustryCodes()).thenReturn("IT/소프트웨어, 핀테크 , 게임");
+    when(companyRepository.findActiveByNormalizedNames(any())).thenReturn(List.of(kakao));
+
+    ArgumentCaptor<AgentCollectionRequest> captor =
+        ArgumentCaptor.forClass(AgentCollectionRequest.class);
+    when(agentClient.triggerDailyCollection(captor.capture())).thenReturn(agentResponse(List.of()));
+    when(candidatePoolService.upsertJobPostings(any(), any()))
+        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+
+    dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
+
+    AgentCollectionRequest sent = captor.getValue();
+    assertThat(sent.companyProfiles()).hasSize(1);
+    assertThat(sent.companyProfiles().get(0).industryCodes())
+        .containsExactlyInAnyOrder("IT/소프트웨어", "핀테크", "게임");
   }
 
   @Test
@@ -442,6 +480,7 @@ class DailyCollectionServiceTest {
     when(kakao.getCanonicalName()).thenReturn("카카오");
     when(kakao.getNormalizedName()).thenReturn("카카오");
     when(kakao.getCompanySize()).thenReturn(null);
+    when(kakao.getIndustryCodes()).thenReturn(null);
     when(companyRepository.findActiveByNormalizedNames(any())).thenReturn(List.of(kakao));
 
     CompanySource source = mock(CompanySource.class);

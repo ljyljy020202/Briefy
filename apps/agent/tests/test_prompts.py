@@ -433,3 +433,69 @@ def test_enrichment_system_prompt_requires_concrete_matching_examples():
     prompt = job_enrichment.get_system_prompt()
     # The prompt should show a concrete example (Spring Boot, 백엔드 개발자, etc.)
     assert "Spring Boot" in prompt or "백엔드 개발자" in prompt
+
+
+# ===========================================================================
+# JobPostingPreference — companySizes and industries (Bug 3 fix)
+# ===========================================================================
+
+
+def test_preference_schema_accepts_company_sizes_camel_case():
+    pref = JobPostingPreference.model_validate({"companySizes": ["대기업", "스타트업"]})
+    assert pref.company_sizes == ["대기업", "스타트업"]
+
+
+def test_preference_schema_accepts_industries_camel_case():
+    pref = JobPostingPreference.model_validate({"industries": ["IT/소프트웨어"]})
+    assert pref.industries == ["IT/소프트웨어"]
+
+
+def test_preference_schema_defaults_company_sizes_to_empty():
+    pref = JobPostingPreference()
+    assert pref.company_sizes == []
+
+
+def test_preference_schema_defaults_industries_to_empty():
+    pref = JobPostingPreference()
+    assert pref.industries == []
+
+
+def test_preference_schema_old_six_field_request_still_works():
+    pref = JobPostingPreference(
+        roles=["백엔드 개발자"],
+        companies=["네이버"],
+        skills=["Spring Boot"],
+        locations=["서울"],
+        experience_levels=["신입"],
+        employment_types=["정규직"],
+    )
+    assert pref.company_sizes == []
+    assert pref.industries == []
+    assert pref.roles == ["백엔드 개발자"]
+
+
+def test_format_preference_includes_company_sizes():
+    pref = JobPostingPreference(company_sizes=["대기업", "중견기업"])
+    result = briefing_synthesis._format_preference(pref)
+    assert "대기업" in result
+    assert "중견기업" in result
+
+
+def test_format_preference_includes_industries():
+    pref = JobPostingPreference(industries=["IT/소프트웨어"])
+    result = briefing_synthesis._format_preference(pref)
+    assert "IT/소프트웨어" in result
+
+
+def test_format_preference_shows_unset_for_empty_company_sizes():
+    pref = JobPostingPreference()
+    result = briefing_synthesis._format_preference(pref)
+    assert "기업 규모" in result
+    assert "미지정" in result
+
+
+def test_format_preference_shows_unset_for_empty_industries():
+    pref = JobPostingPreference()
+    result = briefing_synthesis._format_preference(pref)
+    assert "관심 산업" in result
+    assert "미지정" in result

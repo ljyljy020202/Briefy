@@ -16,4 +16,7 @@ public record AgentCollectedJobPosting(
     List<String> roles,
     String description,
     String postedAt,
-    String contentHash) {}
+    String contentHash,
+    String sourceExternalId,
+    String sourceRecordKey,
+    String canonicalFingerprint) {}

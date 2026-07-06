@@ -16,4 +16,7 @@ public record CollectedJobPostingData(
     String employmentType,
     String experienceLevel,
     String contentHash,
-    LocalDateTime publishedAt) {}
+    LocalDateTime publishedAt,
+    String sourceRecordKey,
+    String sourceExternalId,
+    String canonicalFingerprint) {}
