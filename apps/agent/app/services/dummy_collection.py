@@ -111,11 +111,10 @@ def collect(request: DailyCollectRequest) -> DailyCollectResponse:
         job_postings = _build_job_postings(request)
 
     stats = CollectionStats(
-        collected_count=len(job_postings),
-        deduplicated_count=0,
-        job_posting_count=len(job_postings),
-        company_issue_count=0,
-        industry_issue_count=0,
+        discovered=len(job_postings),
+        fetched=len(job_postings),
+        parsed=len(job_postings),
+        final=len(job_postings),
     )
 
     return DailyCollectResponse(
