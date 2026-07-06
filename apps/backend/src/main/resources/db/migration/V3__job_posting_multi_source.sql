@@ -30,10 +30,10 @@ ALTER TABLE job_postings
 ALTER TABLE job_postings
     ADD COLUMN canonical_fingerprint VARCHAR(64) NULL AFTER content_hash;
 
-CREATE INDEX IF NOT EXISTS idx_job_postings_company_id
+CREATE INDEX idx_job_postings_company_id
     ON job_postings (company_id);
 
-CREATE INDEX IF NOT EXISTS idx_job_postings_canonical_fingerprint
+CREATE INDEX idx_job_postings_canonical_fingerprint
     ON job_postings (canonical_fingerprint);
 
 -- ---------------------------------------------------------------------------
@@ -61,6 +61,6 @@ CREATE TABLE IF NOT EXISTS job_posting_sources
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
 
-CREATE INDEX IF NOT EXISTS idx_jps_job_posting_id ON job_posting_sources (job_posting_id);
-CREATE INDEX IF NOT EXISTS idx_jps_source ON job_posting_sources (source);
-CREATE INDEX IF NOT EXISTS idx_jps_is_active ON job_posting_sources (is_active);
+CREATE INDEX idx_jps_job_posting_id ON job_posting_sources (job_posting_id);
+CREATE INDEX idx_jps_source ON job_posting_sources (source);
+CREATE INDEX idx_jps_is_active ON job_posting_sources (is_active);

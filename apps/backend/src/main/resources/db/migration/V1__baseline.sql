@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS users
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
 
-CREATE INDEX IF NOT EXISTS idx_users_status ON users (status);
+CREATE INDEX idx_users_status ON users (status);
 
 -- ---------------------------------------------------------------------------
 -- briefing_categories
@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS briefing_categories
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
 
-CREATE INDEX IF NOT EXISTS idx_briefing_categories_active ON briefing_categories (is_active);
+CREATE INDEX idx_briefing_categories_active ON briefing_categories (is_active);
 
 -- ---------------------------------------------------------------------------
 -- collection_jobs
@@ -92,9 +92,9 @@ CREATE TABLE IF NOT EXISTS collection_jobs
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
 
-CREATE INDEX IF NOT EXISTS idx_collection_jobs_date        ON collection_jobs (collection_date);
-CREATE INDEX IF NOT EXISTS idx_collection_jobs_status      ON collection_jobs (status);
-CREATE INDEX IF NOT EXISTS idx_collection_jobs_date_status ON collection_jobs (collection_date, status);
+CREATE INDEX idx_collection_jobs_date        ON collection_jobs (collection_date);
+CREATE INDEX idx_collection_jobs_status      ON collection_jobs (status);
+CREATE INDEX idx_collection_jobs_date_status ON collection_jobs (collection_date, status);
 
 -- ---------------------------------------------------------------------------
 -- job_postings
@@ -122,13 +122,13 @@ CREATE TABLE IF NOT EXISTS job_postings
     created_at       DATETIME(6),
     updated_at       DATETIME(6),
     PRIMARY KEY (id),
-    CONSTRAINT uq_job_postings_url UNIQUE (url)
+    CONSTRAINT uq_job_postings_url UNIQUE (url(191))
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
 
-CREATE INDEX IF NOT EXISTS idx_job_postings_collected_date ON job_postings (collected_date);
-CREATE INDEX IF NOT EXISTS idx_job_postings_content_hash   ON job_postings (content_hash);
+CREATE INDEX idx_job_postings_collected_date ON job_postings (collected_date);
+CREATE INDEX idx_job_postings_content_hash   ON job_postings (content_hash);
 
 -- ---------------------------------------------------------------------------
 -- company_issues
@@ -149,13 +149,13 @@ CREATE TABLE IF NOT EXISTS company_issues
     created_at     DATETIME(6),
     updated_at     DATETIME(6),
     PRIMARY KEY (id),
-    CONSTRAINT uq_company_issues_url UNIQUE (url)
+    CONSTRAINT uq_company_issues_url UNIQUE (url(191))
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
 
-CREATE INDEX IF NOT EXISTS idx_company_issues_collected_date ON company_issues (collected_date);
-CREATE INDEX IF NOT EXISTS idx_company_issues_company        ON company_issues (company);
+CREATE INDEX idx_company_issues_collected_date ON company_issues (collected_date);
+CREATE INDEX idx_company_issues_company        ON company_issues (company);
 
 -- ---------------------------------------------------------------------------
 -- industry_issues
@@ -175,13 +175,13 @@ CREATE TABLE IF NOT EXISTS industry_issues
     created_at     DATETIME(6),
     updated_at     DATETIME(6),
     PRIMARY KEY (id),
-    CONSTRAINT uq_industry_issues_url UNIQUE (url)
+    CONSTRAINT uq_industry_issues_url UNIQUE (url(191))
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
 
-CREATE INDEX IF NOT EXISTS idx_industry_issues_collected_date ON industry_issues (collected_date);
-CREATE INDEX IF NOT EXISTS idx_industry_issues_category       ON industry_issues (category);
+CREATE INDEX idx_industry_issues_collected_date ON industry_issues (collected_date);
+CREATE INDEX idx_industry_issues_category       ON industry_issues (category);
 
 -- ---------------------------------------------------------------------------
 -- briefing_jobs
@@ -206,8 +206,8 @@ CREATE TABLE IF NOT EXISTS briefing_jobs
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
 
-CREATE INDEX IF NOT EXISTS idx_briefing_jobs_user   ON briefing_jobs (user_id);
-CREATE INDEX IF NOT EXISTS idx_briefing_jobs_status ON briefing_jobs (status);
+CREATE INDEX idx_briefing_jobs_user   ON briefing_jobs (user_id);
+CREATE INDEX idx_briefing_jobs_status ON briefing_jobs (status);
 
 -- ---------------------------------------------------------------------------
 -- user_briefing_preferences
@@ -232,8 +232,8 @@ CREATE TABLE IF NOT EXISTS user_briefing_preferences
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
 
-CREATE INDEX IF NOT EXISTS idx_ubp_user     ON user_briefing_preferences (user_id);
-CREATE INDEX IF NOT EXISTS idx_ubp_category ON user_briefing_preferences (category_id);
+CREATE INDEX idx_ubp_user     ON user_briefing_preferences (user_id);
+CREATE INDEX idx_ubp_category ON user_briefing_preferences (category_id);
 
 -- ---------------------------------------------------------------------------
 -- briefing_reports
@@ -263,8 +263,8 @@ CREATE TABLE IF NOT EXISTS briefing_reports
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
 
-CREATE INDEX IF NOT EXISTS idx_briefing_reports_user      ON briefing_reports (user_id);
-CREATE INDEX IF NOT EXISTS idx_briefing_reports_user_date ON briefing_reports (user_id, report_date);
+CREATE INDEX idx_briefing_reports_user      ON briefing_reports (user_id);
+CREATE INDEX idx_briefing_reports_user_date ON briefing_reports (user_id, report_date);
 
 -- ---------------------------------------------------------------------------
 -- briefing_articles
@@ -290,7 +290,7 @@ CREATE TABLE IF NOT EXISTS briefing_articles
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
 
-CREATE INDEX IF NOT EXISTS idx_briefing_articles_report ON briefing_articles (briefing_report_id);
+CREATE INDEX idx_briefing_articles_report ON briefing_articles (briefing_report_id);
 
 -- ---------------------------------------------------------------------------
 -- delivery_logs
@@ -317,5 +317,5 @@ CREATE TABLE IF NOT EXISTS delivery_logs
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
 
-CREATE INDEX IF NOT EXISTS idx_delivery_logs_user   ON delivery_logs (user_id);
-CREATE INDEX IF NOT EXISTS idx_delivery_logs_report ON delivery_logs (briefing_report_id);
+CREATE INDEX idx_delivery_logs_user   ON delivery_logs (user_id);
+CREATE INDEX idx_delivery_logs_report ON delivery_logs (briefing_report_id);

@@ -27,8 +27,8 @@ CREATE TABLE IF NOT EXISTS companies
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
 
-CREATE INDEX IF NOT EXISTS idx_companies_canonical_name ON companies (canonical_name);
-CREATE INDEX IF NOT EXISTS idx_companies_is_active ON companies (is_active);
+CREATE INDEX idx_companies_canonical_name ON companies (canonical_name);
+CREATE INDEX idx_companies_is_active ON companies (is_active);
 
 -- ---------------------------------------------------------------------------
 -- company_aliases
@@ -47,8 +47,8 @@ CREATE TABLE IF NOT EXISTS company_aliases
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
 
-CREATE INDEX IF NOT EXISTS idx_company_aliases_company_id ON company_aliases (company_id);
-CREATE INDEX IF NOT EXISTS idx_company_aliases_alias ON company_aliases (alias);
+CREATE INDEX idx_company_aliases_company_id ON company_aliases (company_id);
+CREATE INDEX idx_company_aliases_alias ON company_aliases (alias);
 
 -- ---------------------------------------------------------------------------
 -- company_sources
@@ -72,5 +72,5 @@ CREATE TABLE IF NOT EXISTS company_sources
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
 
-CREATE INDEX IF NOT EXISTS idx_company_sources_company_id ON company_sources (company_id);
-CREATE INDEX IF NOT EXISTS idx_company_sources_status ON company_sources (status);
+CREATE INDEX idx_company_sources_company_id ON company_sources (company_id);
+CREATE INDEX idx_company_sources_status ON company_sources (status);
