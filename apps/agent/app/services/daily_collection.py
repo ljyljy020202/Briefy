@@ -113,11 +113,22 @@ class DailyCollectionService:
                 )
                 raw_postings.extend(result.postings)
                 warnings.extend(result.warnings)
-                log.info(
-                    "daily_collection: %s returned %d postings",
-                    adapter.source_name,
-                    len(result.postings),
-                )
+                if result.source_stats:
+                    log.info(
+                        "daily_collection: %s discovered=%d fetched=%d "
+                        "parsed=%d selected=%d",
+                        adapter.source_name,
+                        result.source_stats.discovered,
+                        result.source_stats.fetched,
+                        result.source_stats.parsed,
+                        result.source_stats.selected,
+                    )
+                else:
+                    log.info(
+                        "daily_collection: %s returned %d postings",
+                        adapter.source_name,
+                        len(result.postings),
+                    )
             except Exception as exc:
                 msg = f"adapter {adapter.source_name} raised unexpectedly: {exc}"
                 log.warning(msg)
