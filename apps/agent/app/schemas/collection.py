@@ -50,6 +50,7 @@ class OfficialCompanySource(BaseModel):
 
     company_id: int
     source_type: str
+    source_url: str | None = None
     adapter_type: str | None = None
     config_json: str | None = None
 

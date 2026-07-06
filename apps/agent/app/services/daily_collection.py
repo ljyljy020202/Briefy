@@ -20,6 +20,7 @@ import logging
 from app.adapters.base import JobBoardAdapter, RawJobPosting
 from app.adapters.fixture import FixtureAdapter
 from app.adapters.jasoseol import JasoseolAdapter
+from app.adapters.official_company import OfficialCompanyAdapter
 from app.adapters.saramin import SaraminAdapter
 from app.core.config import settings
 from app.schemas.collection import (
@@ -43,7 +44,7 @@ log = logging.getLogger(__name__)
 _JOB_POSTING_CATEGORY = "JOB_POSTING"
 
 
-def _build_adapters() -> list[JobBoardAdapter]:
+def _build_adapters(request: DailyCollectRequest) -> list[JobBoardAdapter]:
     adapters: list[JobBoardAdapter] = []
     if settings.job_collection_use_fixture:
         adapters.append(FixtureAdapter())
@@ -51,6 +52,13 @@ def _build_adapters() -> list[JobBoardAdapter]:
         adapters.append(JasoseolAdapter())
     if settings.job_collection_enable_saramin:
         adapters.append(SaraminAdapter())
+    if request.official_company_sources:
+        adapters.append(
+            OfficialCompanyAdapter(
+                request.official_company_sources,
+                request.company_profiles,
+            )
+        )
     if not adapters:
         log.info("daily_collection: both flags off — using FixtureAdapter as fallback")
         adapters.append(FixtureAdapter())
@@ -103,7 +111,7 @@ class DailyCollectionService:
             )
 
         # Stage 1: Collect
-        adapters = _build_adapters()
+        adapters = _build_adapters(request)
         raw_postings: list[RawJobPosting] = []
         warnings: list[str] = []
 

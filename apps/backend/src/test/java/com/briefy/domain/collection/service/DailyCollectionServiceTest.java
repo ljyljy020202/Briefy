@@ -23,11 +23,16 @@ import com.briefy.domain.candidatepool.service.CandidatePoolService;
 import com.briefy.domain.collection.dto.DailyCollectionResult;
 import com.briefy.domain.collection.entity.CollectionJob;
 import com.briefy.domain.collection.entity.CollectionTriggerType;
+import com.briefy.domain.company.entity.Company;
+import com.briefy.domain.company.entity.CompanySource;
+import com.briefy.domain.company.repository.CompanyRepository;
+import com.briefy.domain.company.repository.CompanySourceRepository;
 import com.briefy.global.exception.BusinessException;
 import com.briefy.global.exception.ErrorCode;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -45,10 +50,18 @@ class DailyCollectionServiceTest {
   @Mock private UserBriefingPreferenceRepository userBriefingPreferenceRepository;
   @Mock private AgentClient agentClient;
   @Mock private CandidatePoolService candidatePoolService;
+  @Mock private CompanyRepository companyRepository;
+  @Mock private CompanySourceRepository companySourceRepository;
 
   @InjectMocks private DailyCollectionService dailyCollectionService;
 
   private static final LocalDate TEST_DATE = LocalDate.of(2026, 6, 30);
+
+  @BeforeEach
+  void setUpCompanyRepos() {
+    when(companyRepository.findActiveByNormalizedNames(any())).thenReturn(List.of());
+    when(companySourceRepository.findActiveByCompanyIds(any(), any())).thenReturn(List.of());
+  }
 
   private CollectionJob pendingJob() {
     return CollectionJob.createPending(
@@ -352,5 +365,122 @@ class DailyCollectionServiceTest {
     assertThat(result.status()).isEqualTo("COMPLETED");
     assertThat(result.collectedCount()).isEqualTo(0);
     assertThat(result.savedCount()).isEqualTo(0);
+  }
+
+  @Test
+  void resolveCompanyProfiles_matchesCompanyByNormalizedName() {
+    CollectionJob job = pendingJob();
+    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+
+    UserBriefingPreference pref = mock(UserBriefingPreference.class);
+    when(pref.getPreference()).thenReturn(Map.of("companies", List.of("네이버", "카카오")));
+    when(userBriefingPreferenceRepository.findAllByCategoryCodeAndActiveTrue(
+            BriefingCategoryCode.JOB_POSTING))
+        .thenReturn(List.of(pref));
+
+    Company naver = mock(Company.class);
+    when(naver.getId()).thenReturn(1L);
+    when(naver.getCanonicalName()).thenReturn("네이버");
+    when(naver.getNormalizedName()).thenReturn("네이버");
+    when(naver.getCompanySize()).thenReturn("대기업");
+    when(companyRepository.findActiveByNormalizedNames(any())).thenReturn(List.of(naver));
+
+    ArgumentCaptor<AgentCollectionRequest> captor =
+        ArgumentCaptor.forClass(AgentCollectionRequest.class);
+    when(agentClient.triggerDailyCollection(captor.capture())).thenReturn(agentResponse(List.of()));
+    when(candidatePoolService.upsertJobPostings(any(), any()))
+        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+
+    dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
+
+    AgentCollectionRequest sent = captor.getValue();
+    assertThat(sent.companyProfiles()).hasSize(1);
+    assertThat(sent.companyProfiles().get(0).id()).isEqualTo(1L);
+    assertThat(sent.companyProfiles().get(0).canonicalName()).isEqualTo("네이버");
+    assertThat(sent.companyProfiles().get(0).normalizedName()).isEqualTo("네이버");
+    assertThat(sent.companyProfiles().get(0).companySize()).isEqualTo("대기업");
+  }
+
+  @Test
+  void resolveCompanyProfiles_noMatchingCompanies_sendsEmptyList() {
+    CollectionJob job = pendingJob();
+    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+
+    UserBriefingPreference pref = mock(UserBriefingPreference.class);
+    when(pref.getPreference()).thenReturn(Map.of("companies", List.of("없는회사")));
+    when(userBriefingPreferenceRepository.findAllByCategoryCodeAndActiveTrue(
+            BriefingCategoryCode.JOB_POSTING))
+        .thenReturn(List.of(pref));
+
+    when(companyRepository.findActiveByNormalizedNames(any())).thenReturn(List.of());
+
+    ArgumentCaptor<AgentCollectionRequest> captor =
+        ArgumentCaptor.forClass(AgentCollectionRequest.class);
+    when(agentClient.triggerDailyCollection(captor.capture())).thenReturn(agentResponse(List.of()));
+    when(candidatePoolService.upsertJobPostings(any(), any()))
+        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+
+    dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
+
+    assertThat(captor.getValue().companyProfiles()).isEmpty();
+    assertThat(captor.getValue().officialCompanySources()).isEmpty();
+  }
+
+  @Test
+  void resolveOfficialSources_loadsActiveSourcesForMatchedCompanies() {
+    CollectionJob job = pendingJob();
+    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+
+    UserBriefingPreference pref = mock(UserBriefingPreference.class);
+    when(pref.getPreference()).thenReturn(Map.of("companies", List.of("카카오")));
+    when(userBriefingPreferenceRepository.findAllByCategoryCodeAndActiveTrue(
+            BriefingCategoryCode.JOB_POSTING))
+        .thenReturn(List.of(pref));
+
+    Company kakao = mock(Company.class);
+    when(kakao.getId()).thenReturn(2L);
+    when(kakao.getCanonicalName()).thenReturn("카카오");
+    when(kakao.getNormalizedName()).thenReturn("카카오");
+    when(kakao.getCompanySize()).thenReturn(null);
+    when(companyRepository.findActiveByNormalizedNames(any())).thenReturn(List.of(kakao));
+
+    CompanySource source = mock(CompanySource.class);
+    when(source.getCompany()).thenReturn(kakao);
+    when(source.getSourceType()).thenReturn("CAREERS_PAGE");
+    when(source.getSourceUrl()).thenReturn("https://careers.kakao.com/sitemap.xml");
+    when(source.getAdapterType()).thenReturn("SITEMAP");
+    when(source.getConfigJson()).thenReturn(null);
+    when(companySourceRepository.findActiveByCompanyIds(List.of(2L), "ACTIVE"))
+        .thenReturn(List.of(source));
+
+    ArgumentCaptor<AgentCollectionRequest> captor =
+        ArgumentCaptor.forClass(AgentCollectionRequest.class);
+    when(agentClient.triggerDailyCollection(captor.capture())).thenReturn(agentResponse(List.of()));
+    when(candidatePoolService.upsertJobPostings(any(), any()))
+        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+
+    dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
+
+    AgentCollectionRequest sent = captor.getValue();
+    assertThat(sent.officialCompanySources()).hasSize(1);
+    assertThat(sent.officialCompanySources().get(0).companyId()).isEqualTo(2L);
+    assertThat(sent.officialCompanySources().get(0).sourceUrl())
+        .isEqualTo("https://careers.kakao.com/sitemap.xml");
+    assertThat(sent.officialCompanySources().get(0).adapterType()).isEqualTo("SITEMAP");
+  }
+
+  @Test
+  void resolveOfficialSources_emptyCompanyList_skipsDbQuery() {
+    CollectionJob job = pendingJob();
+    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+    when(userBriefingPreferenceRepository.findAllByCategoryCodeAndActiveTrue(any()))
+        .thenReturn(List.of());
+    when(agentClient.triggerDailyCollection(any())).thenReturn(agentResponse(List.of()));
+    when(candidatePoolService.upsertJobPostings(any(), any()))
+        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+
+    dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
+
+    verify(companySourceRepository, never()).findActiveByCompanyIds(any(), any());
   }
 }

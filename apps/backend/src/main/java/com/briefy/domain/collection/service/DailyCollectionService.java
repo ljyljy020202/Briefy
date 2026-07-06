@@ -5,6 +5,8 @@ import com.briefy.domain.briefing.client.dto.AgentCollectedJobPosting;
 import com.briefy.domain.briefing.client.dto.AgentCollectionOptions;
 import com.briefy.domain.briefing.client.dto.AgentCollectionRequest;
 import com.briefy.domain.briefing.client.dto.AgentCollectionResponse;
+import com.briefy.domain.briefing.client.dto.AgentCompanyProfile;
+import com.briefy.domain.briefing.client.dto.AgentOfficialCompanySource;
 import com.briefy.domain.briefing.client.dto.AgentSeedKeywords;
 import com.briefy.domain.briefingpreference.entity.BriefingCategoryCode;
 import com.briefy.domain.briefingpreference.entity.UserBriefingPreference;
@@ -16,6 +18,8 @@ import com.briefy.domain.collection.dto.DailyCollectionResult;
 import com.briefy.domain.collection.entity.CollectionJob;
 import com.briefy.domain.collection.entity.CollectionJobStatus;
 import com.briefy.domain.collection.entity.CollectionTriggerType;
+import com.briefy.domain.company.repository.CompanyRepository;
+import com.briefy.domain.company.repository.CompanySourceRepository;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -37,16 +41,22 @@ public class DailyCollectionService {
   private final UserBriefingPreferenceRepository userBriefingPreferenceRepository;
   private final AgentClient agentClient;
   private final CandidatePoolService candidatePoolService;
+  private final CompanyRepository companyRepository;
+  private final CompanySourceRepository companySourceRepository;
 
   public DailyCollectionService(
       CollectionJobService collectionJobService,
       UserBriefingPreferenceRepository userBriefingPreferenceRepository,
       AgentClient agentClient,
-      CandidatePoolService candidatePoolService) {
+      CandidatePoolService candidatePoolService,
+      CompanyRepository companyRepository,
+      CompanySourceRepository companySourceRepository) {
     this.collectionJobService = collectionJobService;
     this.userBriefingPreferenceRepository = userBriefingPreferenceRepository;
     this.agentClient = agentClient;
     this.candidatePoolService = candidatePoolService;
+    this.companyRepository = companyRepository;
+    this.companySourceRepository = companySourceRepository;
   }
 
   public DailyCollectionResult triggerDailyCollection(
@@ -81,6 +91,9 @@ public class DailyCollectionService {
 
     try {
       AgentSeedKeywords seedKeywords = aggregateSeedKeywords(categories);
+      List<AgentCompanyProfile> companyProfiles = resolveCompanyProfiles(seedKeywords.companies());
+      List<AgentOfficialCompanySource> officialCompanySources =
+          resolveOfficialSources(companyProfiles.stream().map(AgentCompanyProfile::id).toList());
 
       AgentCollectionRequest agentRequest =
           new AgentCollectionRequest(
@@ -88,7 +101,9 @@ public class DailyCollectionService {
               collectDate.toString(),
               categories,
               seedKeywords,
-              new AgentCollectionOptions(3, 14, 50));
+              new AgentCollectionOptions(3, 14, 50),
+              companyProfiles,
+              officialCompanySources);
 
       AgentCollectionResponse agentResponse = agentClient.triggerDailyCollection(agentRequest);
 
@@ -241,6 +256,36 @@ public class DailyCollectionService {
     return "["
         + categories.stream().map(c -> "\"" + c + "\"").collect(Collectors.joining(","))
         + "]";
+  }
+
+  private List<AgentCompanyProfile> resolveCompanyProfiles(List<String> companyNames) {
+    if (companyNames.isEmpty()) return List.of();
+    List<String> normalized =
+        companyNames.stream().map(n -> n.toLowerCase().trim()).distinct().toList();
+    return companyRepository.findActiveByNormalizedNames(normalized).stream()
+        .map(
+            c ->
+                new AgentCompanyProfile(
+                    c.getId(),
+                    c.getCanonicalName(),
+                    c.getNormalizedName(),
+                    c.getCompanySize(),
+                    List.of()))
+        .toList();
+  }
+
+  private List<AgentOfficialCompanySource> resolveOfficialSources(List<Long> companyIds) {
+    if (companyIds.isEmpty()) return List.of();
+    return companySourceRepository.findActiveByCompanyIds(companyIds, "ACTIVE").stream()
+        .map(
+            s ->
+                new AgentOfficialCompanySource(
+                    s.getCompany().getId(),
+                    s.getSourceType(),
+                    s.getSourceUrl(),
+                    s.getAdapterType(),
+                    s.getConfigJson()))
+        .toList();
   }
 
   private static AgentSeedKeywords emptyKeywords() {
