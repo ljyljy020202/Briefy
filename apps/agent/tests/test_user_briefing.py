@@ -215,8 +215,15 @@ async def test_past_deadline_postings_are_filtered(client):
 # ---------------------------------------------------------------------------
 
 
-async def test_no_llm_calls_made(client):
+async def test_no_llm_calls_made(client, monkeypatch):
     """Without OPENAI_API_KEY, LLM is skipped and token usage stays zero."""
+    from unittest.mock import MagicMock
+
+    import app.graph.user_briefing_graph as _graph
+
+    fake = MagicMock()
+    fake.enabled = False
+    monkeypatch.setattr(_graph, "llm_client", fake)
     response = await client.post("/briefings/generate", json=FULL_REQUEST)
     token_usage = response.json()["tokenUsage"]
     assert token_usage["inputTokens"] == 0
