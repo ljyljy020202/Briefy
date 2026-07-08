@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     job_collection_timeout_seconds: int = 10
     jasoseol_base_url: str = "https://jasoseol.com"
 
+    # Jasoseol-specific
+    # Fraction of detail_fetch_limit_per_source reserved for TARGETED search
+    # candidates.  Must be in [0.0, 1.0].
+    jasoseol_targeted_discovery_ratio: float = 0.8
+
     # Saramin
     saramin_access_key: str = ""
     saramin_api_base_url: str = "https://oapi.saramin.co.kr"

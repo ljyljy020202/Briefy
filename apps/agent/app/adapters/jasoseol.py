@@ -1,31 +1,43 @@
 """JasoseolAdapter — collects job postings from jasoseol.com public pages.
 
-Pipeline:
-  1. Fetch sitemap XMLs → discover (lastmod, url) pairs filtered by lookback.
-     Capped at discovery_limit_per_source, sorted recency-first.
-     Unknown-lastmod URLs are included (conservative) and sort after dated ones.
-  2. Fetch individual posting pages, capped at detail_fetch_limit_per_source.
-  3. Parse each page for company_name, title, deadline, employment_type.
-     source_external_id is extracted from the URL path (/recruit/<id> or
-     /intern/<id>).  Roles, skills, location, experience_level are NOT
-     fabricated — those fields remain empty.
-  4. Score parsed postings for collection-level relevance against seed
-     keywords using only available fields (title, company_name,
-     employment_type).  Do NOT use seeds to filter sitemap discovery;
-     jasoseol sitemaps cannot be searched by keyword.
-  5. Select up to max_results_per_source with an exploration quota so recent
-     postings outside current seeds are not silently dropped.
+Pipeline (Phase 2 — role-aware hybrid discovery):
 
-All per-operation failures are caught, logged, and added to warnings.
-The adapter never raises to the caller.
+  Pre-fetch discovery:
+    A. TARGETED: public /search?dutyGroupIds=... → extract posting URLs
+       (only when seedKeywords.roles can be mapped to developer duty groups)
+    B. EXPLORATION: sitemap XMLs → (lastmod, url) pairs filtered by lookback
 
-robots.txt: jasoseol.com allows all paths under /.
+  Candidate merge:
+    → deduplicate by sourceExternalId (URL fallback)
+    → cap at discovery_limit_per_source
+    → tag each candidate: TARGETED | EXPLORATION | BOTH
+
+  Detail-fetch budget allocation (80/20 preferred split, configurable):
+    → preferred 80 % of detail_fetch_limit for TARGETED+BOTH candidates
+    → preferred 20 % for EXPLORATION-only candidates
+    → shortfalls in either pool backfill from the other
+
+  Post-fetch (unchanged from Phase 1):
+    → parse_posting_page()
+    → _select_postings() (relevance + recency, exploration quota)
+    → AdapterSourceStats
+
+Policy:
+  - Targeted Discovery failure → warning + Sitemap Exploration fallback only
+  - Empty or unmapped roles → Sitemap Exploration only (no targeted query)
+  - All per-operation failures are caught, logged, and added to warnings.
+  - The adapter never raises to the caller.
+
+robots.txt (jasoseol.com, verified 2026-07-09):
+  Disallow: /crt/*, /core, /rocket_correction, /coach-sellers, /webview/, /demo/
+  Allow: / (all other paths, including /search)
 No login, no CAPTCHA bypass, no browser automation.
 """
 
 import asyncio
 import logging
 import re
+from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from xml.etree import ElementTree as ET
 
@@ -38,6 +50,11 @@ from app.adapters.base import (
     JobBoardAdapter,
     RawJobPosting,
 )
+from app.adapters.jasoseol_role_planner import (
+    get_combined_duty_ids,
+    plan_developer_roles,
+)
+from app.adapters.jasoseol_search import SearchCandidate, discover_from_search
 from app.core.config import settings
 from app.schemas.collection import CollectionOptions, SeedKeywords
 
@@ -45,10 +62,9 @@ log = logging.getLogger(__name__)
 
 _SOURCE = "jasoseol"
 _MAX_CONCURRENCY = 5
-# Fraction of the per-source budget reserved for recency-only exploration.
-# Prevents the adapter from returning only seed-matching postings and missing
-# novel recent listings.
-_EXPLORATION_RATIO = 0.2
+# Post-parse exploration quota — fraction of max_results_per_source reserved
+# for recency-only (non-relevance) picks after parsing.
+_POST_PARSE_EXPLORATION_RATIO = 0.2
 _SITEMAP_PATHS = [
     "/sitemap/employment_companies.xml",
     "/sitemap/intern_employment_companies.xml",
@@ -56,8 +72,19 @@ _SITEMAP_PATHS = [
 _EMPLOYMENT_TYPES = ["정규직", "계약직", "인턴", "파견직", "프리랜서"]
 _KR_DATE_RE = re.compile(r"(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일")
 _SM_NS = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
-# Matches /recruit/<id> or /intern/<id> in a Jasoseol URL
 _EXTERNAL_ID_RE = re.compile(r"/(?:recruit|intern)/(\d+)")
+
+
+@dataclass
+class _CandidateEntry:
+    """Unified candidate record for pre-detail-fetch dedup and allocation."""
+
+    url: str
+    source_external_id: str | None
+    # date.min for TARGETED-only candidates (no sitemap lastmod available)
+    lastmod: date
+    # "TARGETED" | "EXPLORATION" | "BOTH"
+    provenance: str
 
 
 class JasoseolAdapter(JobBoardAdapter):
@@ -76,6 +103,7 @@ class JasoseolAdapter(JobBoardAdapter):
 
         base_url = settings.jasoseol_base_url
         timeout = settings.job_collection_timeout_seconds
+        targeted_ratio = settings.jasoseol_targeted_discovery_ratio
         warnings: list[str] = []
 
         try:
@@ -84,23 +112,56 @@ class JasoseolAdapter(JobBoardAdapter):
                 headers={"User-Agent": "Briefy-Agent/1.0 (+https://briefy.io)"},
                 follow_redirects=True,
             ) as client:
-                # Stage 1: Discover URLs from sitemaps (sorted recency-first)
-                url_entries = await _collect_recent_url_entries(
+                # ── A. Targeted Discovery ──────────────────────────────────────
+                targeted_candidates: list[SearchCandidate] = []
+                role_groups = plan_developer_roles(seed_keywords.roles)
+                duty_ids = get_combined_duty_ids(role_groups)
+
+                if duty_ids:
+                    try:
+                        targeted_candidates = await discover_from_search(
+                            client,
+                            base_url,
+                            duty_ids,
+                            limit=options.discovery_limit_per_source,
+                            warnings=warnings,
+                        )
+                    except Exception as exc:
+                        msg = (
+                            f"jasoseol: targeted discovery failed, "
+                            f"falling back to sitemap only: {exc}"
+                        )
+                        log.warning(msg)
+                        warnings.append(msg)
+                        targeted_candidates = []
+
+                # ── B. Sitemap Exploration Discovery ──────────────────────────
+                exploration_entries = await _collect_recent_url_entries(
                     client, base_url, collect_date, options, warnings
                 )
-                discovered = len(url_entries)
 
-                # Stage 2: Fetch pages (cap at detail_fetch_limit_per_source)
-                fetch_limit = min(discovered, options.detail_fetch_limit_per_source)
-                entries_to_fetch = url_entries[:fetch_limit]
+                # ── C. Merge & Dedup ──────────────────────────────────────────
+                candidates = _merge_candidates(
+                    targeted_candidates,
+                    exploration_entries,
+                    options.discovery_limit_per_source,
+                )
+                discovered = len(candidates)
 
-                # Stage 3: Parse pages → (lastmod, RawJobPosting) pairs
+                # ── D. Budget Allocation & Detail Fetch ───────────────────────
+                to_fetch = _allocate_fetch_budget(
+                    candidates,
+                    options.detail_fetch_limit_per_source,
+                    targeted_ratio,
+                )
+                fetch_entries = [(c.lastmod, c.url) for c in to_fetch]
+
                 raw_entries = await _fetch_pages_with_dates(
-                    client, entries_to_fetch, warnings
+                    client, fetch_entries, warnings
                 )
                 parsed = len(raw_entries)
 
-                # Stage 4+5: Score, select with exploration quota
+                # ── E. Post-parse Selection (unchanged) ───────────────────────
                 postings = _select_postings(
                     raw_entries, seed_keywords, options.max_results_per_source
                 )
@@ -117,18 +178,124 @@ class JasoseolAdapter(JobBoardAdapter):
 
         stats = AdapterSourceStats(
             discovered=discovered,
-            fetched=len(entries_to_fetch),
+            fetched=len(to_fetch),
             parsed=parsed,
             selected=len(postings),
         )
         log.info(
-            "jasoseol: discovered=%d fetched=%d parsed=%d selected=%d",
+            "jasoseol: discovered=%d fetched=%d parsed=%d selected=%d "
+            "(targeted=%d exploration=%d)",
             discovered,
-            len(entries_to_fetch),
+            len(to_fetch),
             parsed,
             len(postings),
+            sum(1 for c in candidates if c.provenance in ("TARGETED", "BOTH")),
+            sum(1 for c in candidates if c.provenance == "EXPLORATION"),
         )
         return AdapterResult(postings=postings, warnings=warnings, source_stats=stats)
+
+
+# ── candidate merge ───────────────────────────────────────────────────────────
+
+
+def _merge_candidates(
+    targeted: list[SearchCandidate],
+    exploration: list[tuple[date, str]],
+    discovery_limit: int,
+) -> list[_CandidateEntry]:
+    """Merge TARGETED and EXPLORATION candidates, dedup by sourceExternalId.
+
+    - A URL present in both paths becomes provenance=BOTH and inherits the
+      sitemap lastmod for the EXPLORATION-derived recency ordering.
+    - TARGETED candidates without a lastmod use date.min so they sort AFTER
+      dated EXPLORATION candidates when recency-sorted.
+    - Result is capped at discovery_limit.
+    """
+    entries: dict[str, _CandidateEntry] = {}
+
+    for sc in targeted:
+        key = sc.source_external_id
+        entries[key] = _CandidateEntry(
+            url=sc.url,
+            source_external_id=sc.source_external_id,
+            lastmod=date.min,
+            provenance="TARGETED",
+        )
+
+    for lastmod, url in exploration:
+        sid = _extract_source_external_id(url)
+        key = sid if sid else url
+        if key in entries:
+            entries[key] = replace(
+                entries[key], provenance="BOTH", lastmod=lastmod
+            )
+        else:
+            entries[key] = _CandidateEntry(
+                url=url,
+                source_external_id=sid,
+                lastmod=lastmod,
+                provenance="EXPLORATION",
+            )
+
+    result = list(entries.values())[:discovery_limit]
+    return result
+
+
+# ── budget allocation ─────────────────────────────────────────────────────────
+
+
+def _allocate_fetch_budget(
+    candidates: list[_CandidateEntry],
+    detail_fetch_limit: int,
+    targeted_ratio: float,
+) -> list[_CandidateEntry]:
+    """Allocate the detail-fetch budget with a preferred 80/20 split.
+
+    Preferred:
+      targeted_ratio  fraction → TARGETED+BOTH candidates
+      1 - targeted_ratio       → EXPLORATION-only candidates
+
+    Shortfalls in either pool are backfilled from the other to avoid wasting
+    budget.  Total selection never exceeds detail_fetch_limit.
+
+    Ordering within each pool (deterministic):
+      TARGETED+BOTH: source_external_id desc (higher numeric = newer)
+      EXPLORATION:   lastmod desc, source_external_id desc as tie-breaker
+    """
+    targeted_pool = sorted(
+        [c for c in candidates if c.provenance in ("TARGETED", "BOTH")],
+        key=lambda c: (int(c.source_external_id or 0), c.url),
+        reverse=True,
+    )
+    exploration_pool = sorted(
+        [c for c in candidates if c.provenance == "EXPLORATION"],
+        key=lambda c: (c.lastmod, int(c.source_external_id or 0), c.url),
+        reverse=True,
+    )
+
+    pref_t = min(int(detail_fetch_limit * targeted_ratio), detail_fetch_limit)
+    pref_e = detail_fetch_limit - pref_t
+
+    t_count = min(pref_t, len(targeted_pool))
+    taken_t = targeted_pool[:t_count]
+
+    e_count = min(pref_e, len(exploration_pool))
+    taken_e = exploration_pool[:e_count]
+
+    remaining = detail_fetch_limit - t_count - e_count
+
+    if remaining > 0:
+        # Try to backfill from remaining exploration first
+        extra_e = exploration_pool[e_count: e_count + remaining]
+        taken_e = taken_e + extra_e
+        remaining -= len(extra_e)
+
+    if remaining > 0:
+        # Then backfill from remaining targeted
+        extra_t = targeted_pool[t_count: t_count + remaining]
+        taken_t = taken_t + extra_t
+
+    return (taken_t + taken_e)[:detail_fetch_limit]
 
 
 # ── sitemap ───────────────────────────────────────────────────────────────────
@@ -197,7 +364,6 @@ def _parse_sitemap(xml_text: str, cutoff: date) -> list[tuple[date, str]]:
         lastmod = _parse_lastmod(lastmod_el.text if lastmod_el is not None else None)
 
         if lastmod is None or lastmod >= cutoff:
-            # Use date.min for unknown lastmod so these sort LAST, not first
             results.append((lastmod or date.min, loc))
 
     return results
@@ -258,15 +424,11 @@ async def _fetch_one_with_date(
     return None
 
 
-# ── relevance and selection ───────────────────────────────────────────────────
+# ── relevance and post-parse selection ───────────────────────────────────────
 
 
 def _extract_source_external_id(url: str) -> str | None:
-    """Extract the numeric posting ID from a Jasoseol recruit or intern URL.
-
-    Returns the bare numeric ID string, e.g. "104949" for
-    https://jasoseol.com/recruit/104949, or None for unrecognised patterns.
-    """
+    """Extract the numeric posting ID from a Jasoseol recruit or intern URL."""
     m = _EXTERNAL_ID_RE.search(url)
     return m.group(1) if m else None
 
@@ -314,6 +476,9 @@ def _select_postings(
 ) -> list[RawJobPosting]:
     """Select up to `limit` postings combining relevance, recency, and exploration.
 
+    This is the post-parse selection step — distinct from the pre-fetch
+    TARGETED vs EXPLORATION allocation.
+
     Budget split (deterministic):
       relevance_slots = limit - exploration_slots
         → sorted by relevance desc, recency as tiebreaker
@@ -327,7 +492,9 @@ def _select_postings(
     if not entries or limit <= 0:
         return []
 
-    exploration_slots = min(max(1, int(limit * _EXPLORATION_RATIO)), limit // 2)
+    exploration_slots = min(
+        max(1, int(limit * _POST_PARSE_EXPLORATION_RATIO)), limit // 2
+    )
     relevance_slots = limit - exploration_slots
 
     scored = [
@@ -335,7 +502,6 @@ def _select_postings(
         for lastmod, posting in entries
     ]
 
-    # Primary: highest relevance first, recency as tiebreaker for ties
     by_relevance = sorted(scored, key=lambda x: (x[1], x[2]), reverse=True)
 
     selected: list[RawJobPosting] = []
@@ -347,7 +513,6 @@ def _select_postings(
         selected.append(posting)
         selected_urls.add(posting.source_url)
 
-    # Exploration: remaining entries sorted by recency
     remaining_by_recency = sorted(
         [
             (lastmod, posting)
