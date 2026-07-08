@@ -50,6 +50,12 @@ app:
   frontend-base-url: ${FRONTEND_BASE_URL:http://localhost:3000}
 
 briefy:
+  collection:
+    lookback-days: ${COLLECTION_LOOKBACK_DAYS:7}
+    discovery-limit-per-source: ${COLLECTION_DISCOVERY_LIMIT_PER_SOURCE:300}
+    detail-fetch-limit-per-source: ${COLLECTION_DETAIL_FETCH_LIMIT_PER_SOURCE:100}
+    max-results-per-source: ${COLLECTION_MAX_RESULTS_PER_SOURCE:100}
+    max-total-results: ${COLLECTION_MAX_TOTAL_RESULTS:500}
   scheduler:
     enabled: false
     daily-collection-cron: "0 0 6 * * *"

@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 import com.briefy.domain.collection.dto.DailyCollectionResult;
 import com.briefy.domain.collection.service.DailyCollectionService;
 import java.time.LocalDate;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -21,11 +22,12 @@ class DailyCollectionSchedulerTest {
   @InjectMocks private DailyCollectionScheduler scheduler;
 
   private DailyCollectionResult completedResult(LocalDate date) {
-    return new DailyCollectionResult(1L, "COMPLETED", date, 5, 5, 0, null);
+    return new DailyCollectionResult(1L, "COMPLETED", date, null, 5, 0, List.of(), null);
   }
 
   private DailyCollectionResult skippedResult(LocalDate date) {
-    return new DailyCollectionResult(null, "SKIPPED", date, 0, 0, 0, "Already active");
+    return new DailyCollectionResult(
+        null, "SKIPPED", date, null, 0, 0, List.of(), "Already active");
   }
 
   @Test

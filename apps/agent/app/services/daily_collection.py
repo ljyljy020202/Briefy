@@ -115,6 +115,11 @@ class DailyCollectionService:
         raw_postings: list[RawJobPosting] = []
         warnings: list[str] = []
 
+        # Aggregate per-adapter stats before service-level processing
+        total_discovered = 0
+        total_fetched = 0
+        total_parsed = 0
+
         for adapter in adapters:
             try:
                 result = await adapter.fetch(
@@ -125,6 +130,9 @@ class DailyCollectionService:
                 raw_postings.extend(result.postings)
                 warnings.extend(result.warnings)
                 if result.source_stats:
+                    total_discovered += result.source_stats.discovered
+                    total_fetched += result.source_stats.fetched
+                    total_parsed += result.source_stats.parsed
                     log.info(
                         "daily_collection: %s discovered=%d fetched=%d "
                         "parsed=%d selected=%d",
@@ -135,23 +143,24 @@ class DailyCollectionService:
                         result.source_stats.selected,
                     )
                 else:
+                    n = len(result.postings)
+                    total_discovered += n
+                    total_fetched += n
+                    total_parsed += n
                     log.info(
-                        "daily_collection: %s returned %d postings",
+                        "daily_collection: %s returned %d postings (no source_stats)",
                         adapter.source_name,
-                        len(result.postings),
+                        n,
                     )
             except Exception as exc:
                 msg = f"adapter {adapter.source_name} raised unexpectedly: {exc}"
                 log.warning(msg)
                 warnings.append(msg)
 
-        discovered = len(raw_postings)
-
         # Stage 2+3: Normalize (validation happens implicitly — invalid raws
         # are skipped because normalize raises, and we don't catch normalize
         # errors here; all current adapters guarantee non-null required fields)
         normalized = normalize_many(raw_postings)
-        parsed = len(normalized)
 
         # Stage 4: Source-level exact dedup
         after_source, source_exact = dedup_source_level(normalized)
@@ -174,10 +183,12 @@ class DailyCollectionService:
         selected, truncated = _select_budget(scored, request.options)
 
         log.info(
-            "daily_collection: discovered=%d parsed=%d source_exact=%d "
-            "expired=%d stale=%d cross_merged=%d truncated=%d final=%d",
-            discovered, parsed, source_exact,
-            expired_count, stale_count, cross_merged, truncated, len(selected),
+            "daily_collection: discovered=%d fetched=%d parsed=%d "
+            "source_exact=%d cross_merged=%d expired=%d stale=%d "
+            "truncated=%d final=%d",
+            total_discovered, total_fetched, total_parsed,
+            source_exact, cross_merged, expired_count, stale_count,
+            truncated, len(selected),
         )
 
         return DailyCollectResponse(
@@ -187,15 +198,13 @@ class DailyCollectionService:
             company_issues=[],
             industry_issues=[],
             stats=CollectionStats(
-                discovered=discovered,
-                fetched=discovered,
-                parsed=parsed,
-                exact_duplicates=source_exact,
-                cross_source_merged=cross_merged,
-                expired_filtered=expired_count,
-                stale_filtered=stale_count,
-                truncated=truncated,
-                final=len(selected),
+                discovered_count=total_discovered,
+                fetched_count=total_fetched,
+                parsed_count=total_parsed,
+                duplicate_count=source_exact + cross_merged,
+                filtered_count=expired_count + stale_count,
+                truncated_count=truncated,
+                final_count=len(selected),
             ),
             warnings=warnings,
         )
