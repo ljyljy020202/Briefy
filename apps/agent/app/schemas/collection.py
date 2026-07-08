@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field
+from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
 
@@ -19,20 +19,16 @@ class SeedKeywords(BaseModel):
 
 
 class CollectionOptions(BaseModel):
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+    # extra="forbid" raises on unknown fields instead of silently ignoring them
+    model_config = ConfigDict(
+        alias_generator=to_camel, populate_by_name=True, extra="forbid"
+    )
 
-    lookback_days: int = 3
-    deadline_within_days: int = 14
-
-    # Budget controls (replace the single max_items_per_source)
-    discovery_limit_per_source: int = 50
-    detail_fetch_limit_per_source: int = 50
-    max_results_per_source: int = 50
-    max_total_results: int = 200
-
-    # Collection window
-    collect_from: date | None = None
-    max_lookback_days: int = 30
+    lookback_days: int = 7
+    discovery_limit_per_source: int = 300
+    detail_fetch_limit_per_source: int = 100
+    max_results_per_source: int = 100
+    max_total_results: int = 500
 
 
 class CompanyProfile(BaseModel):
@@ -102,32 +98,13 @@ class CollectedJobPosting(BaseModel):
 class CollectionStats(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
-    # V2 fields
-    discovered: int = 0
-    fetched: int = 0
-    parsed: int = 0
-    exact_duplicates: int = 0
-    cross_source_merged: int = 0
-    expired_filtered: int = 0
-    stale_filtered: int = 0
-    truncated: int = 0
-    final: int = 0
-
-    # Backward-compat aliases (also appear in serialized JSON as camelCase)
-    @computed_field
-    @property
-    def collected_count(self) -> int:
-        return self.discovered
-
-    @computed_field
-    @property
-    def deduplicated_count(self) -> int:
-        return self.exact_duplicates
-
-    @computed_field
-    @property
-    def job_posting_count(self) -> int:
-        return self.final
+    discovered_count: int = 0   # URLs/records discovered before fetch-budget
+    fetched_count: int = 0      # actual detail-page/API fetch attempts
+    parsed_count: int = 0       # pages that yielded a valid posting (pre-service-dedup)
+    duplicate_count: int = 0    # source-level + cross-source duplicates removed
+    filtered_count: int = 0     # expired + stale postings removed
+    truncated_count: int = 0    # valid candidates dropped by global budget cap
+    final_count: int = 0        # postings in jobPostings array
 
 
 class DailyCollectResponse(BaseModel):

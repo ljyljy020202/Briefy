@@ -1,5 +1,6 @@
 package com.briefy.domain.collection.service;
 
+import com.briefy.config.CollectionProperties;
 import com.briefy.domain.briefing.client.AgentClient;
 import com.briefy.domain.briefing.client.dto.AgentCollectedJobPosting;
 import com.briefy.domain.briefing.client.dto.AgentCollectionOptions;
@@ -44,6 +45,7 @@ public class DailyCollectionService {
   private final CandidatePoolService candidatePoolService;
   private final CompanyRepository companyRepository;
   private final CompanySourceRepository companySourceRepository;
+  private final CollectionProperties collectionProperties;
 
   public DailyCollectionService(
       CollectionJobService collectionJobService,
@@ -51,13 +53,15 @@ public class DailyCollectionService {
       AgentClient agentClient,
       CandidatePoolService candidatePoolService,
       CompanyRepository companyRepository,
-      CompanySourceRepository companySourceRepository) {
+      CompanySourceRepository companySourceRepository,
+      CollectionProperties collectionProperties) {
     this.collectionJobService = collectionJobService;
     this.userBriefingPreferenceRepository = userBriefingPreferenceRepository;
     this.agentClient = agentClient;
     this.candidatePoolService = candidatePoolService;
     this.companyRepository = companyRepository;
     this.companySourceRepository = companySourceRepository;
+    this.collectionProperties = collectionProperties;
   }
 
   public DailyCollectionResult triggerDailyCollection(
@@ -73,9 +77,10 @@ public class DailyCollectionService {
           null,
           "SKIPPED",
           collectDate,
+          null,
           0,
           0,
-          0,
+          List.of(),
           "Already PROCESSING or COMPLETED for " + collectDate);
     }
     return executeCollection(collectDate, null, CollectionTriggerType.SCHEDULED);
@@ -102,7 +107,12 @@ public class DailyCollectionService {
               collectDate.toString(),
               categories,
               seedKeywords,
-              new AgentCollectionOptions(3, 14, 50),
+              new AgentCollectionOptions(
+                  collectionProperties.lookbackDays(),
+                  collectionProperties.discoveryLimitPerSource(),
+                  collectionProperties.detailFetchLimitPerSource(),
+                  collectionProperties.maxResultsPerSource(),
+                  collectionProperties.maxTotalResults()),
               companyProfiles,
               officialCompanySources);
 
@@ -113,17 +123,15 @@ public class DailyCollectionService {
       CandidatePoolUpsertResult upsertResult =
           candidatePoolService.upsertJobPostings(postingData, collectDate);
 
-      int collectedCount =
-          agentResponse.stats() != null
-              ? agentResponse.stats().collectedCount()
-              : postingData.size();
+      int agentFinalCount =
+          agentResponse.stats() != null ? agentResponse.stats().finalCount() : postingData.size();
       collectionJobService.markCompleted(
-          job.getId(), collectedCount, upsertResult.savedCount(), upsertResult.duplicateCount());
+          job.getId(), agentFinalCount, upsertResult.savedCount(), upsertResult.duplicateCount());
 
       log.info(
-          "Daily collection completed: jobId={}, collected={}, saved={}, duplicates={}",
+          "Daily collection completed: jobId={}, agentFinal={}, saved={}, persistenceDups={}",
           job.getId(),
-          collectedCount,
+          agentFinalCount,
           upsertResult.savedCount(),
           upsertResult.duplicateCount());
 
@@ -131,9 +139,10 @@ public class DailyCollectionService {
           job.getId(),
           CollectionJobStatus.COMPLETED.name(),
           collectDate,
-          collectedCount,
+          agentResponse.stats(),
           upsertResult.savedCount(),
           upsertResult.duplicateCount(),
+          agentResponse.warnings() != null ? agentResponse.warnings() : List.of(),
           null);
 
     } catch (Exception e) {
@@ -141,7 +150,14 @@ public class DailyCollectionService {
       log.error("Daily collection failed: jobId={}, error={}", job.getId(), errorMessage);
       collectionJobService.markFailed(job.getId(), errorMessage);
       return new DailyCollectionResult(
-          job.getId(), CollectionJobStatus.FAILED.name(), collectDate, 0, 0, 0, errorMessage);
+          job.getId(),
+          CollectionJobStatus.FAILED.name(),
+          collectDate,
+          null,
+          0,
+          0,
+          List.of(),
+          errorMessage);
     }
   }
 

@@ -188,17 +188,11 @@ def filter_postings_with_stats(
 ) -> tuple[list[CollectedJobPosting], int, int]:
     """Stage 5 filter — returns (active, expired_count, stale_count).
 
-    collect_from is the effective start of the collection window:
-    - explicit options.collect_from if set, otherwise
-    - collect_date minus min(lookback_days, max_lookback_days).
+    Stale cutoff: collect_date - lookback_days.
     """
     from datetime import timedelta
 
-    if options.collect_from is not None:
-        collect_from = options.collect_from
-    else:
-        lookback = min(options.lookback_days, options.max_lookback_days)
-        collect_from = collect_date - timedelta(days=lookback)
+    collect_from = collect_date - timedelta(days=options.lookback_days)
 
     active: list[CollectedJobPosting] = []
     expired_count = 0

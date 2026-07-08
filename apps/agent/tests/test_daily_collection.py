@@ -57,8 +57,8 @@ async def test_no_job_posting_category_returns_empty():
     svc = DailyCollectionService()
     resp = await svc.collect(_request(categories=["COMPANY_NEWS"]))
     assert resp.job_postings == []
-    assert resp.stats.job_posting_count == 0
-    assert resp.stats.collected_count == 0
+    assert resp.stats.final_count == 0
+    assert resp.stats.discovered_count == 0
 
 
 @pytest.mark.asyncio
@@ -87,7 +87,7 @@ async def test_fixture_flag_uses_fixture_adapter(monkeypatch):
         resp = await svc.collect(_request())
 
     mock_fetch.assert_called_once()
-    assert resp.stats.job_posting_count == 1
+    assert resp.stats.final_count == 1
 
 
 @pytest.mark.asyncio
@@ -105,7 +105,7 @@ async def test_real_sources_flag_adds_jasoseol_adapter(monkeypatch):
         resp = await svc.collect(_request())
 
     mock_fetch.assert_called_once()
-    assert resp.stats.job_posting_count == 1
+    assert resp.stats.final_count == 1
 
 
 @pytest.mark.asyncio
@@ -130,7 +130,7 @@ async def test_both_flags_true_uses_both_adapters(monkeypatch):
 
     fixture_fetch.assert_called_once()
     jasoseol_fetch.assert_called_once()
-    assert resp.stats.collected_count == 2
+    assert resp.stats.discovered_count == 2
 
 
 @pytest.mark.asyncio
@@ -148,14 +148,14 @@ async def test_both_flags_false_falls_back_to_fixture(monkeypatch):
         resp = await svc.collect(_request())
 
     mock_fetch.assert_called_once()
-    assert resp.stats.job_posting_count == 1
+    assert resp.stats.final_count == 1
 
 
 # ── pipeline stats ─────────────────────────────────────────────────────────────
 
 
 @pytest.mark.asyncio
-async def test_stats_collected_count_is_total_before_dedup(monkeypatch):
+async def test_stats_discovered_count_is_total_before_dedup(monkeypatch):
     monkeypatch.setattr(_USE_FIXTURE, True)
     monkeypatch.setattr(_USE_REAL, False)
 
@@ -169,13 +169,13 @@ async def test_stats_collected_count_is_total_before_dedup(monkeypatch):
         svc = DailyCollectionService()
         resp = await svc.collect(_request())
 
-    assert resp.stats.collected_count == 2
-    assert resp.stats.deduplicated_count == 1
-    assert resp.stats.job_posting_count == 1
+    assert resp.stats.discovered_count == 2
+    assert resp.stats.duplicate_count == 1
+    assert resp.stats.final_count == 1
 
 
 @pytest.mark.asyncio
-async def test_stats_job_posting_count_excludes_expired(monkeypatch):
+async def test_stats_final_count_excludes_expired(monkeypatch):
     monkeypatch.setattr(_USE_FIXTURE, True)
     monkeypatch.setattr(_USE_REAL, False)
 
@@ -190,8 +190,9 @@ async def test_stats_job_posting_count_excludes_expired(monkeypatch):
         svc = DailyCollectionService()
         resp = await svc.collect(_request())
 
-    assert resp.stats.collected_count == 2
-    assert resp.stats.job_posting_count == 1
+    assert resp.stats.discovered_count == 2
+    assert resp.stats.filtered_count == 1
+    assert resp.stats.final_count == 1
 
 
 # ── warnings ───────────────────────────────────────────────────────────────────

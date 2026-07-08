@@ -6,8 +6,13 @@ deserialization of old JSON that omits those fields.
 
 from datetime import date
 
+import pytest
+from pydantic import ValidationError
+
 from app.schemas.collection import (
     CollectedJobPosting,
+    CollectionOptions,
+    CollectionStats,
     CompanyProfile,
     DailyCollectRequest,
     OfficialCompanySource,
@@ -159,3 +164,63 @@ def test_collected_job_posting_source_fields_not_included_when_none():
     assert posting.source_record_key is None
     assert posting.canonical_fingerprint is None
     assert posting.source_refs == []
+
+
+# ── CollectionOptions strict schema ──────────────────────────────────────────
+
+
+def test_collection_options_rejects_unknown_field():
+    """maxItemsPerSource (old Java field) must now raise instead of silently passing."""
+    with pytest.raises(ValidationError):
+        CollectionOptions.model_validate({"maxItemsPerSource": 100})
+
+
+def test_collection_options_rejects_dead_deadline_within_days():
+    with pytest.raises(ValidationError):
+        CollectionOptions.model_validate({"deadlineWithinDays": 14})
+
+
+def test_collection_options_defaults_match_spring_defaults():
+    opts = CollectionOptions()
+    assert opts.lookback_days == 7
+    assert opts.discovery_limit_per_source == 300
+    assert opts.detail_fetch_limit_per_source == 100
+    assert opts.max_results_per_source == 100
+    assert opts.max_total_results == 500
+
+
+def test_collection_options_accepts_valid_five_field_spring_request():
+    payload = {
+        "lookbackDays": 7,
+        "discoveryLimitPerSource": 300,
+        "detailFetchLimitPerSource": 100,
+        "maxResultsPerSource": 100,
+        "maxTotalResults": 500,
+    }
+    opts = CollectionOptions.model_validate(payload)
+    assert opts.lookback_days == 7
+    assert opts.discovery_limit_per_source == 300
+
+
+def test_collection_stats_field_names():
+    stats = CollectionStats(
+        discovered_count=100,
+        fetched_count=50,
+        parsed_count=45,
+        duplicate_count=5,
+        filtered_count=2,
+        truncated_count=10,
+        final_count=28,
+    )
+    data = stats.model_dump(by_alias=True)
+    assert data["discoveredCount"] == 100
+    assert data["fetchedCount"] == 50
+    assert data["parsedCount"] == 45
+    assert data["duplicateCount"] == 5
+    assert data["filteredCount"] == 2
+    assert data["truncatedCount"] == 10
+    assert data["finalCount"] == 28
+    # Legacy aliases must no longer exist
+    assert "collectedCount" not in data
+    assert "deduplicatedCount" not in data
+    assert "jobPostingCount" not in data

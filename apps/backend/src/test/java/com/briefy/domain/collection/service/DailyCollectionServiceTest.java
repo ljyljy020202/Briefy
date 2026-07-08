@@ -9,8 +9,10 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.briefy.config.CollectionProperties;
 import com.briefy.domain.briefing.client.AgentClient;
 import com.briefy.domain.briefing.client.dto.AgentCollectedJobPosting;
+import com.briefy.domain.briefing.client.dto.AgentCollectionOptions;
 import com.briefy.domain.briefing.client.dto.AgentCollectionRequest;
 import com.briefy.domain.briefing.client.dto.AgentCollectionResponse;
 import com.briefy.domain.briefing.client.dto.AgentCollectionStats;
@@ -36,7 +38,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
@@ -53,12 +54,24 @@ class DailyCollectionServiceTest {
   @Mock private CompanyRepository companyRepository;
   @Mock private CompanySourceRepository companySourceRepository;
 
-  @InjectMocks private DailyCollectionService dailyCollectionService;
+  private static final CollectionProperties DEFAULT_COLLECTION_PROPS =
+      new CollectionProperties(7, 300, 100, 100, 500);
+
+  private DailyCollectionService dailyCollectionService;
 
   private static final LocalDate TEST_DATE = LocalDate.of(2026, 6, 30);
 
   @BeforeEach
-  void setUpCompanyRepos() {
+  void setUp() {
+    dailyCollectionService =
+        new DailyCollectionService(
+            collectionJobService,
+            userBriefingPreferenceRepository,
+            agentClient,
+            candidatePoolService,
+            companyRepository,
+            companySourceRepository,
+            DEFAULT_COLLECTION_PROPS);
     when(companyRepository.findActiveByNormalizedNames(any())).thenReturn(List.of());
     when(companySourceRepository.findActiveByCompanyIds(any(), any())).thenReturn(List.of());
   }
@@ -97,7 +110,7 @@ class DailyCollectionServiceTest {
         postings,
         List.of(),
         List.of(),
-        new AgentCollectionStats(count, 0, count, 0, 0),
+        new AgentCollectionStats(count, count, count, 0, 0, 0, count),
         List.of());
   }
 
@@ -117,9 +130,10 @@ class DailyCollectionServiceTest {
         dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
 
     assertThat(result.status()).isEqualTo("COMPLETED");
-    assertThat(result.collectedCount()).isEqualTo(1);
+    assertThat(result.agentStats()).isNotNull();
+    assertThat(result.agentStats().finalCount()).isEqualTo(1);
     assertThat(result.savedCount()).isEqualTo(1);
-    assertThat(result.deduplicatedCount()).isEqualTo(0);
+    assertThat(result.persistenceDuplicateCount()).isEqualTo(0);
     assertThat(result.errorMessage()).isNull();
     verify(collectionJobService).markCompleted(any(), anyInt(), anyInt(), anyInt());
   }
@@ -139,7 +153,8 @@ class DailyCollectionServiceTest {
 
     assertThat(result.status()).isEqualTo("FAILED");
     assertThat(result.errorMessage()).isNotNull();
-    assertThat(result.collectedCount()).isEqualTo(0);
+    assertThat(result.agentStats()).isNull();
+    assertThat(result.savedCount()).isEqualTo(0);
     verify(collectionJobService).markFailed(any(), any());
     verify(candidatePoolService, never()).upsertJobPostings(any(), any());
   }
@@ -366,7 +381,8 @@ class DailyCollectionServiceTest {
         dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
 
     assertThat(result.status()).isEqualTo("COMPLETED");
-    assertThat(result.collectedCount()).isEqualTo(0);
+    assertThat(result.agentStats()).isNotNull();
+    assertThat(result.agentStats().finalCount()).isEqualTo(0);
     assertThat(result.savedCount()).isEqualTo(0);
   }
 
@@ -521,5 +537,72 @@ class DailyCollectionServiceTest {
     dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
 
     verify(companySourceRepository, never()).findActiveByCompanyIds(any(), any());
+  }
+
+  // ── CollectionOptions contract ───────────────────────────────────────────────
+
+  @Test
+  void triggerDailyCollection_sendsAllFiveOptionFields() {
+    CollectionProperties props = new CollectionProperties(5, 200, 80, 80, 400);
+    DailyCollectionService svc =
+        new DailyCollectionService(
+            collectionJobService,
+            userBriefingPreferenceRepository,
+            agentClient,
+            candidatePoolService,
+            companyRepository,
+            companySourceRepository,
+            props);
+
+    CollectionJob job = pendingJob();
+    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+    when(userBriefingPreferenceRepository.findAllByCategoryCodeAndActiveTrue(any()))
+        .thenReturn(List.of());
+
+    ArgumentCaptor<AgentCollectionRequest> captor =
+        ArgumentCaptor.forClass(AgentCollectionRequest.class);
+    when(agentClient.triggerDailyCollection(captor.capture())).thenReturn(agentResponse(List.of()));
+    when(candidatePoolService.upsertJobPostings(any(), any()))
+        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+
+    svc.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
+
+    AgentCollectionOptions opts = captor.getValue().options();
+    assertThat(opts.lookbackDays()).isEqualTo(5);
+    assertThat(opts.discoveryLimitPerSource()).isEqualTo(200);
+    assertThat(opts.detailFetchLimitPerSource()).isEqualTo(80);
+    assertThat(opts.maxResultsPerSource()).isEqualTo(80);
+    assertThat(opts.maxTotalResults()).isEqualTo(400);
+  }
+
+  @Test
+  void triggerDailyCollection_agentStats_populatedInResult() {
+    CollectionJob job = pendingJob();
+    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+    when(userBriefingPreferenceRepository.findAllByCategoryCodeAndActiveTrue(any()))
+        .thenReturn(List.of());
+
+    AgentCollectionStats stats = new AgentCollectionStats(100, 50, 45, 5, 2, 10, 28);
+    AgentCollectionResponse resp =
+        new AgentCollectionResponse(
+            null, TEST_DATE.toString(), List.of(), List.of(), List.of(), stats, List.of("warn1"));
+    when(agentClient.triggerDailyCollection(any())).thenReturn(resp);
+    when(candidatePoolService.upsertJobPostings(any(), any()))
+        .thenReturn(new CandidatePoolUpsertResult(20, 20, 8));
+
+    DailyCollectionResult result =
+        dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
+
+    assertThat(result.status()).isEqualTo("COMPLETED");
+    assertThat(result.agentStats().discoveredCount()).isEqualTo(100);
+    assertThat(result.agentStats().fetchedCount()).isEqualTo(50);
+    assertThat(result.agentStats().parsedCount()).isEqualTo(45);
+    assertThat(result.agentStats().duplicateCount()).isEqualTo(5);
+    assertThat(result.agentStats().filteredCount()).isEqualTo(2);
+    assertThat(result.agentStats().truncatedCount()).isEqualTo(10);
+    assertThat(result.agentStats().finalCount()).isEqualTo(28);
+    assertThat(result.savedCount()).isEqualTo(20);
+    assertThat(result.persistenceDuplicateCount()).isEqualTo(8);
+    assertThat(result.warnings()).containsExactly("warn1");
   }
 }
