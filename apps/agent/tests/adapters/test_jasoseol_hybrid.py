@@ -12,14 +12,13 @@ from datetime import date
 from pathlib import Path
 
 import httpx
+import pytest
 from httpx import TimeoutException
 
 from app.adapters.base import AdapterResult
-import pytest
-
 from app.adapters.jasoseol import (
-    JasoseolAdapter,
     _EXPLORATION_ENABLED,
+    JasoseolAdapter,
     _allocate_fetch_budget,
     _CandidateEntry,
     _merge_candidates,
