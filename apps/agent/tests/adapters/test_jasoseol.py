@@ -14,6 +14,7 @@ from httpx import TimeoutException
 
 from app.adapters.base import AdapterResult, RawJobPosting
 from app.adapters.jasoseol import (
+    _EXPLORATION_ENABLED,
     JasoseolAdapter,
     _extract_source_external_id,
     _parse_lastmod,
@@ -297,6 +298,7 @@ _SINGLE_URL_SITEMAP = (
 )
 
 
+@pytest.mark.skipif(not _EXPLORATION_ENABLED, reason="sitemap exploration disabled")
 async def test_adapter_all_success_returns_postings(monkeypatch):
     responses = {
         _SITEMAP_1: (200, _SINGLE_URL_SITEMAP),
@@ -315,6 +317,7 @@ async def test_adapter_all_success_returns_postings(monkeypatch):
     assert result.warnings == []
 
 
+@pytest.mark.skipif(not _EXPLORATION_ENABLED, reason="sitemap exploration disabled")
 async def test_adapter_sitemap_timeout_returns_empty_with_warning(monkeypatch):
     responses = {
         _SITEMAP_1: TimeoutException("timeout"),
@@ -330,6 +333,7 @@ async def test_adapter_sitemap_timeout_returns_empty_with_warning(monkeypatch):
     assert any("timeout" in w for w in result.warnings)
 
 
+@pytest.mark.skipif(not _EXPLORATION_ENABLED, reason="sitemap exploration disabled")
 async def test_adapter_sitemap_http_error_returns_empty_with_warning(monkeypatch):
     responses = {
         _SITEMAP_1: (503, "Service Unavailable"),
@@ -345,6 +349,7 @@ async def test_adapter_sitemap_http_error_returns_empty_with_warning(monkeypatch
     assert any("503" in w for w in result.warnings)
 
 
+@pytest.mark.skipif(not _EXPLORATION_ENABLED, reason="sitemap exploration disabled")
 async def test_adapter_page_timeout_returns_partial_with_warning(monkeypatch):
     responses = {
         _SITEMAP_1: (200, _SINGLE_URL_SITEMAP),
@@ -465,6 +470,7 @@ async def test_adapter_source_name_is_jasoseol():
 # ── _MockAsyncClient handles malformed sitemap without crashing adapter ───────
 
 
+@pytest.mark.skipif(not _EXPLORATION_ENABLED, reason="sitemap exploration disabled")
 async def test_adapter_malformed_sitemap_xml_returns_warning(monkeypatch):
     responses = {
         _SITEMAP_1: (200, "<not valid xml <<"),
@@ -536,6 +542,7 @@ def _make_multi_url_sitemap(urls: list[str], lastmod: str) -> str:
     )
 
 
+@pytest.mark.skipif(not _EXPLORATION_ENABLED, reason="sitemap exploration disabled")
 async def test_adapter_respects_detail_fetch_limit_per_source(monkeypatch):
     """With detail_fetch_limit=1, only 1 page is fetched from 3 discovered URLs."""
     page_urls = [f"{_BASE}/recruit/{i}" for i in [104951, 104950, 104949]]
@@ -564,6 +571,7 @@ async def test_adapter_respects_detail_fetch_limit_per_source(monkeypatch):
     assert result.source_stats.fetched == 1
 
 
+@pytest.mark.skipif(not _EXPLORATION_ENABLED, reason="sitemap exploration disabled")
 async def test_adapter_source_stats_populated_on_success(monkeypatch):
     responses = {
         _SITEMAP_1: (200, _SINGLE_URL_SITEMAP),
