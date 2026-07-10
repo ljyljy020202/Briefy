@@ -12,10 +12,12 @@ from datetime import date
 from pathlib import Path
 
 import httpx
+import pytest
 from httpx import TimeoutException
 
 from app.adapters.base import AdapterResult
 from app.adapters.jasoseol import (
+    _EXPLORATION_ENABLED,
     JasoseolAdapter,
     _allocate_fetch_budget,
     _CandidateEntry,
@@ -355,6 +357,7 @@ async def test_adapter_unknown_roles_skips_targeted_discovery(monkeypatch):
     assert not any("/search" in u for u in called_urls)
 
 
+@pytest.mark.skipif(not _EXPLORATION_ENABLED, reason="sitemap exploration disabled")
 async def test_adapter_targeted_search_timeout_falls_back_to_sitemap(monkeypatch):
     """Search timeout must not fail collection; sitemap results are preserved."""
     sitemap_xml = _sitemap_xml(
@@ -376,6 +379,7 @@ async def test_adapter_targeted_search_timeout_falls_back_to_sitemap(monkeypatch
     assert any("timeout" in w or "targeted" in w.lower() for w in result.warnings)
 
 
+@pytest.mark.skipif(not _EXPLORATION_ENABLED, reason="sitemap exploration disabled")
 async def test_adapter_stats_discovered_is_unique_merged_count(monkeypatch):
     search_html = _read("jasoseol_search_page.html")  # IDs: 201001, 201002, 201003
     sitemap_xml = _sitemap_xml([
