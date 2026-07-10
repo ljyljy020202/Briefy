@@ -122,9 +122,12 @@ public class CandidatePoolService {
     return new CandidatePoolUpsertResult(postings.size(), saved, duplicates);
   }
 
+  private static final int BRIEFING_LOOKBACK_DAYS = 7;
+
   @Transactional(readOnly = true)
   public List<JobPosting> findJobPostingsByDate(LocalDate date) {
-    return jobPostingRepository.findAllByCollectedDate(date);
+    return jobPostingRepository.findAllByCollectedDateBetween(
+        date.minusDays(BRIEFING_LOOKBACK_DAYS), date);
   }
 
   // SHA-256 hex of "source|identifier".

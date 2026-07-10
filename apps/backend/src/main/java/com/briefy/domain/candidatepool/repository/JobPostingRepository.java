@@ -13,4 +13,6 @@ public interface JobPostingRepository extends JpaRepository<JobPosting, Long> {
   Optional<JobPosting> findFirstByCanonicalFingerprint(String canonicalFingerprint);
 
   List<JobPosting> findAllByCollectedDate(LocalDate collectedDate);
+
+  List<JobPosting> findAllByCollectedDateBetween(LocalDate from, LocalDate to);
 }
