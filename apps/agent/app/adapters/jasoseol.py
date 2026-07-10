@@ -62,6 +62,9 @@ log = logging.getLogger(__name__)
 
 _SOURCE = "jasoseol"
 _MAX_CONCURRENCY = 5
+# Set False to collect via /search targeted discovery only (no sitemap exploration).
+# Set True to re-enable sitemap exploration with the quota below.
+_EXPLORATION_ENABLED = False
 # Post-parse exploration quota — fraction of max_results_per_source reserved
 # for recency-only (non-relevance) picks after parsing.
 _POST_PARSE_EXPLORATION_RATIO = 0.2
@@ -136,9 +139,12 @@ class JasoseolAdapter(JobBoardAdapter):
                         targeted_candidates = []
 
                 # ── B. Sitemap Exploration Discovery ──────────────────────────
-                exploration_entries = await _collect_recent_url_entries(
-                    client, base_url, collect_date, options, warnings
-                )
+                if _EXPLORATION_ENABLED:
+                    exploration_entries = await _collect_recent_url_entries(
+                        client, base_url, collect_date, options, warnings
+                    )
+                else:
+                    exploration_entries = []
 
                 # ── C. Merge & Dedup ──────────────────────────────────────────
                 candidates = _merge_candidates(
@@ -492,9 +498,12 @@ def _select_postings(
     if not entries or limit <= 0:
         return []
 
-    exploration_slots = min(
-        max(1, int(limit * _POST_PARSE_EXPLORATION_RATIO)), limit // 2
-    )
+    if _EXPLORATION_ENABLED:
+        exploration_slots = min(
+            max(1, int(limit * _POST_PARSE_EXPLORATION_RATIO)), limit // 2
+        )
+    else:
+        exploration_slots = 0
     relevance_slots = limit - exploration_slots
 
     scored = [
