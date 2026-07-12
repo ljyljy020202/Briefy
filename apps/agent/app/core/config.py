@@ -2,9 +2,11 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Reads from the monorepo root .env for both native (poetry run) and Docker runs.
-# In Docker, environment variables injected via docker-compose.yml take precedence.
-_ROOT_ENV = Path(__file__).resolve().parents[4] / ".env"
+# Native dev: /…/briefy/apps/agent/app/core/config.py → parents[4] = monorepo root
+# Docker:     /app/app/core/config.py → only 3 ancestors; fall back to Path(".env")
+#             (Docker env vars injected by Compose take precedence anyway)
+_parents = Path(__file__).resolve().parents
+_ROOT_ENV = _parents[4] / ".env" if len(_parents) > 4 else Path(".env")
 
 
 class Settings(BaseSettings):

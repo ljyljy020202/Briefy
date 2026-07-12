@@ -1,157 +1,298 @@
 # Deployment Guide
 
-## Overview
+## 배포 구조
 
-Briefy uses a multi-cloud deployment model:
-- **Frontend**: Vercel (serverless, auto-scaling)
-- **Backend & Agent**: AWS EC2 (Docker containers, Docker Compose orchestration)
-- **Data**: AWS RDS (MySQL) + ElastiCache (Redis)
+```
+User → Vercel (Next.js frontend)
+          ↓ HTTPS + credentials:include
+       Nginx (EC2)
+          ↓ 127.0.0.1:8080
+       backend (Spring Boot, Docker)
+          ↓ http://agent:8000 (Docker 내부 네트워크)
+       agent (FastAPI, Docker)
+          ↓
+       mysql / redis (Docker 내부 네트워크)
+```
 
-## Local Development
+| 서비스 | 플랫폼 | 외부 노출 |
+|--------|--------|----------|
+| Frontend | Vercel | HTTPS (Vercel 도메인) |
+| Backend | EC2 Docker | Nginx를 통해서만 |
+| Agent | EC2 Docker | 외부 비공개 (backend 내부 호출만) |
+| MySQL | EC2 Docker | 외부 비공개 |
+| Redis | EC2 Docker | 외부 비공개 |
 
-### Prerequisites
+---
 
-- Docker & Docker Compose
-- Node.js 20+, Python 3.11+, Java 21+
-- Make
+## 1. 로컬 개발 검증
 
-### Quick Start
+### 사전 준비
 
 ```bash
+# 레포 클론 후 1회만 실행
 cp .env.example .env
-# Edit .env with your values
+# .env 에 GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, OPENAI_API_KEY 등 실제 값 입력
 
-make setup      # Install all dependencies
-make dev        # Start all services (MySQL, Redis, backend, agent)
+make setup   # 의존성 전체 설치
+```
 
-# In another terminal
+### 전체 서비스 기동 (Docker Compose)
+
+```bash
+make dev           # MySQL + Redis + backend + agent 기동 (포그라운드)
+# 또는
+make dev-build     # 이미지 재빌드 후 기동
+```
+
+백그라운드로 실행하려면:
+
+```bash
+docker compose up -d
+docker compose logs -f       # 전체 로그 스트리밍
+docker compose logs -f backend  # 특정 서비스 로그
+```
+
+### 서비스 상태 확인
+
+```bash
+docker compose ps
+
+# backend health check
+curl http://localhost:8080/api/health
+# 기대 응답: {"status":"ok"}
+
+# agent health check
+curl http://localhost:8000/health
+# 기대 응답: {"status":"ok"}
+
+# MySQL 접속 확인
+docker compose exec mysql mysql -u briefy -p briefy -e "SHOW TABLES;"
+
+# Redis 접속 확인
+docker compose exec redis redis-cli ping
+# 기대 응답: PONG
+```
+
+### Frontend 개발 서버
+
+```bash
 cd apps/frontend
-npm run dev     # Start Next.js on port 3000
+cp .env.example .env.local
+# NEXT_PUBLIC_API_BASE_URL=http://localhost:8080 (기본값)
+npm run dev
 ```
 
-### Services
+브라우저에서 http://localhost:3000 접속.
 
-| Service | URL | Command |
-|---------|-----|---------|
-| Frontend | http://localhost:3000 | `npm run dev` (from `apps/frontend/`) |
-| Backend | http://localhost:8080 | `make backend` (or `./gradlew bootRun --args='--spring.profiles.active=local'`) |
-| Agent | http://localhost:8000 | `make agent` (or `poetry run uvicorn ...`) |
-| MySQL | localhost:3306 | `docker compose up mysql` |
-| Redis | localhost:6379 | `docker compose up redis` |
-
-## Production Deployment
-
-### Prerequisites
-
-- AWS Account with EC2, RDS, ElastiCache access
-- GitHub Actions for CI/CD
-- Terraform or CloudFormation for IaC (optional)
-
-### Step 1: Prepare AWS Infrastructure
+### 서비스 종료
 
 ```bash
-cd infra/aws
-# Create RDS MySQL instance, ElastiCache Redis, EC2 instance
-# Store connection details in AWS Secrets Manager
+make down          # 컨테이너 종료 및 제거 (볼륨 유지)
+# ⚠️  절대 'docker compose down -v' 실행 금지 — mysql-data 볼륨이 삭제됩니다.
 ```
 
-### Step 2: Build Docker Images
+---
+
+## 2. 로컬 테스트 / 빌드 검증
 
 ```bash
+# 전체 테스트
+make test
+
+# 서비스별 개별 테스트
+cd apps/backend  && ./gradlew test
+cd apps/frontend && npm test -- --watchAll=false
+cd apps/agent    && poetry run pytest
+
+# 린트
+make lint
+
+# Backend 빌드 검증 (JAR 생성)
 cd apps/backend && ./gradlew bootJar
-cd apps/agent && poetry export -f requirements.txt --output requirements.txt
-docker build -t briefy-backend:latest .
-docker build -t briefy-agent:latest .
+
+# Frontend 빌드 검증
+cd apps/frontend && npm run build
 ```
 
-Or use GitHub Actions to build automatically on push to `main`.
+> **주의:** `SCHEDULER_ENABLED=false` (기본값), `EMAIL_MODE=log` (기본값) 상태에서 테스트하세요.
+> 실제 이메일 발송이나 스케줄러 자동 실행이 일어나서는 안 됩니다.
 
-### Step 3: Deploy to EC2
+---
+
+## 3. EC2 배포 전 준비물
+
+### 필요한 것
+
+- EC2 인스턴스 (Ubuntu 22.04 권장, t3.medium 이상)
+- EC2 보안 그룹: 인바운드 80(HTTP), 443(HTTPS), 22(SSH)만 허용
+- Docker, Docker Compose v2 설치 완료
+- (선택) 도메인 + DNS A레코드 설정
+- Google Cloud Console OAuth redirect URI 등록 (예: `https://api.example.com/api/oauth2/callback/google`)
+- OpenAI API Key
+
+### EC2 초기 설정
 
 ```bash
-# SSH into EC2 instance
-ssh -i key.pem ec2-user@your-instance-ip
+# Docker 설치 (Ubuntu)
+sudo apt update && sudo apt install -y docker.io docker-compose-plugin
+sudo usermod -aG docker $USER
+# 재로그인 후 docker ps 로 권한 확인
 
-# Pull latest images
-docker pull your-registry/briefy-backend:latest
-docker pull your-registry/briefy-agent:latest
-
-# Copy production docker-compose
-scp docker-compose.yml docker-compose.prod.yml ec2-user@your-instance-ip:~/
-
-# Start services
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# Nginx 설치
+sudo apt install -y nginx curl
 ```
 
-### Step 4: Deploy Frontend
+---
 
-Frontend deploys automatically to Vercel when you push to `main` branch (if connected).
+## 4. EC2 배포 절차
 
-Alternatively:
-```bash
-npm run build
-npm run start  # Or deploy to your hosting platform
-```
-
-### Step 5: Configure Domain & SSL
-
-- Set up Route 53 DNS (or your DNS provider)
-- Use AWS Certificate Manager for SSL certificates
-- Configure load balancer if using multiple EC2 instances
-
-## Monitoring & Logging
-
-### Backend & Agent Logs
+### 4-1. 레포 클론
 
 ```bash
-# On EC2
-docker compose logs -f backend
-docker compose logs -f agent
-
-# Or use CloudWatch with Docker logging driver
+git clone https://github.com/<your-org>/briefy.git
+cd briefy
+git checkout main
 ```
 
-### Frontend Monitoring
-
-- Vercel provides built-in analytics & monitoring
-- Set up DataDog or similar for custom metrics
-
-## Scaling Considerations
-
-### Horizontal Scaling
-
-For high traffic, consider:
-- Multiple EC2 instances behind load balancer
-- AWS Auto Scaling Groups
-- CloudFront CDN for frontend
-
-### Database Scaling
-
-- RDS Read Replicas for scaling reads
-- ElastiCache for caching frequently accessed data
-- Connection pooling in backend
-
-## Rollback Procedure
+### 4-2. `.env.prod` 작성
 
 ```bash
-# SSH into EC2
-docker pull your-registry/briefy-backend:previous-tag
-docker compose down
-docker compose up -d backend  # Starts with rolled-back image
+cp .env.prod.example .env.prod
+# 실제 값으로 수정
+#   MYSQL_ROOT_PASSWORD, MYSQL_PASSWORD, JWT_SECRET (openssl rand -hex 32)
+#   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
+#   GOOGLE_REDIRECT_URI=https://api.example.com/api/oauth2/callback/google
+#   FRONTEND_BASE_URL=https://app.example.com (Vercel 배포 도메인)
+#   OPENAI_API_KEY
+#   EMAIL_MODE=log  (초기 배포 시 — SES 준비 전)
+#   SCHEDULER_ENABLED=false  (초기 배포 시)
+nano .env.prod
 ```
 
-## Environment Variables
+### 4-3. `docker-compose.prod.yml` 준비
 
-Production `.env` should include:
-- Database credentials (from AWS Secrets Manager)
-- Redis connection string
-- API keys (OpenAI, etc.)
-- JWT secret
-- CORS origins
+```bash
+cp docker-compose.prod.yml.example docker-compose.prod.yml
+# 필요 시 수정 (기본 설정으로 충분한 경우 그대로 사용)
+```
 
-Store sensitive values in AWS Secrets Manager, not in `.env` file.
+### 4-4. 이미지 빌드 및 기동
 
-## Emergency Contacts
+```bash
+docker compose -f docker-compose.prod.yml up -d --build
 
-- On-call engineer: check Slack #oncall
-- AWS support: Enterprise Support plan
+# 기동 상태 확인
+docker compose -f docker-compose.prod.yml ps
+
+# 로그 확인
+docker compose -f docker-compose.prod.yml logs -f backend
+docker compose -f docker-compose.prod.yml logs -f agent
+```
+
+### 4-5. 서비스 확인
+
+```bash
+# backend health (Nginx 설정 전, 직접 확인)
+curl http://127.0.0.1:8080/api/health
+# 기대 응답: {"status":"ok"}
+
+# agent health (내부 네트워크 전용 — docker exec으로 확인)
+docker compose -f docker-compose.prod.yml exec agent curl http://localhost:8000/health
+```
+
+### 4-6. Nginx 설정
+
+```bash
+sudo cp infra/nginx/briefy.conf.example /etc/nginx/sites-available/briefy
+sudo nano /etc/nginx/sites-available/briefy
+# api.example.com 을 실제 도메인으로 변경
+
+sudo ln -s /etc/nginx/sites-available/briefy /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+### 4-7. HTTPS 적용 (도메인 연결 후)
+
+```bash
+sudo apt install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d api.example.com
+# Certbot이 Nginx 설정을 자동으로 수정합니다.
+```
+
+---
+
+## 5. Vercel 환경변수 설정
+
+Vercel 프로젝트 → Settings → Environment Variables 에서:
+
+| 변수명 | 값 | 환경 |
+|--------|-----|------|
+| `NEXT_PUBLIC_API_BASE_URL` | `https://api.example.com` | Production |
+| `NEXT_PUBLIC_API_BASE_URL` | `http://localhost:8080` | Development |
+
+> **vercel.json `ignoreCommand`:** `apps/frontend/` 변경이 없는 commit에서는
+> Vercel 재빌드를 자동으로 skip합니다. (backend/agent만 변경된 경우 빌드 생략)
+
+---
+
+## 6. 운영 중 주의사항
+
+### ⚠️ 절대 실행 금지
+
+```bash
+# mysql-data 볼륨 삭제 → 모든 DB 데이터 영구 소실
+docker compose -f docker-compose.prod.yml down -v
+```
+
+### 안전한 재시작
+
+```bash
+# 컨테이너만 재시작 (데이터 유지)
+docker compose -f docker-compose.prod.yml restart
+
+# 이미지 재빌드 후 무중단 교체
+docker compose -f docker-compose.prod.yml up -d --build --no-deps backend
+docker compose -f docker-compose.prod.yml up -d --build --no-deps agent
+```
+
+### 로그 확인
+
+```bash
+docker compose -f docker-compose.prod.yml logs -f --tail=100 backend
+docker compose -f docker-compose.prod.yml logs -f --tail=100 agent
+```
+
+---
+
+## 7. main merge 전 체크리스트
+
+dev → main merge 전에 아래 항목을 모두 확인하세요.
+
+- [ ] `make dev` 로 로컬 전체 기동 확인
+- [ ] `curl http://localhost:8080/api/health` → `{"status":"ok"}`
+- [ ] `curl http://localhost:8000/health` → `{"status":"ok"}`
+- [ ] `cd apps/backend && ./gradlew test` 통과
+- [ ] `cd apps/backend && ./gradlew spotlessCheck` 통과
+- [ ] `cd apps/frontend && npm run build` 통과
+- [ ] `cd apps/frontend && npm run lint` 통과
+- [ ] `cd apps/agent && poetry run pytest` 통과
+- [ ] `cd apps/agent && poetry run ruff check .` 통과
+- [ ] `.env.prod.example` 에 새로운 환경변수가 반영되어 있는지 확인
+- [ ] API 계약 변경 시 `docs/api.md` 업데이트
+
+---
+
+## 8. CI/CD (후속 단계)
+
+현재는 GitHub Actions CI(테스트/빌드)만 구성되어 있습니다.
+EC2 자동 배포(CD)는 EC2 배포 안정화 후 추가 예정입니다.
+
+CD 구성 시 필요한 GitHub Secrets:
+
+| Secret | 용도 |
+|--------|------|
+| `EC2_HOST` | SSH 접속 대상 IP 또는 도메인 |
+| `EC2_USER` | SSH 접속 유저명 (예: `ubuntu`) |
+| `EC2_SSH_KEY` | EC2 SSH private key (PEM 내용) |
+| `EC2_ENV_PROD` | `.env.prod` 전체 내용 (base64 인코딩) |

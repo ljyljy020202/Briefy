@@ -1,0 +1,115 @@
+# docker-compose.prod.yml.example
+#
+# EC2 운영 배포용 Docker Compose 템플릿.
+# 사용법:
+#   cp docker-compose.prod.yml.example docker-compose.prod.yml
+#   # docker-compose.prod.yml은 .gitignore에 등록되어 있어 커밋되지 않습니다.
+#
+# 실행:
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# ⚠️  절대 'docker compose -f docker-compose.prod.yml down -v' 를 실행하지 마세요.
+#      -v 플래그는 mysql-data 볼륨을 삭제하여 데이터를 영구적으로 잃습니다.
+#      컨테이너 재시작이 필요하면 'docker compose ... down' (v 없이) 또는 'restart'를 사용하세요.
+
+services:
+
+  mysql:
+    image: mysql:8.0
+    env_file: .env.prod
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: briefy
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    # ports: 외부에 노출하지 않음 — briefy-net 내부에서만 접근
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - briefy-net
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis-data:/data
+    # ports: 외부에 노출하지 않음 — briefy-net 내부에서만 접근
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - briefy-net
+
+  backend:
+    build:
+      context: ./apps/backend
+      dockerfile: Dockerfile
+    env_file: .env.prod
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      MYSQL_URL: jdbc:mysql://mysql:3306/briefy?useSSL=false&allowPublicKeyRetrieval=true
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      AGENT_URL: http://agent:8000
+      # 아래 변수들은 .env.prod 에서 주입됩니다:
+      # JWT_SECRET, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI,
+      # FRONTEND_BASE_URL, EMAIL_MODE, EMAIL_AUTO_SEND_ENABLED, SES_FROM_EMAIL,
+      # AWS_REGION, SCHEDULER_ENABLED
+    ports:
+      - "127.0.0.1:8080:8080"  # Nginx만 접근; EC2 외부에서 직접 접근 불가
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - briefy-net
+
+  agent:
+    build:
+      context: ./apps/agent
+      dockerfile: Dockerfile
+    env_file: .env.prod
+    environment:
+      BACKEND_URL: http://backend:8080
+      # 아래 변수들은 .env.prod 에서 주입됩니다:
+      # OPENAI_API_KEY, LLM_MODEL, LLM_TEMPERATURE, LLM_TIMEOUT_SECONDS,
+      # JOB_COLLECTION_USE_FIXTURE, JOB_COLLECTION_ENABLE_REAL_SOURCES,
+      # JOB_COLLECTION_ENABLE_SARAMIN, SARAMIN_ACCESS_KEY
+    # ports: 외부에 노출하지 않음 — backend가 내부 네트워크로만 호출
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - briefy-net
+
+volumes:
+  mysql-data:
+    # ⚠️  이 볼륨을 삭제하면 모든 DB 데이터가 사라집니다.
+    # 'docker compose down -v' 명령을 운영 환경에서 절대 실행하지 마세요.
+  redis-data:
+
+networks:
+  briefy-net:
+    driver: bridge
