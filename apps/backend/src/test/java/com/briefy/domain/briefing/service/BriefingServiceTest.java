@@ -27,6 +27,7 @@ import com.briefy.domain.briefingpreference.entity.UserBriefingPreference;
 import com.briefy.domain.briefingpreference.repository.UserBriefingPreferenceRepository;
 import com.briefy.domain.candidatepool.entity.JobPosting;
 import com.briefy.domain.candidatepool.service.CandidatePoolService;
+import com.briefy.domain.company.entity.Company;
 import com.briefy.global.exception.BusinessException;
 import com.briefy.global.exception.ErrorCode;
 import com.briefy.global.response.PageResult;
@@ -299,6 +300,191 @@ class BriefingServiceTest {
     assertThat(candidates.get(0).preScore()).isGreaterThan(candidates.get(1).preScore());
   }
 
+  // ── Eligibility filtering ────────────────────────────────────────────────
+
+  @Test
+  void selectCandidates_expiredPosting_isFiltered() {
+    JobPosting active = samplePosting("네이버", "백엔드 개발자", "서울", LocalDate.now().plusDays(3));
+    JobPosting expired = samplePosting("카카오", "프론트엔드 개발자", "서울", LocalDate.now().minusDays(1));
+
+    List<AgentCandidateJobPosting> candidates = candidatesFor(Map.of(), List.of(active, expired));
+
+    assertThat(candidates).hasSize(1);
+    assertThat(candidates.get(0).companyName()).isEqualTo("네이버");
+  }
+
+  @Test
+  void selectCandidates_explicitExpLevelMismatch_isFiltered() {
+    JobPosting match = samplePostingWithMeta("네이버", "백엔드 개발자", "서울", null, "신입", null);
+    JobPosting mismatch = samplePostingWithMeta("카카오", "백엔드 개발자", "서울", null, "경력", null);
+
+    List<AgentCandidateJobPosting> candidates =
+        candidatesFor(Map.of("experienceLevels", List.of("신입")), List.of(match, mismatch));
+
+    assertThat(candidates.stream().map(AgentCandidateJobPosting::companyName).toList())
+        .containsOnly("네이버")
+        .doesNotContain("카카오");
+  }
+
+  @Test
+  void selectCandidates_nullExpLevel_isNotFiltered() {
+    JobPosting nullExp = samplePostingWithMeta("네이버", "백엔드 개발자", "서울", null, null, null);
+
+    List<AgentCandidateJobPosting> candidates =
+        candidatesFor(Map.of("experienceLevels", List.of("신입")), List.of(nullExp));
+
+    assertThat(candidates).hasSize(1);
+  }
+
+  @Test
+  void selectCandidates_explicitEmpTypeMismatch_isFiltered() {
+    JobPosting match = samplePostingWithMeta("네이버", "백엔드 개발자", "서울", null, null, "정규직");
+    JobPosting mismatch = samplePostingWithMeta("카카오", "백엔드 개발자", "서울", null, null, "계약직");
+
+    List<AgentCandidateJobPosting> candidates =
+        candidatesFor(Map.of("employmentTypes", List.of("정규직")), List.of(match, mismatch));
+
+    assertThat(candidates.stream().map(AgentCandidateJobPosting::companyName).toList())
+        .containsOnly("네이버");
+  }
+
+  @Test
+  void selectCandidates_nullEmpType_isNotFiltered() {
+    JobPosting nullEmp = samplePostingWithMeta("네이버", "백엔드 개발자", "서울", null, null, null);
+
+    List<AgentCandidateJobPosting> candidates =
+        candidatesFor(Map.of("employmentTypes", List.of("정규직")), List.of(nullEmp));
+
+    assertThat(candidates).hasSize(1);
+  }
+
+  // ── Scoring: company metadata ────────────────────────────────────────────
+
+  @Test
+  void selectCandidates_noLinkedCompany_stillEligibleAndScored() {
+    JobPosting noLinked = samplePosting("스타트업", "백엔드 개발자", "서울", null);
+
+    List<AgentCandidateJobPosting> candidates =
+        candidatesFor(
+            Map.of("companySizes", List.of("대기업"), "industries", List.of("IT")), List.of(noLinked));
+
+    assertThat(candidates).hasSize(1);
+  }
+
+  @Test
+  void selectCandidates_industryScoredWhenLinkedCompanyMatches() {
+    Company itCompany = Company.create("네이버", "네이버", "대기업", "IT,전자상거래");
+    JobPosting withIndustry = samplePostingWithLinkedCompany("네이버", "백엔드 개발자", itCompany);
+    JobPosting withoutIndustry = samplePosting("카카오", "백엔드 개발자", "서울", null);
+
+    List<AgentCandidateJobPosting> candidates =
+        candidatesFor(Map.of("industries", List.of("IT")), List.of(withoutIndustry, withIndustry));
+
+    assertThat(candidates.get(0).companyName()).isEqualTo("네이버");
+    assertThat(candidates.get(0).preScore()).isGreaterThan(candidates.get(1).preScore());
+  }
+
+  @Test
+  void selectCandidates_companySizeScoredWhenLinkedCompanyMatches() {
+    Company largeCompany = Company.create("네이버", "네이버", "대기업", null);
+    JobPosting withSize = samplePostingWithLinkedCompany("네이버", "백엔드 개발자", largeCompany);
+    JobPosting withoutSize = samplePosting("스타트업", "백엔드 개발자", "서울", null);
+
+    List<AgentCandidateJobPosting> candidates =
+        candidatesFor(Map.of("companySizes", List.of("대기업")), List.of(withoutSize, withSize));
+
+    assertThat(candidates.get(0).companyName()).isEqualTo("네이버");
+    assertThat(candidates.get(0).preScore()).isGreaterThan(candidates.get(1).preScore());
+  }
+
+  @Test
+  void selectCandidates_targetedCompanyBoost_appliesHigherScore() {
+    JobPosting targeted = samplePosting("네이버", "백엔드 개발자", "서울", null);
+    JobPosting notTargeted = samplePosting("카카오", "백엔드 개발자", "서울", null);
+
+    List<AgentCandidateJobPosting> candidates =
+        candidatesFor(Map.of("companies", List.of("네이버")), List.of(notTargeted, targeted));
+
+    assertThat(candidates.get(0).companyName()).isEqualTo("네이버");
+    assertThat(candidates.get(0).preScore()).isGreaterThan(candidates.get(1).preScore());
+  }
+
+  // ── Diversity selection ──────────────────────────────────────────────────
+
+  @Test
+  void selectCandidates_diversitySelection_capsNonTargetedCompanyAt2() {
+    List<JobPosting> postings =
+        List.of(
+            samplePosting("삼성", "개발자 A", "서울", null),
+            samplePosting("삼성", "개발자 B", "서울", null),
+            samplePosting("삼성", "개발자 C", "서울", null),
+            samplePosting("삼성", "개발자 D", "서울", null),
+            samplePosting("카카오", "백엔드 개발자", "서울", null));
+
+    List<AgentCandidateJobPosting> candidates = candidatesFor(Map.of(), postings);
+
+    long samsungCount = candidates.stream().filter(c -> "삼성".equals(c.companyName())).count();
+    assertThat(samsungCount).isLessThanOrEqualTo(2);
+  }
+
+  @Test
+  void selectCandidates_diversitySelection_allowsMoreFromTargetedCompany() {
+    List<JobPosting> postings =
+        List.of(
+            samplePosting("네이버", "개발자 A", "서울", null),
+            samplePosting("네이버", "개발자 B", "서울", null),
+            samplePosting("네이버", "개발자 C", "서울", null),
+            samplePosting("네이버", "개발자 D", "서울", null));
+
+    List<AgentCandidateJobPosting> candidates =
+        candidatesFor(Map.of("companies", List.of("네이버")), postings);
+
+    long naverCount = candidates.stream().filter(c -> "네이버".equals(c.companyName())).count();
+    assertThat(naverCount).isGreaterThan(2);
+  }
+
+  @Test
+  void selectCandidates_deterministicOrdering() {
+    List<JobPosting> postings =
+        List.of(
+            samplePosting("나", "백엔드 개발자", "서울", null),
+            samplePosting("가", "백엔드 개발자", "서울", null),
+            samplePosting("다", "백엔드 개발자", "서울", null));
+
+    List<AgentCandidateJobPosting> first = candidatesFor(Map.of(), postings);
+    List<AgentCandidateJobPosting> second = candidatesFor(Map.of(), postings);
+
+    assertThat(first.stream().map(AgentCandidateJobPosting::companyName).toList())
+        .isEqualTo(second.stream().map(AgentCandidateJobPosting::companyName).toList());
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
+
+  private List<AgentCandidateJobPosting> candidatesFor(
+      Map<String, Object> prefMap, List<JobPosting> postings) {
+    BriefingCategory category = mock(BriefingCategory.class);
+    when(category.getCode()).thenReturn(BriefingCategoryCode.JOB_POSTING);
+    UserBriefingPreference pref = mock(UserBriefingPreference.class);
+    when(pref.getCategory()).thenReturn(category);
+    when(pref.getPreference()).thenReturn(prefMap);
+
+    when(userBriefingPreferenceRepository.findAllByUserIdAndActiveTrue(1L))
+        .thenReturn(List.of(pref));
+    when(briefingJobRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+    when(candidatePoolService.findJobPostingsByDate(any())).thenReturn(postings);
+
+    ArgumentCaptor<AgentBriefingRequest> captor =
+        ArgumentCaptor.forClass(AgentBriefingRequest.class);
+    when(agentClient.generate(captor.capture())).thenReturn(mockAgentResponse);
+
+    BriefingReport mockReport = mock(BriefingReport.class);
+    when(mockReport.getId()).thenReturn(1L);
+    when(briefingReportRepository.save(any())).thenReturn(mockReport);
+
+    briefingService.generateBriefing(1L);
+    return captor.getValue().candidatePool().jobPostings();
+  }
+
   private JobPosting samplePosting(
       String company, String title, String location, LocalDate deadline) {
     return JobPosting.create(
@@ -316,5 +502,51 @@ class BriefingServiceTest {
         "hash-" + company + "-" + title,
         LocalDate.now(),
         null);
+  }
+
+  private JobPosting samplePostingWithMeta(
+      String company,
+      String title,
+      String location,
+      LocalDate deadline,
+      String experienceLevel,
+      String employmentType) {
+    return JobPosting.create(
+        title,
+        company,
+        "원티드",
+        "https://example.com/" + company.hashCode() + "/" + title.hashCode(),
+        location,
+        deadline,
+        null,
+        null,
+        null,
+        employmentType,
+        experienceLevel,
+        "hash-" + company + "-" + title,
+        LocalDate.now(),
+        null);
+  }
+
+  private JobPosting samplePostingWithLinkedCompany(
+      String company, String title, Company linkedCompany) {
+    JobPosting posting =
+        JobPosting.create(
+            title,
+            company,
+            "원티드",
+            "https://example.com/" + company.hashCode() + "/" + title.hashCode(),
+            "서울",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "hash-" + company + "-" + title,
+            LocalDate.now(),
+            null);
+    posting.linkCompany(linkedCompany);
+    return posting;
   }
 }

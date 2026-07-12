@@ -398,11 +398,15 @@ def _build_enriched_inputs(
             else None
         )
 
+        _company = posting.company_name or ""
+        _raw_title = posting.title or "채용 공고"
+        _display_title = f"{_company} — {_raw_title}" if _company else _raw_title
+
         result.append(
             EnrichedArticleInput(
                 id=post_id,
-                title=posting.title or "채용 공고",
-                company_name=posting.company_name or "",
+                title=_display_title,
+                company_name=_company,
                 url=posting.source_url,
                 source=posting.source,
                 summary=summary,

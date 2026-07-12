@@ -33,8 +33,10 @@ dependencies {
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.0")
     implementation(platform("software.amazon.awssdk:bom:2.26.0"))
     implementation("software.amazon.awssdk:ses")
+    implementation("org.flywaydb:flyway-mysql")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.springframework.security:spring-security-test")
+    testRuntimeOnly("com.h2database:h2")
 }
 
 spotless {

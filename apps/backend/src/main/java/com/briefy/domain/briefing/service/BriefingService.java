@@ -19,14 +19,17 @@ import com.briefy.domain.briefingpreference.entity.UserBriefingPreference;
 import com.briefy.domain.briefingpreference.repository.UserBriefingPreferenceRepository;
 import com.briefy.domain.candidatepool.entity.JobPosting;
 import com.briefy.domain.candidatepool.service.CandidatePoolService;
+import com.briefy.domain.company.entity.Company;
 import com.briefy.global.exception.BusinessException;
 import com.briefy.global.exception.ErrorCode;
 import com.briefy.global.response.PageResult;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.data.domain.Page;
@@ -38,6 +41,20 @@ import org.springframework.transaction.annotation.Transactional;
 public class BriefingService {
 
   private static final int MAX_CANDIDATE_COUNT = 30;
+  private static final int MAX_PER_COMPANY = 2;
+  private static final int MAX_PER_TARGETED_COMPANY = 3;
+
+  private static final int SCORE_ROLE_MATCH = 30;
+  private static final int SCORE_TARGET_COMPANY = 25;
+  private static final int SCORE_SKILL = 5;
+  private static final int SCORE_SKILLS_MAX = 25;
+  private static final int SCORE_EXPERIENCE = 15;
+  private static final int SCORE_INDUSTRY = 12;
+  private static final int SCORE_LOCATION = 10;
+  private static final int SCORE_EMPLOYMENT_TYPE = 10;
+  private static final int SCORE_COMPANY_SIZE = 8;
+  private static final int SCORE_DEADLINE_SOON = 10;
+  private static final int SCORE_RECENT = 5;
 
   private final BriefingJobRepository briefingJobRepository;
   private final BriefingReportRepository briefingReportRepository;
@@ -141,11 +158,44 @@ public class BriefingService {
     List<JobPosting> postings = candidatePoolService.findJobPostingsByDate(date);
     if (postings == null || postings.isEmpty()) return List.of();
 
-    return postings.stream()
-        .map(p -> toAgentCandidateJobPosting(p, scorePosting(p, preference)))
-        .sorted(Comparator.comparingInt(AgentCandidateJobPosting::preScore).reversed())
-        .limit(MAX_CANDIDATE_COUNT)
-        .toList();
+    List<String> prefCompanies = extractStringList(preference, "companies");
+
+    List<AgentCandidateJobPosting> scored =
+        postings.stream()
+            .filter(p -> isEligible(p, preference))
+            .map(p -> toAgentCandidateJobPosting(p, scorePosting(p, preference)))
+            .sorted(
+                Comparator.comparingInt(AgentCandidateJobPosting::preScore)
+                    .reversed()
+                    .thenComparing(AgentCandidateJobPosting::companyName)
+                    .thenComparing(AgentCandidateJobPosting::title))
+            .toList();
+
+    return applyDiversitySelection(scored, prefCompanies);
+  }
+
+  private boolean isEligible(JobPosting posting, Map<String, Object> pref) {
+    if (posting.getDeadline() != null && posting.getDeadline().isBefore(LocalDate.now())) {
+      return false;
+    }
+
+    List<String> prefExpLevels = extractStringList(pref, "experienceLevels");
+    String expLevel = posting.getExperienceLevel();
+    if (!prefExpLevels.isEmpty() && expLevel != null && !expLevel.isBlank()) {
+      if (prefExpLevels.stream().noneMatch(e -> e.equalsIgnoreCase(expLevel))) {
+        return false;
+      }
+    }
+
+    List<String> prefEmpTypes = extractStringList(pref, "employmentTypes");
+    String empType = posting.getEmploymentType();
+    if (!prefEmpTypes.isEmpty() && empType != null && !empType.isBlank()) {
+      if (prefEmpTypes.stream().noneMatch(e -> e.equalsIgnoreCase(empType))) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   private int scorePosting(JobPosting posting, Map<String, Object> pref) {
@@ -157,22 +207,24 @@ public class BriefingService {
     List<String> prefLocations = extractStringList(pref, "locations");
     List<String> prefExpLevels = extractStringList(pref, "experienceLevels");
     List<String> prefEmpTypes = extractStringList(pref, "employmentTypes");
+    List<String> prefIndustries = extractStringList(pref, "industries");
+    List<String> prefCompanySizes = extractStringList(pref, "companySizes");
 
     // role/title match: +30
     String titleLower = posting.getTitle() != null ? posting.getTitle().toLowerCase() : "";
     String rolesStr = posting.getRoles() != null ? posting.getRoles().toLowerCase() : "";
     for (String role : prefRoles) {
       if (titleLower.contains(role.toLowerCase()) || rolesStr.contains(role.toLowerCase())) {
-        score += 30;
+        score += SCORE_ROLE_MATCH;
         break;
       }
     }
 
-    // interested company match: +15
+    // target company match: +25
     String company = posting.getCompany() != null ? posting.getCompany() : "";
     for (String prefCo : prefCompanies) {
       if (company.equalsIgnoreCase(prefCo)) {
-        score += 15;
+        score += SCORE_TARGET_COMPANY;
         break;
       }
     }
@@ -182,36 +234,65 @@ public class BriefingService {
     int skillScore = 0;
     for (String skill : prefSkills) {
       if (skillsStr.contains(skill.toLowerCase())) {
-        skillScore += 5;
-        if (skillScore >= 25) break;
+        skillScore += SCORE_SKILL;
+        if (skillScore >= SCORE_SKILLS_MAX) break;
       }
     }
     score += skillScore;
+
+    // experience level match: +15
+    String expLevel = posting.getExperienceLevel() != null ? posting.getExperienceLevel() : "";
+    for (String prefExp : prefExpLevels) {
+      if (expLevel.equalsIgnoreCase(prefExp)) {
+        score += SCORE_EXPERIENCE;
+        break;
+      }
+    }
+
+    // industry match via linkedCompany: +12
+    Company linkedCompany = posting.getLinkedCompany();
+    if (!prefIndustries.isEmpty()
+        && linkedCompany != null
+        && linkedCompany.getIndustryCodes() != null
+        && !linkedCompany.getIndustryCodes().isBlank()) {
+      List<String> codes =
+          Arrays.stream(linkedCompany.getIndustryCodes().split(",")).map(String::trim).toList();
+      for (String prefIndustry : prefIndustries) {
+        if (codes.stream().anyMatch(c -> c.equalsIgnoreCase(prefIndustry))) {
+          score += SCORE_INDUSTRY;
+          break;
+        }
+      }
+    }
 
     // location match: +10
     String location = posting.getLocation() != null ? posting.getLocation() : "";
     for (String prefLoc : prefLocations) {
       if (location.contains(prefLoc) || prefLoc.contains(location)) {
-        score += 10;
+        score += SCORE_LOCATION;
         break;
       }
     }
 
-    // experience level match: +10
-    String expLevel = posting.getExperienceLevel() != null ? posting.getExperienceLevel() : "";
-    for (String prefExp : prefExpLevels) {
-      if (expLevel.equalsIgnoreCase(prefExp)) {
-        score += 10;
-        break;
-      }
-    }
-
-    // employment type match: +5
+    // employment type match: +10
     String empType = posting.getEmploymentType() != null ? posting.getEmploymentType() : "";
     for (String prefEmp : prefEmpTypes) {
       if (empType.equalsIgnoreCase(prefEmp)) {
-        score += 5;
+        score += SCORE_EMPLOYMENT_TYPE;
         break;
+      }
+    }
+
+    // company size match via linkedCompany: +8
+    if (!prefCompanySizes.isEmpty()
+        && linkedCompany != null
+        && linkedCompany.getCompanySize() != null
+        && !linkedCompany.getCompanySize().isBlank()) {
+      for (String prefSize : prefCompanySizes) {
+        if (linkedCompany.getCompanySize().equalsIgnoreCase(prefSize)) {
+          score += SCORE_COMPANY_SIZE;
+          break;
+        }
       }
     }
 
@@ -219,17 +300,39 @@ public class BriefingService {
     if (posting.getDeadline() != null) {
       long days = ChronoUnit.DAYS.between(LocalDate.now(), posting.getDeadline());
       if (days >= 0 && days <= 7) {
-        score += 10;
+        score += SCORE_DEADLINE_SOON;
       }
     }
 
     // recently collected (within 3 days): +5
     if (posting.getCollectedDate() != null
         && !posting.getCollectedDate().isBefore(LocalDate.now().minusDays(3))) {
-      score += 5;
+      score += SCORE_RECENT;
     }
 
     return score;
+  }
+
+  private List<AgentCandidateJobPosting> applyDiversitySelection(
+      List<AgentCandidateJobPosting> sorted, List<String> targetCompanies) {
+    Map<String, Integer> companyCount = new HashMap<>();
+    List<AgentCandidateJobPosting> result = new ArrayList<>();
+
+    for (AgentCandidateJobPosting candidate : sorted) {
+      if (result.size() >= MAX_CANDIDATE_COUNT) break;
+      String companyLower =
+          candidate.companyName() != null ? candidate.companyName().toLowerCase() : "";
+      boolean isTargeted =
+          !companyLower.isEmpty()
+              && targetCompanies.stream().anyMatch(t -> t.toLowerCase().equals(companyLower));
+      int limit = isTargeted ? MAX_PER_TARGETED_COMPANY : MAX_PER_COMPANY;
+      int current = companyCount.getOrDefault(companyLower, 0);
+      if (current < limit) {
+        result.add(candidate);
+        companyCount.put(companyLower, current + 1);
+      }
+    }
+    return result;
   }
 
   private AgentCandidateJobPosting toAgentCandidateJobPosting(JobPosting p, int preScore) {

@@ -383,6 +383,7 @@ _MOCK_SYNTHESIS_10 = {
     ),
 }
 
+
 # ISO-8601 local datetime pattern Spring's LocalDateTime.parse() expects.
 _ISO_LOCAL_DATETIME_RE = re.compile(
     r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$"
@@ -562,7 +563,14 @@ async def test_smoke_no_api_key_returns_200_not_500(client):
     assert response.status_code == 200
 
 
-async def test_smoke_no_api_key_token_usage_is_zero(client):
+async def test_smoke_no_api_key_token_usage_is_zero(client, monkeypatch):
+    from unittest.mock import MagicMock
+
+    import app.graph.user_briefing_graph as _graph
+
+    fake = MagicMock()
+    fake.enabled = False
+    monkeypatch.setattr(_graph, "llm_client", fake)
     token = (await client.post("/briefings/generate", json=_REQUEST_10)).json()[
         "tokenUsage"
     ]

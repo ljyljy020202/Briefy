@@ -217,6 +217,7 @@ GET /api/users/me
     "id": 1,
     "email": "user@gmail.com",
     "nickname": "Jiye",
+    "reportEmail": "user@gmail.com",
     "profileImageUrl": "https://lh3.googleusercontent.com/...",
     "role": "USER",
     "onboardingCompleted": true
@@ -243,13 +244,15 @@ PATCH /api/users/me/onboarding
 
 ```json
 {
-  "nickname": "Jiye"
+  "nickname": "Jiye",
+  "reportEmail": "user@gmail.com"
 }
 ```
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `nickname` | String | No | Max 100 chars |
+| `reportEmail` | String | No | Email address for briefing delivery |
 
 **Response:**
 
@@ -290,11 +293,9 @@ GET /api/briefing-categories
     {
       "id": 1,
       "code": "JOB_POSTING",
-      "name": "채용 공고 브리핑",
-      "description": "목표 직무·회사·스킬·지역 등을 설정하면, 신규 채용 공고와 마감 임박 공고를 매일 정리해 드립니다.",
+      "displayName": "채용 공고 브리핑",
       "phase": "FIRST",
-      "isActive": true,
-      "displayOrder": 1
+      "active": true
     }
   ],
   "error": null
@@ -335,18 +336,20 @@ GET /api/me/briefing-preferences
   "data": [
     {
       "id": 10,
-      "categoryId": 1,
       "categoryCode": "JOB_POSTING",
-      "categoryName": "채용 공고 브리핑",
-      "isActive": true,
+      "categoryDisplayName": "채용 공고 브리핑",
+      "active": true,
       "preference": {
         "roles": ["백엔드 개발자", "풀스택 개발자"],
         "companies": ["네이버", "카카오", "라인"],
+        "companySizes": ["대기업", "중견기업"],
+        "industries": ["IT/인터넷", "게임"],
         "skills": ["Spring Boot", "Java", "Kotlin"],
         "locations": ["서울", "판교"],
         "experienceLevels": ["신입", "3년 이상"],
         "employmentTypes": ["정규직"]
       },
+      "createdAt": "2026-06-28T09:00:00",
       "updatedAt": "2026-06-28T10:00:00"
     }
   ],
@@ -376,6 +379,8 @@ POST /api/me/briefing-preferences
   "preference": {
     "roles": ["백엔드 개발자", "풀스택 개발자"],
     "companies": ["네이버", "카카오", "라인"],
+    "companySizes": ["대기업", "중견기업"],
+    "industries": ["IT/인터넷", "게임"],
     "skills": ["Spring Boot", "Java", "Kotlin"],
     "locations": ["서울", "판교"],
     "experienceLevels": ["신입", "3년 이상"],
@@ -390,6 +395,8 @@ POST /api/me/briefing-preferences
 | `preference` | Object | Yes | Category-specific preference data |
 | `preference.roles` | Array\<String\> | No | Target job roles |
 | `preference.companies` | Array\<String\> | No | Target companies |
+| `preference.companySizes` | Array\<String\> | No | e.g. `대기업`, `중견기업`, `스타트업` |
+| `preference.industries` | Array\<String\> | No | e.g. `IT/인터넷`, `게임`, `핀테크` |
 | `preference.skills` | Array\<String\> | No | Required or preferred skills |
 | `preference.locations` | Array\<String\> | No | Preferred work locations |
 | `preference.experienceLevels` | Array\<String\> | No | e.g. `신입`, `3년 이상` |
@@ -404,18 +411,20 @@ At least one preference field must be non-empty.
   "success": true,
   "data": {
     "id": 10,
-    "categoryId": 1,
     "categoryCode": "JOB_POSTING",
-    "categoryName": "채용 공고 브리핑",
-    "isActive": true,
+    "categoryDisplayName": "채용 공고 브리핑",
+    "active": true,
     "preference": {
       "roles": ["백엔드 개발자", "풀스택 개발자"],
       "companies": ["네이버", "카카오", "라인"],
+      "companySizes": ["대기업", "중견기업"],
+      "industries": ["IT/인터넷", "게임"],
       "skills": ["Spring Boot", "Java", "Kotlin"],
       "locations": ["서울", "판교"],
       "experienceLevels": ["신입", "3년 이상"],
       "employmentTypes": ["정규직"]
     },
+    "createdAt": "2026-06-28T10:00:00",
     "updatedAt": "2026-06-28T10:00:00"
   },
   "error": null
@@ -460,18 +469,20 @@ All `preference` fields are optional. Only the fields provided are merged into t
   "success": true,
   "data": {
     "id": 10,
-    "categoryId": 1,
     "categoryCode": "JOB_POSTING",
-    "categoryName": "채용 공고 브리핑",
-    "isActive": true,
+    "categoryDisplayName": "채용 공고 브리핑",
+    "active": true,
     "preference": {
       "roles": ["백엔드 개발자", "풀스택 개발자", "DevOps 엔지니어"],
       "companies": ["네이버", "카카오", "라인"],
+      "companySizes": ["대기업", "중견기업"],
+      "industries": ["IT/인터넷", "게임"],
       "skills": ["Spring Boot", "Java", "Kotlin", "Docker"],
       "locations": ["서울", "판교"],
       "experienceLevels": ["신입", "3년 이상"],
       "employmentTypes": ["정규직"]
     },
+    "createdAt": "2026-06-28T10:00:00",
     "updatedAt": "2026-06-28T11:30:00"
   },
   "error": null
@@ -534,10 +545,12 @@ GET /api/dashboard
     "briefingPreferences": [
       {
         "categoryCode": "JOB_POSTING",
-        "categoryName": "채용 공고 브리핑",
+        "categoryDisplayName": "채용 공고 브리핑",
         "preference": {
           "roles": ["백엔드 개발자", "풀스택 개발자"],
           "companies": ["네이버", "카카오", "라인"],
+          "companySizes": ["대기업", "중견기업"],
+          "industries": ["IT/인터넷", "게임"],
           "skills": ["Spring Boot", "Java", "Kotlin"],
           "locations": ["서울", "판교"],
           "experienceLevels": ["신입", "3년 이상"],
@@ -992,9 +1005,9 @@ POST /collections/daily
 
 **Auth:** None (internal network only; restrict via Docker network or security group in production)
 
-**Description:** Accepts seed keywords aggregated by Spring, collects job postings via the configured adapters, and returns the raw list to Spring. Spring then upserts them into `job_postings`. The Agent does not access the database.
+**Description:** Accepts seed keywords, Company Registry data, and official company sources assembled by Spring. Runs the V2 10-stage collection pipeline via the configured adapters and returns the processed list to Spring. Spring then upserts postings into `job_postings` and `job_posting_sources`. The Agent does not access the database.
 
-Default mode (`JOB_COLLECTION_USE_FIXTURE=true`, `JOB_COLLECTION_ENABLE_REAL_SOURCES=false`) returns deterministic fixture postings with no network calls. Set `JOB_COLLECTION_ENABLE_REAL_SOURCES=true` in `apps/agent/.env` to enable real source collection (JasoseolAdapter).
+Default mode (`JOB_COLLECTION_USE_FIXTURE=true`) returns deterministic fixture postings with no network calls. Set `JOB_COLLECTION_ENABLE_REAL_SOURCES=true` and/or `JOB_COLLECTION_ENABLE_SARAMIN=true` to enable real source collection.
 
 Must run before `POST /briefings/generate` so the candidate pool is populated.
 
@@ -1008,18 +1021,40 @@ Must run before `POST /briefings/generate` so the candidate pool is populated.
   "seedKeywords": {
     "roles": ["백엔드 개발자", "풀스택 개발자"],
     "companies": ["네이버", "카카오", "라인"],
+    "companySizes": ["대기업", "중견기업"],
+    "industries": ["IT/인터넷", "게임"],
     "skills": ["Spring Boot", "Java", "Kotlin"],
     "locations": ["서울", "판교"],
     "experienceLevels": ["신입", "3년 이상"],
     "employmentTypes": ["정규직"],
-    "industries": [],
     "keywords": []
   },
   "options": {
     "lookbackDays": 3,
     "deadlineWithinDays": 14,
-    "maxItemsPerSource": 50
-  }
+    "discoveryLimitPerSource": 50,
+    "detailFetchLimitPerSource": 50,
+    "maxResultsPerSource": 50,
+    "maxTotalResults": 200
+  },
+  "companyProfiles": [
+    {
+      "id": 1,
+      "canonicalName": "네이버",
+      "normalizedName": "네이버",
+      "companySize": "대기업",
+      "industryCodes": ["IT/인터넷"]
+    }
+  ],
+  "officialCompanySources": [
+    {
+      "companyId": 1,
+      "sourceType": "CAREERS_PAGE",
+      "sourceUrl": "https://recruit.navercorp.com/sitemap.xml",
+      "adapterType": "SITEMAP",
+      "configJson": null
+    }
+  ]
 }
 ```
 
@@ -1029,7 +1064,14 @@ Must run before `POST /briefings/generate` so the candidate pool is populated.
 | `collectDate` | String | ISO-8601 date (`YYYY-MM-DD`); the date being collected for |
 | `categories` | Array\<String\> | Briefing category codes to collect for |
 | `seedKeywords` | Object | Aggregated by Spring from all active `user_briefing_preferences` |
-| `options` | Object | Collection tuning parameters |
+| `seedKeywords.companySizes` | Array\<String\> | From `preference_json.companySizes` |
+| `seedKeywords.industries` | Array\<String\> | From `preference_json.industries` |
+| `options.discoveryLimitPerSource` | Int | Max URLs enumerated per source (default: 50) |
+| `options.detailFetchLimitPerSource` | Int | Max detail fetches per source (default: 50) |
+| `options.maxResultsPerSource` | Int | Max postings selected per source (default: 50) |
+| `options.maxTotalResults` | Int | Hard cap on total returned postings (default: 200) |
+| `companyProfiles` | Array | Company Registry rows for the companies in `seedKeywords.companies` |
+| `officialCompanySources` | Array | Active `company_sources` rows; dispatched by `OfficialCompanyAdapter` |
 
 **Response:**
 
@@ -1052,17 +1094,34 @@ Must run before `POST /briefings/generate` so the candidate pool is populated.
       "roles": ["백엔드 개발자"],
       "description": "[픽스처 데이터] 채용 공고 설명",
       "postedAt": "2026-07-01T09:00:00",
-      "contentHash": "a3f2...sha256hex...64chars"
+      "contentHash": "a3f2...sha256hex...64chars",
+      "sourceRecordKey": "b1c2...sha256hex...64chars",
+      "canonicalFingerprint": "c3d4...sha256hex...64chars",
+      "sourceRefs": [
+        {
+          "source": "fixture",
+          "sourceExternalId": null,
+          "sourceUrl": "https://fixture.local/jobs/00123",
+          "sourceRecordKey": "b1c2...sha256hex...64chars"
+        }
+      ]
     }
   ],
   "companyIssues": [],
   "industryIssues": [],
   "stats": {
-    "collectedCount": 3,
+    "discovered": 5,
+    "fetched": 5,
+    "parsed": 5,
+    "exactDuplicates": 0,
+    "crossSourceMerged": 0,
+    "expiredFiltered": 0,
+    "staleFiltered": 0,
+    "truncated": 0,
+    "final": 5,
+    "collectedCount": 5,
     "deduplicatedCount": 0,
-    "jobPostingCount": 3,
-    "companyIssueCount": 0,
-    "industryIssueCount": 0
+    "jobPostingCount": 5
   },
   "warnings": []
 }
@@ -1070,13 +1129,24 @@ Must run before `POST /briefings/generate` so the candidate pool is populated.
 
 | Field | Notes |
 |---|---|
-| `jobPostings` | Raw postings returned to Spring for upsert into `job_postings` |
-| `jobPostings[].source` | `"fixture"` in default mode; `"jasoseol"` when real source enabled |
+| `jobPostings` | Processed postings returned to Spring for upsert into `job_postings` / `job_posting_sources` |
+| `jobPostings[].source` | `"fixture"` in default mode; `"jasoseol"`, `"saramin"`, etc. with real sources |
+| `jobPostings[].sourceRecordKey` | SHA-256 identity key; stored in `job_posting_sources.source_record_key` |
+| `jobPostings[].canonicalFingerprint` | Cross-source merge key; identifies the same posting across platforms |
+| `jobPostings[].sourceRefs` | All source records merged into this canonical posting |
 | `companyIssues` | Always `[]` in 1st MVP |
 | `industryIssues` | Always `[]` in 1st MVP |
-| `stats.collectedCount` | Total raw postings fetched across all adapters (before dedup/filter) |
-| `stats.deduplicatedCount` | Items removed by Agent-side deduplication (3-level: URL → hash → title+company+deadline) |
-| `stats.jobPostingCount` | Final count returned after dedup and deadline filtering |
+| `stats.discovered` | URLs enumerated before fetching |
+| `stats.fetched` | Detail pages actually fetched |
+| `stats.parsed` | Postings successfully parsed |
+| `stats.exactDuplicates` | Items removed by same-source dedup |
+| `stats.crossSourceMerged` | Items merged across sources |
+| `stats.expiredFiltered` | Items removed due to expired deadline |
+| `stats.staleFiltered` | Items removed due to lookback window |
+| `stats.final` | Final count returned |
+| `stats.collectedCount` | Alias for `discovered` (backward compat) |
+| `stats.deduplicatedCount` | Alias for `exactDuplicates` (backward compat) |
+| `stats.jobPostingCount` | Alias for `final` (backward compat) |
 | `warnings` | Non-fatal issues from adapters (timeouts, parse errors, HTTP errors) |
 
 **Error handling (backend side):** Log the failure and proceed; user briefing generation for the day may return empty results but should not fail hard.
@@ -1093,9 +1163,9 @@ POST /briefings/generate
 
 **Auth:** None (internal network only; restrict via Docker network or security group in production)
 
-**Description:** Runs `UserBriefingWorkflow`. Receives a pre-scored `candidatePool` assembled by Spring, filters past-deadline / invalid postings, re-ranks by combined score, selects the top 10, and assembles a Markdown briefing. Does **not** call external sources or the database — all input data is in the request body.
+**Description:** Runs `UserBriefingWorkflow`. Receives a pre-scored `candidatePool` assembled by Spring, filters past-deadline / invalid postings, re-ranks by combined score, selects the top 7, and assembles a Markdown briefing. Does **not** call external sources or the database — all input data is in the request body.
 
-**Current 1st MVP:** Fully deterministic — no LLM calls. `tokenUsage` is always `{inputTokens: 0, outputTokens: 0}`.
+LLM enrichment (enrichment + synthesis via `gpt-4o-mini`) is enabled when `OPENAI_API_KEY` is set. Both LLM nodes fall back to deterministic equivalents when the key is absent or any LLM call fails — the pipeline never returns HTTP 500. `tokenUsage` reflects actual LLM token usage when enabled; it is `{inputTokens: 0, outputTokens: 0}` in fallback mode.
 
 **Request:**
 
@@ -1106,6 +1176,8 @@ POST /briefings/generate
   "preference": {
     "roles": ["백엔드 개발자", "풀스택 개발자"],
     "companies": ["네이버", "카카오", "라인"],
+    "companySizes": ["대기업", "중견기업"],
+    "industries": ["IT/인터넷", "게임"],
     "skills": ["Spring Boot", "Java", "Kotlin"],
     "locations": ["서울", "판교"],
     "experienceLevels": ["신입", "3년 이상"],
@@ -1147,7 +1219,7 @@ POST /briefings/generate
 | `category` | String | Briefing category code (e.g. `JOB_POSTING`) |
 | `preference` | Object | The user's `preference_json` from `user_briefing_preferences` |
 | `briefingDate` | String | ISO-8601 date (`YYYY-MM-DD`); used for deadline filtering |
-| `tone` | String | Forwarded from the frontend or scheduler; not used in current deterministic implementation |
+| `tone` | String | Forwarded from the frontend or scheduler; used as tone hint in LLM prompts |
 | `candidatePool.jobPostings` | Array | Top 30 pre-scored `job_postings` rows selected by Spring; sorted by `preScore` desc |
 | `candidatePool.jobPostings[].preScore` | Integer | Score assigned by Spring's preference-matching logic |
 | `candidatePool.companyIssues` | Array | Always `[]` in 1st MVP |
@@ -1181,8 +1253,8 @@ POST /briefings/generate
 | Field | Notes |
 |---|---|
 | `content` | Full briefing in **Markdown** |
-| `articles` | Each element is one job posting selected for the report. May be empty if `candidatePool` is empty or all postings are past-deadline. |
-| `tokenUsage` | Always `{inputTokens: 0, outputTokens: 0}` in current deterministic implementation; will reflect real LLM usage when summarization is added |
+| `articles` | Each element is one job posting selected for the report (up to 7). May be empty if `candidatePool` is empty or all postings are past-deadline. |
+| `tokenUsage` | Reflects actual LLM token usage (Call 1 enrichment + Call 2 synthesis) when `OPENAI_API_KEY` is set; `{inputTokens: 0, outputTokens: 0}` in fallback mode |
 
 **Error handling (backend side):** If the Agent returns a non-2xx status or is unreachable, the backend marks the job as `FAILED` with `errorMessage` and returns `AGENT_SERVER_ERROR` to the caller.
 
@@ -1243,11 +1315,12 @@ Do **not** store the JWT or any user session data in `localStorage` or `sessionS
 
 | Route | Description | APIs called |
 |---|---|---|
-| `/onboarding` | First-time setup (unauthenticated or pre-onboarding). Redirects to `/dashboard` if already completed. | `GET /api/users/me`, `GET /api/briefing-categories`, `POST /api/me/briefing-preferences`, `PATCH /api/users/me/onboarding` |
-| `/dashboard` | Main landing after login. | `GET /api/dashboard` |
-| `/reports` | Paginated briefing list. | `GET /api/briefings` |
-| `/reports/[id]` | Briefing detail view. | `GET /api/briefings/{id}` |
-| `/mypage` | Account info and briefing preference management. Logout and account deletion are accessible here only. | `GET /api/me/briefing-preferences`, `GET /api/briefing-categories`, `PATCH /api/users/me/onboarding`, `POST /api/me/briefing-preferences`, `PATCH /api/me/briefing-preferences/{id}`, `DELETE /api/me/briefing-preferences/{id}`, `POST /api/auth/logout`, `DELETE /api/users/me` |
+| `/login` | Google 로그인. 이미 인증된 기존 회원은 `/dashboard`로, 온보딩 미완료 회원은 `/onboarding`으로 리디렉션. | `GET /api/users/me` |
+| `/onboarding` | 신규 회원 온보딩 (미인증 또는 온보딩 미완료). 온보딩이 이미 완료된 경우 `/dashboard`로 리디렉션. | `GET /api/users/me`, `GET /api/briefing-categories`, `POST /api/me/briefing-preferences`, `PATCH /api/users/me/onboarding` |
+| `/dashboard` | 로그인 후 메인 화면. | `GET /api/dashboard` |
+| `/reports` | 브리핑 목록 (페이지네이션). | `GET /api/briefings` |
+| `/reports/[id]` | 브리핑 상세 보기. | `GET /api/briefings/{id}` |
+| `/mypage` | 계정 정보 및 브리핑 선호도 관리. 로그아웃 및 계정 삭제는 이 페이지에서만 가능. | `GET /api/me/briefing-preferences`, `GET /api/briefing-categories`, `PATCH /api/users/me/onboarding`, `POST /api/me/briefing-preferences`, `PATCH /api/me/briefing-preferences/{id}`, `DELETE /api/me/briefing-preferences/{id}`, `POST /api/auth/logout`, `DELETE /api/users/me` |
 
 ---
 

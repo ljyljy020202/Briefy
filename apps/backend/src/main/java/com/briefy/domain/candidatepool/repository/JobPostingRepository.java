@@ -8,11 +8,11 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface JobPostingRepository extends JpaRepository<JobPosting, Long> {
 
-  Optional<JobPosting> findByUrl(String url);
+  Optional<JobPosting> findFirstByUrl(String url);
+
+  Optional<JobPosting> findFirstByCanonicalFingerprint(String canonicalFingerprint);
 
   List<JobPosting> findAllByCollectedDate(LocalDate collectedDate);
 
-  boolean existsByUrl(String url);
-
-  boolean existsByContentHash(String contentHash);
+  List<JobPosting> findAllByCollectedDateBetween(LocalDate from, LocalDate to);
 }

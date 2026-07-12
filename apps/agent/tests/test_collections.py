@@ -71,9 +71,9 @@ async def test_collect_daily_posting_fields_are_camelcase(client):
 async def test_collect_daily_stats_match_posting_count(client):
     response = await client.post("/collections/daily", json=COLLECT_REQUEST)
     body = response.json()
-    assert body["stats"]["jobPostingCount"] == len(body["jobPostings"])
-    # collectedCount is the raw total before dedup/filter, so it can be >= final count
-    assert body["stats"]["collectedCount"] >= len(body["jobPostings"])
+    assert body["stats"]["finalCount"] == len(body["jobPostings"])
+    # discoveredCount is the raw total before dedup/filter, so it can be >= final count
+    assert body["stats"]["discoveredCount"] >= len(body["jobPostings"])
 
 
 async def test_collect_daily_non_job_posting_category_returns_no_postings(client):
@@ -120,7 +120,7 @@ async def test_collect_daily_no_real_network_calls_in_fixture_mode(client, monke
 
     monkeypatch.setattr(
         "app.services.daily_collection._build_adapters",
-        lambda: [FixtureAdapter()],
+        lambda _req: [FixtureAdapter()],
     )
     response = await client.post("/collections/daily", json=COLLECT_REQUEST)
     postings = response.json()["jobPostings"]

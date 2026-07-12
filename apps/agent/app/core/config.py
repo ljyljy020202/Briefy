@@ -2,9 +2,11 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Reads from the monorepo root .env for both native (poetry run) and Docker runs.
-# In Docker, environment variables injected via docker-compose.yml take precedence.
-_ROOT_ENV = Path(__file__).resolve().parents[4] / ".env"
+# Native dev: /…/briefy/apps/agent/app/core/config.py → parents[4] = monorepo root
+# Docker:     /app/app/core/config.py → only 3 ancestors; fall back to Path(".env")
+#             (Docker env vars injected by Compose take precedence anyway)
+_parents = Path(__file__).resolve().parents
+_ROOT_ENV = _parents[4] / ".env" if len(_parents) > 4 else Path(".env")
 
 
 class Settings(BaseSettings):
@@ -16,8 +18,19 @@ class Settings(BaseSettings):
     # Job collection
     job_collection_use_fixture: bool = True
     job_collection_enable_real_sources: bool = False
+    job_collection_enable_saramin: bool = False
     job_collection_timeout_seconds: int = 10
     jasoseol_base_url: str = "https://jasoseol.com"
+
+    # Jasoseol-specific
+    # Fraction of detail_fetch_limit_per_source reserved for TARGETED search
+    # candidates.  Must be in [0.0, 1.0].
+    jasoseol_targeted_discovery_ratio: float = 0.8
+
+    # Saramin
+    saramin_access_key: str = ""
+    saramin_api_base_url: str = "https://oapi.saramin.co.kr"
+    saramin_max_queries_per_collect: int = 10
 
     # LLM
     llm_model: str = "gpt-4o-mini"

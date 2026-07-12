@@ -20,12 +20,24 @@ class RawJobPosting:
     roles: list[str] = field(default_factory=list)
     description: str | None = None
     posted_at: datetime | None = None
+    source_external_id: str | None = None
+
+
+@dataclass
+class AdapterSourceStats:
+    """Per-source collection counts for pipeline diagnostics."""
+
+    discovered: int = 0  # sitemap URLs passing the lookback filter
+    fetched: int = 0  # page HTTP requests attempted
+    parsed: int = 0  # pages that yielded a valid RawJobPosting
+    selected: int = 0  # postings returned after budget/relevance selection
 
 
 @dataclass
 class AdapterResult:
     postings: list[RawJobPosting] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    source_stats: AdapterSourceStats | None = None
 
 
 class JobBoardAdapter(ABC):

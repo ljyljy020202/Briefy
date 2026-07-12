@@ -37,7 +37,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-background">
       {/* Sidebar — desktop */}
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-border bg-[hsl(var(--sidebar))] px-4 py-6 lg:flex">
-        <Link href="/" className="px-2">
+        <Link href="/dashboard" className="px-2">
           <BriefyLogo />
         </Link>
 
@@ -85,7 +85,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Mobile top bar */}
       <header className="sticky top-0 z-30 flex items-center justify-between border-b border-border bg-background px-4 py-3 lg:hidden">
-        <Link href="/">
+        <Link href="/dashboard">
           <BriefyLogo size="sm" />
         </Link>
         <nav className="flex items-center gap-1">

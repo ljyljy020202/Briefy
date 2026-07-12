@@ -1,0 +1,76 @@
+# infra/nginx/briefy.conf.example
+#
+# EC2 운영 배포용 Nginx reverse proxy 설정 템플릿.
+# 사용법:
+#   sudo cp briefy.conf.example /etc/nginx/sites-available/briefy
+#   # example.com 을 실제 도메인으로 변경하세요.
+#   sudo ln -s /etc/nginx/sites-available/briefy /etc/nginx/sites-enabled/
+#   sudo nginx -t && sudo systemctl reload nginx
+#
+# ── Certbot (Let's Encrypt) 적용 순서 ──────────────────────────────────────
+# 1단계: HTTP 설정만으로 nginx 기동 (아래 HTTP 블록 사용)
+# 2단계: sudo certbot --nginx -d api.example.com
+#        Certbot이 자동으로 HTTPS 설정을 추가합니다.
+#
+# ── 도메인 placeholder ─────────────────────────────────────────────────────
+# api.example.com → 실제 API 서버 도메인으로 교체하세요.
+
+# ── 1단계: HTTP only (Certbot 적용 전) ────────────────────────────────────
+server {
+    listen 80;
+    server_name api.example.com;
+
+    # Certbot ACME challenge (인증서 발급 시 자동 사용)
+    location /.well-known/acme-challenge/ {
+        root /var/www/html;
+    }
+
+    # Spring Boot backend (Docker Compose가 127.0.0.1:8080 에 바인딩)
+    location /api/ {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 60s;
+        proxy_connect_timeout 10s;
+    }
+
+    # OAuth2 콜백 경로 (Spring Security가 /api/oauth2/** 로 처리)
+    # /api/ 로 시작하므로 위 location /api/ 블록에서 처리됨.
+    # 별도 설정 불필요.
+}
+
+# ── 2단계: HTTPS (Certbot 적용 후 자동 생성 또는 수동 추가) ──────────────
+# Certbot은 아래 블록을 자동으로 추가/수정합니다.
+# 수동 설정이 필요한 경우 아래를 참고하세요.
+
+# server {
+#     listen 443 ssl;
+#     server_name api.example.com;
+#
+#     ssl_certificate     /etc/letsencrypt/live/api.example.com/fullchain.pem;
+#     ssl_certificate_key /etc/letsencrypt/live/api.example.com/privkey.pem;
+#     include             /etc/letsencrypt/options-ssl-nginx.conf;
+#     ssl_dhparam         /etc/letsencrypt/ssl-dhparams.pem;
+#
+#     location /api/ {
+#         proxy_pass http://127.0.0.1:8080;
+#         proxy_set_header Host $host;
+#         proxy_set_header X-Real-IP $remote_addr;
+#         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+#         proxy_set_header X-Forwarded-Proto $scheme;
+#         proxy_read_timeout 60s;
+#         proxy_connect_timeout 10s;
+#     }
+# }
+
+# ── HTTP → HTTPS 리다이렉트 (Certbot 적용 후 자동 추가) ─────────────────
+# Certbot이 위 HTTP 블록을 아래 형태로 자동 수정합니다.
+# 수동 설정 시 참고:
+
+# server {
+#     listen 80;
+#     server_name api.example.com;
+#     return 301 https://$host$request_uri;
+# }

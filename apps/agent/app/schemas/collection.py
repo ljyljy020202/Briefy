@@ -9,20 +9,46 @@ class SeedKeywords(BaseModel):
 
     roles: list[str] = []
     companies: list[str] = []
+    company_sizes: list[str] = []
+    industries: list[str] = []
     skills: list[str] = []
     locations: list[str] = []
     experience_levels: list[str] = []
     employment_types: list[str] = []
-    industries: list[str] = []
     keywords: list[str] = []
 
 
 class CollectionOptions(BaseModel):
+    # extra="forbid" raises on unknown fields instead of silently ignoring them
+    model_config = ConfigDict(
+        alias_generator=to_camel, populate_by_name=True, extra="forbid"
+    )
+
+    lookback_days: int = 7
+    discovery_limit_per_source: int = 300
+    detail_fetch_limit_per_source: int = 100
+    max_results_per_source: int = 100
+    max_total_results: int = 500
+
+
+class CompanyProfile(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
-    lookback_days: int = 3
-    deadline_within_days: int = 14
-    max_items_per_source: int = 50
+    id: int
+    canonical_name: str
+    normalized_name: str
+    company_size: str | None = None
+    industry_codes: list[str] = []
+
+
+class OfficialCompanySource(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    company_id: int
+    source_type: str
+    source_url: str | None = None
+    adapter_type: str | None = None
+    config_json: str | None = None
 
 
 class DailyCollectRequest(BaseModel):
@@ -33,6 +59,17 @@ class DailyCollectRequest(BaseModel):
     categories: list[str]
     seed_keywords: SeedKeywords = Field(default_factory=SeedKeywords)
     options: CollectionOptions = Field(default_factory=CollectionOptions)
+    company_profiles: list[CompanyProfile] = []
+    official_company_sources: list[OfficialCompanySource] = []
+
+
+class SourceRef(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    source: str
+    source_external_id: str | None = None
+    source_url: str
+    source_record_key: str | None = None
 
 
 class CollectedJobPosting(BaseModel):
@@ -52,16 +89,22 @@ class CollectedJobPosting(BaseModel):
     description: str | None = None
     posted_at: datetime | None = None
     content_hash: str
+    source_external_id: str | None = None
+    source_record_key: str | None = None
+    canonical_fingerprint: str | None = None
+    source_refs: list[SourceRef] = []
 
 
 class CollectionStats(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
-    collected_count: int = 0
-    deduplicated_count: int = 0
-    job_posting_count: int = 0
-    company_issue_count: int = 0
-    industry_issue_count: int = 0
+    discovered_count: int = 0   # URLs/records discovered before fetch-budget
+    fetched_count: int = 0      # actual detail-page/API fetch attempts
+    parsed_count: int = 0       # pages that yielded a valid posting (pre-service-dedup)
+    duplicate_count: int = 0    # source-level + cross-source duplicates removed
+    filtered_count: int = 0     # expired + stale postings removed
+    truncated_count: int = 0    # valid candidates dropped by global budget cap
+    final_count: int = 0        # postings in jobPostings array
 
 
 class DailyCollectResponse(BaseModel):

@@ -7,4 +7,6 @@ public record AgentCollectionRequest(
     String collectDate,
     List<String> categories,
     AgentSeedKeywords seedKeywords,
-    AgentCollectionOptions options) {}
+    AgentCollectionOptions options,
+    List<AgentCompanyProfile> companyProfiles,
+    List<AgentOfficialCompanySource> officialCompanySources) {}

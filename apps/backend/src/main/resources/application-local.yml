@@ -5,6 +5,8 @@ spring:
     password: ${MYSQL_PASSWORD:briefypassword}
   jpa:
     hibernate:
+      # Phase 1 (Flyway 도입): 기존 로컬 데이터 보존을 위해 update 유지.
+      # V1 baseline 검증 후 validate 로 전환 예정 (Phase 2).
       ddl-auto: update
     show-sql: true
 

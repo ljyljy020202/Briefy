@@ -1,10 +1,13 @@
 package com.briefy.domain.collection.service;
 
+import com.briefy.config.CollectionProperties;
 import com.briefy.domain.briefing.client.AgentClient;
 import com.briefy.domain.briefing.client.dto.AgentCollectedJobPosting;
 import com.briefy.domain.briefing.client.dto.AgentCollectionOptions;
 import com.briefy.domain.briefing.client.dto.AgentCollectionRequest;
 import com.briefy.domain.briefing.client.dto.AgentCollectionResponse;
+import com.briefy.domain.briefing.client.dto.AgentCompanyProfile;
+import com.briefy.domain.briefing.client.dto.AgentOfficialCompanySource;
 import com.briefy.domain.briefing.client.dto.AgentSeedKeywords;
 import com.briefy.domain.briefingpreference.entity.BriefingCategoryCode;
 import com.briefy.domain.briefingpreference.entity.UserBriefingPreference;
@@ -16,9 +19,12 @@ import com.briefy.domain.collection.dto.DailyCollectionResult;
 import com.briefy.domain.collection.entity.CollectionJob;
 import com.briefy.domain.collection.entity.CollectionJobStatus;
 import com.briefy.domain.collection.entity.CollectionTriggerType;
+import com.briefy.domain.company.repository.CompanyRepository;
+import com.briefy.domain.company.repository.CompanySourceRepository;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -37,16 +43,25 @@ public class DailyCollectionService {
   private final UserBriefingPreferenceRepository userBriefingPreferenceRepository;
   private final AgentClient agentClient;
   private final CandidatePoolService candidatePoolService;
+  private final CompanyRepository companyRepository;
+  private final CompanySourceRepository companySourceRepository;
+  private final CollectionProperties collectionProperties;
 
   public DailyCollectionService(
       CollectionJobService collectionJobService,
       UserBriefingPreferenceRepository userBriefingPreferenceRepository,
       AgentClient agentClient,
-      CandidatePoolService candidatePoolService) {
+      CandidatePoolService candidatePoolService,
+      CompanyRepository companyRepository,
+      CompanySourceRepository companySourceRepository,
+      CollectionProperties collectionProperties) {
     this.collectionJobService = collectionJobService;
     this.userBriefingPreferenceRepository = userBriefingPreferenceRepository;
     this.agentClient = agentClient;
     this.candidatePoolService = candidatePoolService;
+    this.companyRepository = companyRepository;
+    this.companySourceRepository = companySourceRepository;
+    this.collectionProperties = collectionProperties;
   }
 
   public DailyCollectionResult triggerDailyCollection(
@@ -62,9 +77,10 @@ public class DailyCollectionService {
           null,
           "SKIPPED",
           collectDate,
+          null,
           0,
           0,
-          0,
+          List.of(),
           "Already PROCESSING or COMPLETED for " + collectDate);
     }
     return executeCollection(collectDate, null, CollectionTriggerType.SCHEDULED);
@@ -81,6 +97,9 @@ public class DailyCollectionService {
 
     try {
       AgentSeedKeywords seedKeywords = aggregateSeedKeywords(categories);
+      List<AgentCompanyProfile> companyProfiles = resolveCompanyProfiles(seedKeywords.companies());
+      List<AgentOfficialCompanySource> officialCompanySources =
+          resolveOfficialSources(companyProfiles.stream().map(AgentCompanyProfile::id).toList());
 
       AgentCollectionRequest agentRequest =
           new AgentCollectionRequest(
@@ -88,7 +107,14 @@ public class DailyCollectionService {
               collectDate.toString(),
               categories,
               seedKeywords,
-              new AgentCollectionOptions(3, 14, 50));
+              new AgentCollectionOptions(
+                  collectionProperties.lookbackDays(),
+                  collectionProperties.discoveryLimitPerSource(),
+                  collectionProperties.detailFetchLimitPerSource(),
+                  collectionProperties.maxResultsPerSource(),
+                  collectionProperties.maxTotalResults()),
+              companyProfiles,
+              officialCompanySources);
 
       AgentCollectionResponse agentResponse = agentClient.triggerDailyCollection(agentRequest);
 
@@ -97,17 +123,15 @@ public class DailyCollectionService {
       CandidatePoolUpsertResult upsertResult =
           candidatePoolService.upsertJobPostings(postingData, collectDate);
 
-      int collectedCount =
-          agentResponse.stats() != null
-              ? agentResponse.stats().collectedCount()
-              : postingData.size();
+      int agentFinalCount =
+          agentResponse.stats() != null ? agentResponse.stats().finalCount() : postingData.size();
       collectionJobService.markCompleted(
-          job.getId(), collectedCount, upsertResult.savedCount(), upsertResult.duplicateCount());
+          job.getId(), agentFinalCount, upsertResult.savedCount(), upsertResult.duplicateCount());
 
       log.info(
-          "Daily collection completed: jobId={}, collected={}, saved={}, duplicates={}",
+          "Daily collection completed: jobId={}, agentFinal={}, saved={}, persistenceDups={}",
           job.getId(),
-          collectedCount,
+          agentFinalCount,
           upsertResult.savedCount(),
           upsertResult.duplicateCount());
 
@@ -115,9 +139,10 @@ public class DailyCollectionService {
           job.getId(),
           CollectionJobStatus.COMPLETED.name(),
           collectDate,
-          collectedCount,
+          agentResponse.stats(),
           upsertResult.savedCount(),
           upsertResult.duplicateCount(),
+          agentResponse.warnings() != null ? agentResponse.warnings() : List.of(),
           null);
 
     } catch (Exception e) {
@@ -125,7 +150,14 @@ public class DailyCollectionService {
       log.error("Daily collection failed: jobId={}, error={}", job.getId(), errorMessage);
       collectionJobService.markFailed(job.getId(), errorMessage);
       return new DailyCollectionResult(
-          job.getId(), CollectionJobStatus.FAILED.name(), collectDate, 0, 0, 0, errorMessage);
+          job.getId(),
+          CollectionJobStatus.FAILED.name(),
+          collectDate,
+          null,
+          0,
+          0,
+          List.of(),
+          errorMessage);
     }
   }
 
@@ -140,6 +172,8 @@ public class DailyCollectionService {
 
     Set<String> roles = new LinkedHashSet<>();
     Set<String> companies = new LinkedHashSet<>();
+    Set<String> companySizes = new LinkedHashSet<>();
+    Set<String> industries = new LinkedHashSet<>();
     Set<String> skills = new LinkedHashSet<>();
     Set<String> locations = new LinkedHashSet<>();
     Set<String> experienceLevels = new LinkedHashSet<>();
@@ -150,6 +184,8 @@ public class DailyCollectionService {
       if (prefMap == null) continue;
       roles.addAll(extractStringList(prefMap, "roles"));
       companies.addAll(extractStringList(prefMap, "companies"));
+      companySizes.addAll(extractStringList(prefMap, "companySizes"));
+      industries.addAll(extractStringList(prefMap, "industries"));
       skills.addAll(extractStringList(prefMap, "skills"));
       locations.addAll(extractStringList(prefMap, "locations"));
       experienceLevels.addAll(extractStringList(prefMap, "experienceLevels"));
@@ -159,11 +195,12 @@ public class DailyCollectionService {
     return new AgentSeedKeywords(
         new ArrayList<>(roles),
         new ArrayList<>(companies),
+        new ArrayList<>(companySizes),
+        new ArrayList<>(industries),
         new ArrayList<>(skills),
         new ArrayList<>(locations),
         new ArrayList<>(experienceLevels),
         new ArrayList<>(employmentTypes),
-        List.of(),
         List.of());
   }
 
@@ -194,7 +231,10 @@ public class DailyCollectionService {
                     p.employmentType(),
                     p.experienceLevel(),
                     p.contentHash(),
-                    parseDateTime(p.postedAt())))
+                    parseDateTime(p.postedAt()),
+                    p.sourceRecordKey(),
+                    p.sourceExternalId(),
+                    p.canonicalFingerprint()))
         .toList();
   }
 
@@ -238,8 +278,48 @@ public class DailyCollectionService {
         + "]";
   }
 
+  private List<AgentCompanyProfile> resolveCompanyProfiles(List<String> companyNames) {
+    if (companyNames.isEmpty()) return List.of();
+    List<String> normalized =
+        companyNames.stream().map(n -> n.toLowerCase().trim()).distinct().toList();
+    return companyRepository.findActiveByNormalizedNames(normalized).stream()
+        .map(
+            c -> {
+              String codes = c.getIndustryCodes();
+              List<String> industryCodes =
+                  (codes == null || codes.isBlank())
+                      ? List.of()
+                      : Arrays.stream(codes.split(","))
+                          .map(String::strip)
+                          .filter(s -> !s.isEmpty())
+                          .toList();
+              return new AgentCompanyProfile(
+                  c.getId(),
+                  c.getCanonicalName(),
+                  c.getNormalizedName(),
+                  c.getCompanySize(),
+                  industryCodes);
+            })
+        .toList();
+  }
+
+  private List<AgentOfficialCompanySource> resolveOfficialSources(List<Long> companyIds) {
+    if (companyIds.isEmpty()) return List.of();
+    return companySourceRepository.findActiveByCompanyIds(companyIds, "ACTIVE").stream()
+        .map(
+            s ->
+                new AgentOfficialCompanySource(
+                    s.getCompany().getId(),
+                    s.getSourceType(),
+                    s.getSourceUrl(),
+                    s.getAdapterType(),
+                    s.getConfigJson()))
+        .toList();
+  }
+
   private static AgentSeedKeywords emptyKeywords() {
     return new AgentSeedKeywords(
-        List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of());
+        List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
+        List.of());
   }
 }

@@ -132,6 +132,8 @@ def _format_preference(pref: JobPostingPreference) -> str:
     lines = [
         f"역할: {', '.join(pref.roles) or '미지정'}",
         f"관심 기업: {', '.join(pref.companies) or '미지정'}",
+        f"기업 규모: {', '.join(pref.company_sizes) or '미지정'}",
+        f"관심 산업: {', '.join(pref.industries) or '미지정'}",
         f"스킬: {', '.join(pref.skills) or '미지정'}",
         f"위치: {', '.join(pref.locations) or '미지정'}",
         f"경력 수준: {', '.join(pref.experience_levels) or '미지정'}",

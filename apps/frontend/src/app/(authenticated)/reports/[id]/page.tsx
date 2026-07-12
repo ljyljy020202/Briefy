@@ -20,6 +20,18 @@ import { briefings } from '@/lib/api'
 import type { BriefingDetail } from '@/types/api'
 import { FeedbackButtons } from '@/components/reports/FeedbackButtons'
 
+
+const SOURCE_DISPLAY_NAMES: Record<string, string> = {
+  jasoseol: '자소설닷컴',
+  saramin: '사람인',
+  fixture: '테스트',
+}
+
+function formatSource(source: string | null | undefined): string {
+  if (!source) return ''
+  return SOURCE_DISPLAY_NAMES[source] ?? source
+}
+
 export default function ReportDetailPage() {
   const { id } = useParams<{ id: string }>()
   const numericId = Number(id)
@@ -67,8 +79,6 @@ export default function ReportDetailPage() {
     )
   }
 
-  const newPostings = report.articles.slice(0, 3)
-  const deadlinePostings = report.articles.slice(3)
   const recommendedActions = report.content
     .split('\n')
     .filter((line) => /^\d+\.\s/.test(line.trim()))
@@ -104,15 +114,15 @@ export default function ReportDetailPage() {
             </p>
           )}
 
-          {/* New postings */}
-          {newPostings.length > 0 && (
+          {/* Recommended postings */}
+          {report.articles.length > 0 && (
             <section className="mt-8">
               <h2 className="flex items-center gap-2 text-base font-semibold text-foreground">
-                📌 신규 공고
-                <Badge variant="muted">{newPostings.length}건</Badge>
+                🏆 추천 공고
+                <Badge variant="muted">TOP {report.articles.length}</Badge>
               </h2>
               <div className="mt-4 space-y-4">
-                {newPostings.map((article, i) => (
+                {report.articles.map((article, i) => (
                   <Card key={i} className="overflow-hidden">
                     <CardContent className="p-5">
                       <a
@@ -125,59 +135,7 @@ export default function ReportDetailPage() {
                         <ExternalLink className="size-3.5 shrink-0 text-muted-foreground" />
                       </a>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        {article.source}
-                        {article.publishedAt
-                          ? ` · ${article.publishedAt.slice(0, 10)}`
-                          : ''}
-                      </p>
-                      {article.summary && (
-                        <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                          {article.summary}
-                        </p>
-                      )}
-                      {article.whyItMatters && (
-                        <div className="mt-3 rounded-lg bg-primary/5 px-3 py-2">
-                          <p className="text-xs font-medium text-primary">매칭 이유</p>
-                          <p className="mt-0.5 text-xs text-foreground">
-                            {article.whyItMatters}
-                          </p>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* Deadline-near postings */}
-          {deadlinePostings.length > 0 && (
-            <section className="mt-8">
-              <h2 className="flex items-center gap-2 text-base font-semibold text-foreground">
-                ⏰ 마감 임박 공고
-                <Badge variant="muted">{deadlinePostings.length}건</Badge>
-              </h2>
-              <div className="mt-4 space-y-4">
-                {deadlinePostings.map((article, i) => (
-                  <Card
-                    key={i}
-                    className="overflow-hidden border-amber-200/60 dark:border-amber-900/40"
-                  >
-                    <CardContent className="p-5">
-                      <a
-                        href={article.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 font-medium text-foreground hover:text-primary"
-                      >
-                        {article.title}
-                        <ExternalLink className="size-3.5 shrink-0 text-muted-foreground" />
-                      </a>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {article.source}
-                        {article.publishedAt
-                          ? ` · ${article.publishedAt.slice(0, 10)}`
-                          : ''}
+                        {formatSource(article.source)}
                       </p>
                       {article.summary && (
                         <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
@@ -221,7 +179,8 @@ export default function ReportDetailPage() {
             </section>
           )}
 
-          <div className="mt-10 border-t pt-8">
+          {/* 피드백: 미구현, 추후 활성화 */}
+          <div className="mt-10 hidden border-t pt-8">
             <FeedbackButtons reportId={numericId} />
           </div>
         </div>
@@ -233,11 +192,11 @@ export default function ReportDetailPage() {
               <p className="text-sm font-medium text-foreground">이 브리핑</p>
               {report.articles.length > 0 && (
                 <p className="mt-1 text-xs text-muted-foreground">
-                  신규 공고 {newPostings.length}건 · 마감 임박{' '}
-                  {deadlinePostings.length}건
+                  추천 공고 {report.articles.length}건
                 </p>
               )}
-              <div className="mt-4 space-y-2">
+              {/* 저장하기·공유하기: 미구현, 추후 활성화 */}
+              <div className="mt-4 hidden space-y-2">
                 <button
                   type="button"
                   className={cn(
@@ -265,7 +224,7 @@ export default function ReportDetailPage() {
           <Card className="mt-4 bg-secondary/40">
             <CardContent className="p-5">
               <p className="text-sm font-medium text-foreground">
-                내일도 받아보세요
+                더 정확한 리포트 받기
               </p>
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
                 선호 기업·스킬을 추가하면 브리핑이 더 정확해집니다.

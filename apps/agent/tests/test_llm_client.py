@@ -60,7 +60,10 @@ def _make_mock_openai(
 # ---------------------------------------------------------------------------
 
 
-def test_llm_client_disabled_when_no_api_key():
+def test_llm_client_disabled_when_no_api_key(monkeypatch):
+    import app.services.llm_client as _mod
+
+    monkeypatch.setattr(_mod.settings, "openai_api_key", None)
     client = LLMClient()
     assert client.enabled is False
 
@@ -76,13 +79,19 @@ def test_llm_client_enabled_with_injected_client():
 # ---------------------------------------------------------------------------
 
 
-async def test_call_text_raises_unavailable_when_disabled():
+async def test_call_text_raises_unavailable_when_disabled(monkeypatch):
+    import app.services.llm_client as _mod
+
+    monkeypatch.setattr(_mod.settings, "openai_api_key", None)
     client = LLMClient()
     with pytest.raises(LLMUnavailableError):
         await client.call_text("system", "user")
 
 
-async def test_call_json_raises_unavailable_when_disabled():
+async def test_call_json_raises_unavailable_when_disabled(monkeypatch):
+    import app.services.llm_client as _mod
+
+    monkeypatch.setattr(_mod.settings, "openai_api_key", None)
     client = LLMClient()
     with pytest.raises(LLMUnavailableError):
         await client.call_json("system", "user")

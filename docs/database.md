@@ -4,11 +4,12 @@
 
 > **Notes:**
 > - `collection_jobs` tracks executions of the common daily collection workflow; it is an independent execution-log table with no FK into the candidate pool.
-> - `job_postings`, `company_issues`, and `industry_issues` are candidate pool tables. **The Spring backend owns all writes** — the Agent returns raw job postings in the `POST /collections/daily` response, and Spring upserts them via `CandidatePoolService`. The Agent does not connect to the database directly. Spring reads the candidate pool during briefing generation and sends it to the Agent in the `candidatePool` field of the `POST /briefings/generate` request.
+> - `companies`, `company_aliases`, `company_sources` form the Company Registry. Spring owns all writes; the Agent receives company data in the collection request body.
+> - `job_postings` and `job_posting_sources` are candidate pool tables. **Spring owns all writes** — the Agent returns raw job postings in the `POST /collections/daily` response, and Spring upserts them via `CandidatePoolService`. The Agent does not connect to the database directly.
 > - `briefing_reports` stores the final generated briefing per user per day.
 > - `briefing_articles` stores article snapshots included in each report; `source` and `url` provide a logical trace back to the candidate pool tables, but no DB-level FK is enforced.
-> - Some `user_id` columns (`briefing_jobs.user_id`, `briefing_reports.user_id`) are **logical FKs** stored as plain `BIGINT` — no DB-level `FOREIGN KEY` constraint is defined.
-> - `delivery_logs` and `user_feedback` are **planned** tables; they are documented below but not yet implemented as Java entities.
+> - Some `user_id` columns (`briefing_jobs.user_id`, `briefing_reports.user_id`, `delivery_logs.user_id`) are **logical FKs** stored as plain `BIGINT` — no DB-level `FOREIGN KEY` constraint is defined.
+> - `user_feedbacks` and `notification_settings` are **planned** tables; they are documented below but not yet implemented as Java entities.
 
 ```mermaid
 erDiagram
@@ -63,46 +64,73 @@ erDiagram
         datetime updated_at
     }
 
+    companies {
+        bigint id PK
+        varchar canonical_name
+        varchar normalized_name UK
+        varchar company_size
+        text industry_codes
+        boolean is_active
+        datetime created_at
+        datetime updated_at
+    }
+
+    company_aliases {
+        bigint id PK
+        bigint company_id FK
+        varchar alias
+        varchar normalized_alias UK
+        datetime created_at
+    }
+
+    company_sources {
+        bigint id PK
+        bigint company_id FK
+        varchar source_type
+        varchar source_url
+        varchar adapter_type
+        varchar status
+        text config_json
+        datetime last_verified_at
+        datetime last_collected_at
+        datetime created_at
+        datetime updated_at
+    }
+
     job_postings {
         bigint id PK
         varchar title
         varchar company
-        varchar url UK
+        bigint company_id "nullable FK to companies"
+        varchar source
+        varchar url
         varchar location
         date deadline
         text description
+        text roles
         varchar skills
         varchar employment_type
         varchar experience_level
         varchar content_hash
+        varchar canonical_fingerprint
         date collected_date
         datetime published_at
         datetime created_at
         datetime updated_at
     }
 
-    company_issues {
+    job_posting_sources {
         bigint id PK
-        varchar company
-        varchar title
-        varchar url UK
-        text summary
-        datetime published_at
-        varchar content_hash
-        date collected_date
-        datetime created_at
-        datetime updated_at
-    }
-
-    industry_issues {
-        bigint id PK
-        varchar category
-        varchar title
-        varchar url UK
-        text summary
-        datetime published_at
-        varchar content_hash
-        date collected_date
+        bigint job_posting_id FK
+        varchar source
+        varchar source_external_id
+        varchar source_url
+        varchar source_record_key UK
+        varchar source_content_hash
+        datetime first_seen_at
+        datetime last_seen_at
+        date last_collected_at
+        boolean is_active
         datetime created_at
         datetime updated_at
     }
@@ -142,7 +170,7 @@ erDiagram
         bigint briefing_report_id FK
         varchar title
         varchar source "publisher name; logically traces to candidate pool"
-        varchar url "source URL; logically traces to job_postings / company_issues / industry_issues"
+        varchar url "source URL; logically traces to job_postings"
         text summary
         text why_it_matters
         datetime published_at
@@ -150,15 +178,34 @@ erDiagram
         datetime created_at
     }
 
+    delivery_logs {
+        bigint id PK
+        bigint user_id "logical FK to users (denormalized)"
+        bigint briefing_report_id FK
+        varchar status
+        varchar to_email
+        varchar subject
+        varchar provider_message_id
+        varchar error_message
+        datetime sent_at
+        datetime created_at
+        datetime updated_at
+    }
+
     %% Planned (not yet implemented as Java entities):
-    %% delivery_logs  — email send attempts per briefing_report
-    %% user_feedback  — user reactions to briefing reports
+    %% user_feedbacks       — user reactions to briefing reports
+    %% notification_settings — per-user delivery time and channel toggles
 
     users ||--o{ user_briefing_preferences : "user_id"
     briefing_categories ||--o{ user_briefing_preferences : "category_id"
     users ||--o{ briefing_jobs : "user_id"
     briefing_jobs ||--o| briefing_reports : "briefing_job_id"
     briefing_reports ||--o{ briefing_articles : "briefing_report_id"
+    briefing_reports ||--o{ delivery_logs : "briefing_report_id"
+    companies ||--o{ company_aliases : "company_id"
+    companies ||--o{ company_sources : "company_id"
+    job_postings }o--o| companies : "company_id (nullable)"
+    job_postings ||--o{ job_posting_sources : "job_posting_id"
 ```
 
 ---
@@ -213,9 +260,7 @@ INDEX        idx_users_status           (status)
 - 1:N → `user_briefing_preferences`
 - 1:N → `briefing_jobs`
 - 1:N → `briefing_reports`
-- 1:N → `delivery_logs`
-- 1:N → `user_feedbacks`
-- 1:1 → `notification_settings`
+- 1:N → `delivery_logs` (logical FK — no DB constraint)
 
 ---
 
@@ -282,6 +327,8 @@ Unlike a flat keyword-per-topic model, this table stores all preference dimensio
 {
   "roles": ["백엔드 개발자", "풀스택 개발자"],
   "companies": ["네이버", "카카오", "라인"],
+  "companySizes": ["대기업", "중견기업"],
+  "industries": ["IT/인터넷", "게임"],
   "skills": ["Spring Boot", "Java", "Kotlin"],
   "locations": ["서울", "판교"],
   "experienceLevels": ["신입", "3년 이상"],
@@ -292,7 +339,9 @@ Unlike a flat keyword-per-topic model, this table stores all preference dimensio
 | Field | Type | Notes |
 |---|---|---|
 | `roles` | Array\<String\> | Target job roles |
-| `companies` | Array\<String\> | Target companies; used for both posting search and company news |
+| `companies` | Array\<String\> | Target companies; drives Company Registry lookup and official source collection |
+| `companySizes` | Array\<String\> | e.g. `대기업`, `중견기업`, `스타트업` |
+| `industries` | Array\<String\> | e.g. `IT/인터넷`, `게임`, `핀테크` |
 | `skills` | Array\<String\> | Required or preferred skills / competencies |
 | `locations` | Array\<String\> | Preferred work locations |
 | `experienceLevels` | Array\<String\> | e.g. `신입`, `경력 3년 이상` |
@@ -339,25 +388,115 @@ INDEX        idx_ubp_active         (is_active)
 
 ---
 
-### `job_postings`
+### `companies`
 
-Candidate pool for job briefings. Written by the Agent `DailyCollectWorkflow`; read by `UserBriefingWorkflow` to generate user-specific briefings without re-fetching from external sources.
+Company Registry: the canonical source of truth for company identities used in collection and deduplication. Spring populates this table; the Agent receives resolved `CompanyProfile` objects in the collection request body rather than querying the DB directly.
 
 | Column | Type | Constraints | Notes |
 |---|---|---|---|
 | `id` | BIGINT | PK, AUTO_INCREMENT | |
-| `title` | VARCHAR(500) | NOT NULL | Job posting title |
-| `company` | VARCHAR(255) | NOT NULL | Hiring company name |
-| `source` | VARCHAR(255) | | Source platform (e.g. Wanted, 사람인, LinkedIn) |
-| `url` | VARCHAR(1000) | UNIQUE NOT NULL | Original URL; used for deduplication |
-| `location` | VARCHAR(255) | | Work location |
-| `roles` | TEXT | | JSON array of matched role tags |
-| `skills` | TEXT | | JSON array of required skill tags |
-| `experience_level` | VARCHAR(100) | | e.g. `신입`, `3년 이상` |
-| `employment_type` | VARCHAR(100) | | e.g. `정규직`, `계약직` |
+| `canonical_name` | VARCHAR(200) | NOT NULL | Official / display company name |
+| `normalized_name` | VARCHAR(200) | UNIQUE NOT NULL | Lowercased, trimmed; used for fuzzy matching |
+| `company_size` | VARCHAR(30) | | e.g. `대기업`, `중견기업`, `스타트업` |
+| `industry_codes` | TEXT | | JSON array of industry code strings |
+| `is_active` | BOOLEAN | NOT NULL DEFAULT TRUE | Inactive companies are excluded from collection |
+| `created_at` | DATETIME | | |
+| `updated_at` | DATETIME | | |
+
+**Indexes**
+
+```sql
+UNIQUE INDEX uq_companies_normalized_name (normalized_name)
+INDEX        idx_companies_canonical_name  (canonical_name)
+INDEX        idx_companies_is_active       (is_active)
+```
+
+**Relationships**
+
+- 1:N → `company_aliases`
+- 1:N → `company_sources`
+- 1:N → `job_postings` (nullable FK via `linked_company`)
+
+---
+
+### `company_aliases`
+
+Maps alternative spellings and abbreviations to a canonical company. Used during collection to resolve user-typed company names (e.g. "네이버" → `naver`, "NAVER Corp" → `naver`) to a single `companies` row.
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | BIGINT | PK, AUTO_INCREMENT | |
+| `company_id` | BIGINT | FK `companies.id` NOT NULL | Parent company |
+| `alias` | VARCHAR(200) | NOT NULL | Original alias string |
+| `normalized_alias` | VARCHAR(200) | UNIQUE NOT NULL | Lowercased, trimmed alias; lookup key |
+| `created_at` | DATETIME | | |
+
+**Indexes**
+
+```sql
+UNIQUE INDEX uq_company_aliases_normalized  (normalized_alias)
+INDEX        idx_company_aliases_company_id  (company_id)
+INDEX        idx_company_aliases_alias       (alias)
+```
+
+**Relationships**
+
+- N:1 → `companies`
+
+---
+
+### `company_sources`
+
+Stores the known crawl/scrape sources for each registered company. Spring resolves these at collection time and passes them to the Agent as `officialCompanySources`; the Agent's `OfficialCompanyAdapter` dispatches each source based on `adapter_type`.
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | BIGINT | PK, AUTO_INCREMENT | |
+| `company_id` | BIGINT | FK `companies.id` NOT NULL | Parent company |
+| `source_type` | VARCHAR(50) | NOT NULL | e.g. `CAREERS_PAGE`, `GREENHOUSE`, `JOBKOREA` |
+| `source_url` | VARCHAR(500) | | URL of the source (sitemap, RSS feed, or listing page) |
+| `adapter_type` | VARCHAR(50) | | Dispatch key: `SITEMAP`, `RSS`, `CUSTOM` |
+| `status` | VARCHAR(30) | NOT NULL | `ACTIVE` or `INACTIVE`; only `ACTIVE` rows are sent to the Agent |
+| `config_json` | TEXT | | Adapter-specific config (e.g. custom parser id, headers) |
+| `last_verified_at` | DATETIME | | Last time the source was confirmed reachable |
+| `last_collected_at` | DATETIME | | Last time a successful collection run used this source |
+| `created_at` | DATETIME | | |
+| `updated_at` | DATETIME | | |
+
+**Indexes**
+
+```sql
+INDEX idx_company_sources_company_id (company_id)
+INDEX idx_company_sources_status     (status)
+```
+
+**Relationships**
+
+- N:1 → `companies`
+
+---
+
+### `job_postings`
+
+Canonical candidate pool for job briefings. Each row represents one unique job posting after cross-source deduplication. Written by Spring (`CandidatePoolService`) after the Agent returns raw postings; read by Spring during briefing generation.
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | BIGINT | PK, AUTO_INCREMENT | |
+| `title` | VARCHAR(255) | NOT NULL | Job posting title |
+| `company` | VARCHAR(100) | NOT NULL | Hiring company name (raw string from source) |
+| `company_id` | BIGINT | FK `companies.id` (nullable) | Set when the company is resolved via Company Registry |
+| `source` | VARCHAR(255) | | Primary source platform (e.g. `jasoseol`, `saramin`, `fixture`) |
+| `url` | VARCHAR(1000) | NOT NULL | Representative URL (first-seen source URL) |
+| `location` | VARCHAR(100) | | Work location |
 | `deadline` | DATE | | Application deadline (`NULL` if not specified) |
-| `description_summary` | TEXT | | Agent-generated summary of the posting |
-| `content_hash` | VARCHAR(64) | | SHA-256 of key fields; used to detect changed postings |
+| `description` | TEXT | | Full or partial job description text |
+| `roles` | TEXT | | JSON array of matched role tags |
+| `skills` | VARCHAR(1000) | | JSON array of required skill tags |
+| `employment_type` | VARCHAR(50) | | e.g. `정규직`, `계약직` |
+| `experience_level` | VARCHAR(50) | | e.g. `신입`, `3년 이상` |
+| `content_hash` | VARCHAR(64) | | SHA-256 of key fields; detects changed postings |
+| `canonical_fingerprint` | VARCHAR(64) | | SHA-256(norm_company + norm_title + deadline); cross-source identity |
 | `collected_date` | DATE | NOT NULL | Date the row was inserted by the collector |
 | `published_at` | DATETIME | | Original publication time from the source |
 | `created_at` | DATETIME | | |
@@ -366,19 +505,64 @@ Candidate pool for job briefings. Written by the Agent `DailyCollectWorkflow`; r
 **Indexes**
 
 ```sql
-UNIQUE INDEX uq_job_postings_url         (url)
-INDEX        idx_job_postings_company     (company)
-INDEX        idx_job_postings_deadline    (deadline)
-INDEX        idx_job_postings_collected   (collected_date)
-INDEX        idx_job_postings_hash        (content_hash)
+INDEX idx_job_postings_collected_date      (collected_date)
+INDEX idx_job_postings_content_hash        (content_hash)
+INDEX idx_job_postings_canonical_fingerprint (canonical_fingerprint)
+INDEX idx_job_postings_company_id          (company_id)
 ```
 
 **Notes**
 
-- `url` uniqueness prevents re-inserting the same posting on repeated collection runs.
-- `content_hash` allows detecting changed postings (e.g. deadline extension) for future update logic.
+- `url` is **not** unique at the DB level. Uniqueness is enforced by `job_posting_sources.source_record_key` (per-source) and `canonical_fingerprint` (cross-source).
+- `content_hash` = SHA-256(norm_company + norm_title + deadline + description[:500]); allows detecting changed postings (e.g. deadline extension).
+- `canonical_fingerprint` = SHA-256(norm_company + norm_title + deadline); the cross-source merge key — two sources referring to the same posting share this value.
+- `company_id` is nullable; it is set when `DailyCollectionService.resolveCompanyProfiles` finds a match in the Company Registry.
 - **Spring owns all writes** via `CandidatePoolService.upsertJobPostings` after the Agent returns raw postings. Spring also owns reads during briefing generation.
-- Rows older than a configurable retention window (e.g. 30 days past deadline) can be purged in future.
+
+**Relationships**
+
+- N:1 → `companies` (nullable)
+- 1:N → `job_posting_sources`
+
+---
+
+### `job_posting_sources`
+
+Per-source tracking record for each job posting. One `job_postings` row may have multiple `job_posting_sources` rows when the same posting appears on several platforms. The `source_record_key` uniqueness constraint prevents double-inserting the same source record.
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | BIGINT | PK, AUTO_INCREMENT | |
+| `job_posting_id` | BIGINT | FK `job_postings.id` NOT NULL | Parent canonical posting |
+| `source` | VARCHAR(100) | | Source platform name (e.g. `jasoseol`, `saramin`) |
+| `source_external_id` | VARCHAR(500) | | Platform-assigned ID (e.g. Saramin job key) |
+| `source_url` | VARCHAR(1000) | NOT NULL | URL on the source platform |
+| `source_record_key` | VARCHAR(64) | UNIQUE NOT NULL | SHA-256(source + externalId or canonicalize_url(url)); global dedup key |
+| `source_content_hash` | VARCHAR(64) | | SHA-256 of this source's view of the posting |
+| `first_seen_at` | DATETIME | | When this source record was first collected |
+| `last_seen_at` | DATETIME | | Most recent collection run that saw this record |
+| `last_collected_at` | DATE | | Most recent collection date |
+| `is_active` | BOOLEAN | NOT NULL DEFAULT TRUE | False if the source URL returned 404 or was manually deactivated |
+| `created_at` | DATETIME | | |
+| `updated_at` | DATETIME | | |
+
+**Indexes**
+
+```sql
+UNIQUE INDEX uq_jps_source_record_key (source_record_key)
+INDEX        idx_jps_job_posting_id   (job_posting_id)
+INDEX        idx_jps_source           (source)
+INDEX        idx_jps_is_active        (is_active)
+```
+
+**Notes**
+
+- `source_record_key` = SHA-256(source + externalId) when the source provides an external ID, or SHA-256(source + canonicalize_url(url)) otherwise.
+- `touch()` updates `last_seen_at`, `last_collected_at`, and optionally `source_content_hash` on repeat collection without creating a new row.
+
+**Relationships**
+
+- N:1 → `job_postings`
 
 ---
 
@@ -528,7 +712,6 @@ INDEX        idx_briefing_reports_user_date (user_id, report_date)
 - 1:1 → `briefing_jobs`
 - 1:N → `briefing_articles`
 - 1:N → `delivery_logs`
-- 1:N → `user_feedbacks`
 
 ---
 
@@ -569,50 +752,42 @@ INDEX idx_briefing_articles_url    (url)
 
 ### `delivery_logs`
 
-Records every email delivery attempt and its outcome. One report may have multiple log entries (e.g. initial attempt + retry).
+Records every email delivery attempt and its outcome. One report may have multiple log entries (e.g. initial attempt + retry). **Implemented** as `DeliveryLog.java`.
 
 | Column | Type | Constraints | Notes |
 |---|---|---|---|
 | `id` | BIGINT | PK, AUTO_INCREMENT | |
+| `user_id` | BIGINT | NOT NULL | Logical FK to `users`; denormalized for query convenience (no DB-level constraint) |
 | `briefing_report_id` | BIGINT | FK `briefing_reports.id` NOT NULL | |
-| `user_id` | BIGINT | FK `users.id` NOT NULL | Denormalized for query convenience |
-| `channel` | VARCHAR(30) | NOT NULL | See `DeliveryChannel` |
-| `status` | VARCHAR(30) | NOT NULL | See `DeliveryStatus` |
-| `recipient` | VARCHAR(255) | NOT NULL | Email address (or channel-specific handle) |
-| `sent_at` | DATETIME | | Populated on successful send |
-| `error_message` | TEXT | | Populated on `FAILED` status |
+| `status` | VARCHAR(20) | NOT NULL | See `DeliveryStatus` |
+| `to_email` | VARCHAR(255) | NOT NULL | Recipient email address |
+| `subject` | VARCHAR(255) | | Email subject line |
+| `provider_message_id` | VARCHAR(255) | | Message ID returned by the email provider on success |
+| `error_message` | VARCHAR(1000) | | Populated on `FAILED` status |
+| `sent_at` | DATETIME | | Populated when `markSent()` is called |
 | `created_at` | DATETIME | | |
 | `updated_at` | DATETIME | | |
 
 **Enums**
 
-| Enum | Values | MVP? |
-|---|---|---|
-| `DeliveryChannel` | `EMAIL` | MVP |
-| | `KAKAO`, `SLACK` | Future |
-| `DeliveryStatus` | `PENDING`, `SENT`, `FAILED` | |
+| Enum | Values |
+|---|---|
+| `DeliveryStatus` | `PENDING`, `SENT`, `FAILED` |
 
 **Indexes**
 
 ```sql
-INDEX idx_delivery_logs_report (briefing_report_id)
 INDEX idx_delivery_logs_user   (user_id)
-INDEX idx_delivery_logs_status (status)
+INDEX idx_delivery_logs_report (briefing_report_id)
 ```
-
-**Notes**
-
-- Only `EMAIL` is implemented for MVP. `KAKAO` and `SLACK` enum values are reserved; do not implement them yet.
-- `user_id` is denormalized from the report for fast per-user delivery history queries.
 
 **Relationships**
 
 - N:1 → `briefing_reports`
-- N:1 → `users`
 
 ---
 
-### `user_feedbacks`
+### `user_feedbacks` _(Planned — not yet implemented)_
 
 Records a user's reaction to a briefing report. MVP stores the data only; future versions will use it to personalize preference weighting.
 
@@ -644,14 +819,9 @@ INDEX idx_user_feedbacks_report (briefing_report_id)
 - A user can submit multiple feedback entries per report — uniqueness is not enforced at the DB level for MVP.
 - Future: aggregate `USEFUL`/`NOT_USEFUL` ratios per preference category to improve ranking weights in `UserBriefingWorkflow` automatically.
 
-**Relationships**
-
-- N:1 → `users`
-- N:1 → `briefing_reports`
-
 ---
 
-### `notification_settings`
+### `notification_settings` _(Planned — not yet implemented)_
 
 One row per user. Stores the user's preferred delivery time and channel toggles. Optional for a minimal MVP but useful for the settings dashboard and future scheduled delivery.
 
@@ -677,10 +847,6 @@ UNIQUE INDEX uq_notification_settings_user (user_id)
 - `delivery_time` + `timezone` together determine when the scheduler enqueues a `briefing_job` for this user.
 - Future channels (Kakao, Slack) will add `kakao_enabled`, `slack_enabled` columns rather than a new table.
 
-**Relationships**
-
-- 1:1 → `users`
-
 ---
 
 ## Entity Relationship Summary
@@ -693,17 +859,27 @@ users ────────────────────────�
   │ 1:N briefing_jobs (generation lifecycle)                                     │
   │       1:1 briefing_reports (Markdown content)                               │
   │             1:N briefing_articles (source articles)                          │
-  │             1:N delivery_logs (email send attempts)  ←── also N:1 users     │
-  │             1:N user_feedbacks (reactions)           ←── also N:1 users     │
-  │                                                                              │
-  │ 1:1 notification_settings (delivery preferences)                             │
+  │             1:N delivery_logs (email send attempts)  ←── logical FK users   │
   └────────────────────────────────────────────────────────────────────────────┘
+
+Company Registry (written by Spring; passed to Agent as request fields — Agent is stateless):
+
+  companies
+    │ 1:N company_aliases  (alternate spellings / abbreviations)
+    │ 1:N company_sources  (sitemap / RSS / custom crawl sources per company)
+    └── FK ← job_postings.company_id (nullable; set when company is resolved)
 
 Candidate pool tables (written by Spring after Agent returns raw data; read by Spring before calling Agent for briefing):
 
-  job_postings       ← 1st MVP  (JOB_POSTING category)
-  company_issues     ← 1.5 MVP  (COMPANY_NEWS category)  [placeholder — not populated in 1st MVP]
-  industry_issues    ← 2nd MVP  (INDUSTRY_TREND category) [placeholder — not populated in 1st MVP]
+  job_postings            ← 1st MVP  (JOB_POSTING category)
+    └── 1:N job_posting_sources  (per-source tracking; source_record_key UNIQUE)
+
+  company_issues          ← 1.5 MVP  (COMPANY_NEWS category)  [placeholder — not populated in 1st MVP]
+  industry_issues         ← 2nd MVP  (INDUSTRY_TREND category) [placeholder — not populated in 1st MVP]
+
+Planned (not yet implemented as Java entities):
+  user_feedbacks          ← user reactions to briefing reports
+  notification_settings   ← per-user delivery time and channel toggles
 ```
 
 ---
