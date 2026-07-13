@@ -49,9 +49,7 @@ services:
       - briefy-net
 
   backend:
-    build:
-      context: ./apps/backend
-      dockerfile: Dockerfile
+    image: ${BACKEND_IMAGE:-ghcr.io/ljyljy020202/briefy-backend:latest}
     env_file: .env.prod
     environment:
       SPRING_PROFILES_ACTIVE: prod
@@ -83,9 +81,7 @@ services:
       - briefy-net
 
   agent:
-    build:
-      context: ./apps/agent
-      dockerfile: Dockerfile
+    image: ${AGENT_IMAGE:-ghcr.io/ljyljy020202/briefy-agent:latest}
     env_file: .env.prod
     environment:
       BACKEND_URL: http://backend:8080

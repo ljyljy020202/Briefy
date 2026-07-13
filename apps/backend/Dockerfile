@@ -4,9 +4,12 @@ COPY gradle gradle
 COPY gradlew gradlew.bat ./
 RUN chmod +x gradlew
 COPY build.gradle.kts settings.gradle.kts ./
+
+ENV GRADLE_OPTS="-Dorg.gradle.jvmargs=-Xmx512m -Dorg.gradle.daemon=false"
+
 RUN ./gradlew dependencies --no-daemon -q
 COPY src src
-RUN ./gradlew bootJar --no-daemon -q
+RUN ./gradlew bootJar -x test --no-daemon
 
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
