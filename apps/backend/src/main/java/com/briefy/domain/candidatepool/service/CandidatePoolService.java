@@ -123,11 +123,12 @@ public class CandidatePoolService {
   }
 
   private static final int BRIEFING_LOOKBACK_DAYS = 7;
+  private static final List<String> TEST_SOURCES = List.of("fixture");
 
   @Transactional(readOnly = true)
   public List<JobPosting> findJobPostingsByDate(LocalDate date) {
-    return jobPostingRepository.findAllByCollectedDateBetween(
-        date.minusDays(BRIEFING_LOOKBACK_DAYS), date);
+    return jobPostingRepository.findAllByCollectedDateBetweenExcludingSources(
+        date.minusDays(BRIEFING_LOOKBACK_DAYS), date, TEST_SOURCES);
   }
 
   // SHA-256 hex of "source|identifier".
