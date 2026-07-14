@@ -283,16 +283,58 @@ dev → main merge 전에 아래 항목을 모두 확인하세요.
 
 ---
 
-## 8. CI/CD (후속 단계)
+## 8. CI/CD
 
-현재는 GitHub Actions CI(테스트/빌드)만 구성되어 있습니다.
-EC2 자동 배포(CD)는 EC2 배포 안정화 후 추가 예정입니다.
+### 구조
 
-CD 구성 시 필요한 GitHub Secrets:
+| Job | Runner | 역할 |
+|-----|--------|------|
+| `test` | `ubuntu-latest` (GitHub-hosted) | 단위 테스트 |
+| `build-and-push` | `ubuntu-latest` (GitHub-hosted) | Docker 이미지 빌드 → GHCR push |
+| `deploy` | `self-hosted, briefy-prod` (EC2) | GHCR에서 pull 후 컨테이너 교체 |
 
-| Secret | 용도 |
-|--------|------|
-| `EC2_HOST` | SSH 접속 대상 IP 또는 도메인 |
-| `EC2_USER` | SSH 접속 유저명 (예: `ubuntu`) |
-| `EC2_SSH_KEY` | EC2 SSH private key (PEM 내용) |
-| `EC2_ENV_PROD` | `.env.prod` 전체 내용 (base64 인코딩) |
+`deploy` job은 EC2 self-hosted runner가 직접 실행합니다. SSH 터널 없이 EC2 내부에서 `docker compose pull / up`만 수행하므로 보안 그룹에서 22번 포트를 외부에 열어둘 필요가 없습니다.
+
+### EC2 self-hosted runner 등록
+
+```bash
+# EC2에서 한 번만 실행
+mkdir -p /home/ubuntu/actions-runner && cd /home/ubuntu/actions-runner
+# GitHub 레포 → Settings → Actions → Runners → New self-hosted runner
+# 안내에 따라 tarball 다운로드 및 configure 실행
+# label 지정: briefy-prod
+./config.sh --url https://github.com/<org>/<repo> --token <REGISTRATION_TOKEN> --labels briefy-prod
+sudo ./svc.sh install && sudo ./svc.sh start
+```
+
+### EC2 보안 그룹
+
+- SSH(22): `0.0.0.0/0`으로 열지 말 것. **본인 고정 IP/32로만** 허용.
+- HTTP(80), HTTPS(443): `0.0.0.0/0` 허용 (Nginx 경유).
+- 그 외 포트(8080, 8000 등): 인바운드 차단 유지.
+
+### 환경변수만 변경할 때
+
+GitHub Actions를 트리거하지 않고 EC2에서 직접 처리합니다.
+
+```bash
+# EC2에서 실행
+nano /home/ubuntu/apps/Briefy/.env.prod
+
+# 변경된 환경변수를 적용하려면 force-recreate
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --force-recreate --no-build --no-deps backend
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --force-recreate --no-build --no-deps agent
+```
+
+### EC2에서 빌드 금지
+
+EC2는 리소스가 제한적이므로 `docker compose build`를 실행하면 서버가 과부하됩니다. **EC2에서는 pull/up만 사용하고 build는 절대 실행하지 마세요.**
+
+```bash
+# ✅ 올바른 방법 (GHCR에서 pull)
+docker compose --env-file .env.prod -f docker-compose.prod.yml pull backend
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --force-recreate --no-build --no-deps backend
+
+# ❌ 절대 금지 (EC2에서 빌드)
+docker compose -f docker-compose.prod.yml up -d --build
+```

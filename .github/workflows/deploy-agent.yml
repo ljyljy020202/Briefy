@@ -85,36 +85,26 @@ jobs:
 
   deploy:
     name: Deploy Agent to EC2
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, briefy-prod]
     needs: build-and-push
 
     steps:
-      - name: Configure SSH
+      - name: Pull and recreate agent container
         run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/ec2_key
-          chmod 600 ~/.ssh/ec2_key
-          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts
+          set -e
+          cd /home/ubuntu/apps/Briefy
 
-      - name: Deploy agent
-        run: |
-          ssh -i ~/.ssh/ec2_key ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
-            set -e
+          echo "Pull agent image"
+          docker compose --env-file .env.prod -f docker-compose.prod.yml pull agent
 
-            cd /home/ubuntu/apps/Briefy
+          echo "Restart agent"
+          docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --force-recreate --no-build --no-deps agent
 
-            echo "Pull agent image"
-            docker compose --env-file .env.prod -f docker-compose.prod.yml pull agent
+          echo "Status"
+          docker compose --env-file .env.prod -f docker-compose.prod.yml ps
 
-            echo "Restart agent"
-            docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --no-deps agent
+          echo "Agent health check"
+          sleep 10
+          docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T agent python -c "import urllib.request; print(urllib.request.urlopen('http://localhost:8000/health', timeout=5).read().decode())"
 
-            echo "Status"
-            docker compose --env-file .env.prod -f docker-compose.prod.yml ps
-
-            echo "Agent health check"
-            sleep 10
-            docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T agent python -c "import urllib.request; print(urllib.request.urlopen('http://localhost:8000/health', timeout=5).read().decode())"
-
-            echo "Agent deploy completed"
-          EOF
+          echo "Agent deploy completed"

@@ -84,36 +84,26 @@ jobs:
 
   deploy:
     name: Deploy Backend to EC2
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, briefy-prod]
     needs: build-and-push
 
     steps:
-      - name: Configure SSH
+      - name: Pull and recreate backend container
         run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/ec2_key
-          chmod 600 ~/.ssh/ec2_key
-          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts
+          set -e
+          cd /home/ubuntu/apps/Briefy
 
-      - name: Deploy backend
-        run: |
-          ssh -i ~/.ssh/ec2_key ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
-            set -e
+          echo "Pull backend image"
+          docker compose --env-file .env.prod -f docker-compose.prod.yml pull backend
 
-            cd /home/ubuntu/apps/Briefy
+          echo "Restart backend"
+          docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --force-recreate --no-build --no-deps backend
 
-            echo "Pull backend image"
-            docker compose --env-file .env.prod -f docker-compose.prod.yml pull backend
+          echo "Status"
+          docker compose --env-file .env.prod -f docker-compose.prod.yml ps
 
-            echo "Restart backend"
-            docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --no-deps backend
+          echo "Health check"
+          sleep 15
+          curl -fsS http://127.0.0.1:8080/api/health
 
-            echo "Status"
-            docker compose --env-file .env.prod -f docker-compose.prod.yml ps
-
-            echo "Health check"
-            sleep 15
-            curl -fsS http://127.0.0.1:8080/api/health
-
-            echo "Backend deploy completed"
-          EOF
+          echo "Backend deploy completed"
