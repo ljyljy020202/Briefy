@@ -472,11 +472,13 @@ Spring scores each `job_postings` row before sending:
 | Match | Score |
 |---|---|
 | Role or title matches `preference.roles` | +30 |
-| Company matches `preference.companies` | +15 |
+| Company matches `preference.companies` | +25 |
 | Each matching skill (max 5 skills) | +5 each (max +25) |
+| Experience level matches | +15 |
+| Industry matches (via Company Registry) | +12 |
 | Location matches `preference.locations` | +10 |
-| Experience level matches | +10 |
-| Employment type matches | +5 |
+| Employment type matches | +10 |
+| Company size matches (via Company Registry) | +8 |
 | Deadline within 7 days | +10 |
 | Collected within last 3 days | +5 |
 

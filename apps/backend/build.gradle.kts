@@ -34,6 +34,7 @@ dependencies {
     implementation(platform("software.amazon.awssdk:bom:2.26.0"))
     implementation("software.amazon.awssdk:ses")
     implementation("org.flywaydb:flyway-mysql")
+    implementation("org.commonmark:commonmark:0.23.0")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.springframework.security:spring-security-test")
     testRuntimeOnly("com.h2database:h2")
