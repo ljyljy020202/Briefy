@@ -351,14 +351,16 @@ class CandidatePoolServiceTest {
                 null,
                 COLLECTED_DATE,
                 null));
-    when(jobPostingRepository.findAllByCollectedDateBetween(any(), any())).thenReturn(expected);
+    when(jobPostingRepository.findAllByCollectedDateBetweenExcludingSources(any(), any(), any()))
+        .thenReturn(expected);
 
     List<JobPosting> result = candidatePoolService.findJobPostingsByDate(COLLECTED_DATE);
 
     assertThat(result).hasSize(1);
     assertThat(result.get(0).getCompany()).isEqualTo("카카오");
     verify(jobPostingRepository)
-        .findAllByCollectedDateBetween(COLLECTED_DATE.minusDays(7), COLLECTED_DATE);
+        .findAllByCollectedDateBetweenExcludingSources(
+            COLLECTED_DATE.minusDays(7), COLLECTED_DATE, List.of("fixture"));
   }
 
   // ---------------------------------------------------------------------------
