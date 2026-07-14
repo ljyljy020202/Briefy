@@ -103,7 +103,17 @@ jobs:
           docker compose --env-file .env.prod -f docker-compose.prod.yml ps
 
           echo "Health check"
-          sleep 15
-          curl -fsS http://127.0.0.1:8080/api/health
+          for i in $(seq 1 18); do
+            if curl -fsS http://127.0.0.1:8080/api/health; then
+              echo "Backend is healthy"
+              break
+            fi
+            if [ "$i" -eq 18 ]; then
+              echo "Health check failed after 90 seconds"
+              exit 1
+            fi
+            echo "Waiting for backend... ($i/18)"
+            sleep 5
+          done
 
           echo "Backend deploy completed"
