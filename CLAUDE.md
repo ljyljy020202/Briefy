@@ -169,6 +169,7 @@ Spring profile `local` (activated via `--spring.profiles.active=local`) uses `dd
 | `main` | Stable, always deployable. Never push feature work here directly. |
 | `dev` | Integration branch. All feature branches merge here first. |
 | `feature/*` | Feature-specific working branches, cut from `dev`. |
+| `hotfix/*` | Critical bug fixes that must go to `main` immediately, bypassing `dev`. Cut from `main`; merge back to both `main` and `dev`. |
 
 ### Branch Naming
 
@@ -176,6 +177,7 @@ Use a service prefix so the branch name immediately shows what is being changed:
 
 ```
 feature/<service>-<short-description>
+hotfix/<service>-<short-description>
 ```
 
 | Prefix | Area |
@@ -186,6 +188,9 @@ feature/<service>-<short-description>
 | `feature/infra-` | Docker Compose, Makefile, scripts |
 | `feature/docs-` | `docs/` |
 | `feature/ci-` | `.github/workflows/` |
+| `hotfix/backend-` | Critical backend fix going directly to `main` |
+| `hotfix/frontend-` | Critical frontend fix going directly to `main` |
+| `hotfix/agent-` | Critical agent fix going directly to `main` |
 
 **Examples:**
 
@@ -200,12 +205,15 @@ feature/agent-user-briefing
 feature/infra-docker-compose
 feature/docs-database-erd
 feature/ci-backend-workflow
+hotfix/backend-email-html-format
+hotfix/frontend-login-redirect
 ```
 
 ### PR Rules
 
 - Always create a PR from `feature/*` → `dev`; never push feature work directly to `main`.
 - Merge `dev` → `main` only when the integrated version is tested and deployable.
+- `hotfix/*` branches are the only exception: create a PR from `hotfix/*` → `main`, and after merging also merge `main` back to `dev` so `dev` stays in sync.
 - Prefer small, single-feature PRs. Avoid mixing frontend, backend, and agent changes in one PR unless the feature genuinely requires cross-service integration — if it does, explain why in the PR description.
 - Before opening a PR, run the relevant checks for changed services:
   - **backend**: `./gradlew test` and `./gradlew spotlessCheck`
@@ -214,6 +222,8 @@ feature/ci-backend-workflow
 - Update `docs/` when API contracts, database schema, environment variables, or workflows change.
 
 ### Typical Flow
+
+#### Feature work
 
 1. Cut a feature branch from `dev`:
    ```bash
@@ -227,6 +237,25 @@ feature/ci-backend-workflow
 3. Push and open a PR from `feature/backend-auth` → `dev`.
 4. After review and CI passes, merge to `dev`.
 5. Merge `dev` → `main` only after integration testing confirms the build is deployable.
+
+#### Hotfix (production critical bug)
+
+1. Cut a hotfix branch from `main`:
+   ```bash
+   git switch main && git pull
+   git switch -c hotfix/backend-email-html-format
+   ```
+2. Commit with a `fix` type:
+   ```
+   fix(backend): 이메일 본문 Markdown HTML 변환 누락 수정
+   ```
+3. Push and open a PR from `hotfix/backend-email-html-format` → `main`.
+4. After merging to `main`, sync back to `dev`:
+   ```bash
+   git switch dev && git pull
+   git merge main
+   git push
+   ```
 
 ## Commit Convention
 

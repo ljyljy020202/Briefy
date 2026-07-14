@@ -9,6 +9,7 @@ import com.briefy.domain.user.repository.UserRepository;
 import com.briefy.email.EmailMessage;
 import com.briefy.email.EmailSendResult;
 import com.briefy.email.EmailSender;
+import com.briefy.email.MarkdownToHtmlConverter;
 import com.briefy.global.exception.BusinessException;
 import com.briefy.global.exception.ErrorCode;
 import org.springframework.stereotype.Service;
@@ -59,7 +60,8 @@ public class EmailDeliveryService {
     deliveryLogRepository.save(deliveryLog);
 
     try {
-      EmailMessage message = new EmailMessage(toEmail, report.getTitle(), report.getContent());
+      String htmlContent = MarkdownToHtmlConverter.convert(report.getContent());
+      EmailMessage message = new EmailMessage(toEmail, report.getTitle(), htmlContent);
       EmailSendResult result = emailSender.send(message);
       if (result.success()) {
         deliveryLog.markSent(result.providerMessageId());
