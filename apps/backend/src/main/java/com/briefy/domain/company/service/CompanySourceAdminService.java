@@ -1,6 +1,10 @@
 package com.briefy.domain.company.service;
 
+import com.briefy.domain.briefing.client.AgentClient;
+import com.briefy.domain.briefing.client.dto.AgentSourcePreflightRequest;
+import com.briefy.domain.briefing.client.dto.AgentSourcePreflightResponse;
 import com.briefy.domain.company.dto.admin.CompanySourceAdminResponse;
+import com.briefy.domain.company.dto.admin.CompanySourcePreflightResponse;
 import com.briefy.domain.company.dto.admin.CreateCompanySourceRequest;
 import com.briefy.domain.company.dto.admin.UpdateCompanySourceRequest;
 import com.briefy.domain.company.entity.Company;
@@ -15,10 +19,15 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,6 +36,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class CompanySourceAdminService {
 
+  private static final Logger log = LoggerFactory.getLogger(CompanySourceAdminService.class);
+
   private static final Set<String> ALLOWED_SOURCE_TYPES = Set.of("OFFICIAL_CAREER");
   private static final Set<String> ALLOWED_ADAPTER_TYPES = Set.of("SITEMAP", "RSS", "CUSTOM");
   private static final Set<String> ALLOWED_STATUSES = Set.of("PENDING", "INACTIVE");
@@ -34,14 +45,17 @@ public class CompanySourceAdminService {
   private final CompanyRepository companyRepository;
   private final CompanySourceRepository companySourceRepository;
   private final ObjectMapper objectMapper;
+  private final AgentClient agentClient;
 
   public CompanySourceAdminService(
       CompanyRepository companyRepository,
       CompanySourceRepository companySourceRepository,
-      ObjectMapper objectMapper) {
+      ObjectMapper objectMapper,
+      AgentClient agentClient) {
     this.companyRepository = companyRepository;
     this.companySourceRepository = companySourceRepository;
     this.objectMapper = objectMapper;
+    this.agentClient = agentClient;
   }
 
   public PageResult<CompanySourceAdminResponse> listSources(Pageable pageable) {
@@ -95,18 +109,23 @@ public class CompanySourceAdminService {
   public CompanySourceAdminResponse updateSource(Long id, UpdateCompanySourceRequest request) {
     CompanySource source = findSourceOrThrow(id);
 
+    // Resolve new field values
     String sourceType =
         request.sourceType() != null ? normalize(request.sourceType()) : source.getSourceType();
     String adapterType =
         request.adapterType() != null ? normalize(request.adapterType()) : source.getAdapterType();
-    String status = request.status() != null ? normalize(request.status()) : source.getStatus();
     String sourceUrl = request.sourceUrl() != null ? request.sourceUrl() : source.getSourceUrl();
-    Map<String, Object> config =
+    Map<String, Object> effectiveConfig =
         request.config() != null ? request.config() : deserializeConfig(source.getConfigJson());
 
     validateSourceType(sourceType);
     validateAdapterType(adapterType);
-    validateStatus(status);
+
+    // Only validate status if explicitly requested (ACTIVE sources remain readable from DB)
+    if (request.status() != null) {
+      validateStatus(normalize(request.status()));
+    }
+    String status = request.status() != null ? normalize(request.status()) : source.getStatus();
 
     if ("OFFICIAL_CAREER".equals(sourceType)) {
       requireSourceUrl(sourceUrl);
@@ -115,7 +134,7 @@ public class CompanySourceAdminService {
       validateSourceUrl(sourceUrl);
     }
 
-    Map<String, Object> normalizedConfig = validateAndNormalizeConfig(adapterType, config);
+    Map<String, Object> normalizedConfig = validateAndNormalizeConfig(adapterType, effectiveConfig);
 
     Long companyId = source.getCompany().getId();
     if (companySourceRepository.existsByCompany_IdAndSourceTypeAndSourceUrlAndIdNot(
@@ -123,7 +142,19 @@ public class CompanySourceAdminService {
       throw new BusinessException(ErrorCode.DUPLICATE_COMPANY_SOURCE);
     }
 
+    // Detect core field change → reset verification
+    boolean coreFieldChanged =
+        !sourceType.equals(source.getSourceType())
+            || !Objects.equals(sourceUrl, source.getSourceUrl())
+            || !adapterType.equals(source.getAdapterType())
+            || !Objects.equals(normalizedConfig, deserializeConfig(source.getConfigJson()));
+
     source.update(sourceType, sourceUrl, adapterType, status, serializeConfig(normalizedConfig));
+
+    if (coreFieldChanged) {
+      source.resetVerification();
+    }
+
     return CompanySourceAdminResponse.from(source, objectMapper);
   }
 
@@ -134,10 +165,110 @@ public class CompanySourceAdminService {
     return CompanySourceAdminResponse.from(source, objectMapper);
   }
 
+  // ── preflight ─────────────────────────────────────────────────────────────
+
+  @Transactional
+  public CompanySourcePreflightResponse runPreflight(Long id) {
+    CompanySource source = findSourceOrThrow(id);
+    Company company = source.getCompany();
+
+    AgentSourcePreflightRequest request =
+        new AgentSourcePreflightRequest(
+            id,
+            company.getId(),
+            company.getCanonicalName(),
+            source.getSourceType(),
+            source.getSourceUrl(),
+            source.getAdapterType(),
+            source.getConfigJson());
+
+    AgentSourcePreflightResponse agentResp;
+    try {
+      agentResp = agentClient.preflight(request);
+    } catch (Exception e) {
+      log.warn("Agent preflight unavailable for sourceId={}: {}", id, e.getMessage());
+      String safeMessage = "Agent unavailable";
+      source.markVerificationFailed(safeMessage);
+      return buildPreflightResponse(source, null, safeMessage);
+    }
+
+    boolean success = agentResp.failureCode() == null;
+    if (success) {
+      String message =
+          (agentResp.warnings() == null || agentResp.warnings().isEmpty())
+              ? "Preflight succeeded"
+              : String.join("; ", agentResp.warnings());
+      source.markVerified(LocalDateTime.now(), message);
+    } else {
+      String failMsg =
+          agentResp.failureMessage() != null ? agentResp.failureMessage() : agentResp.failureCode();
+      source.markVerificationFailed(failMsg);
+    }
+
+    return buildPreflightResponse(source, agentResp, null);
+  }
+
+  // ── activate ─────────────────────────────────────────────────────────────
+
+  @Transactional
+  public CompanySourceAdminResponse activateSource(Long id) {
+    CompanySource source = findSourceOrThrow(id);
+    Company company = source.getCompany();
+
+    if (!company.isActive()) {
+      throw new BusinessException(ErrorCode.COMPANY_INACTIVE);
+    }
+    if ("ACTIVE".equals(source.getStatus())) {
+      throw new BusinessException(ErrorCode.SOURCE_ALREADY_ACTIVE);
+    }
+    if (!"VERIFIED".equals(source.getVerificationStatus())) {
+      throw new BusinessException(ErrorCode.SOURCE_NOT_VERIFIED);
+    }
+
+    source.activate();
+    return CompanySourceAdminResponse.from(source, objectMapper);
+  }
+
+  // ── helpers ───────────────────────────────────────────────────────────────
+
   private CompanySource findSourceOrThrow(Long id) {
     return companySourceRepository
         .findById(id)
         .orElseThrow(() -> new BusinessException(ErrorCode.COMPANY_SOURCE_NOT_FOUND));
+  }
+
+  private CompanySourcePreflightResponse buildPreflightResponse(
+      CompanySource source, AgentSourcePreflightResponse agentResp, String overrideFailMessage) {
+    String recommendedAction;
+    if ("VERIFIED".equals(source.getVerificationStatus())) {
+      recommendedAction = "Preflight succeeded. Use POST /{id}/activate to activate the source.";
+    } else if (overrideFailMessage != null) {
+      recommendedAction = "Agent is unavailable. Retry preflight later.";
+    } else {
+      String code = agentResp != null ? agentResp.failureCode() : null;
+      recommendedAction =
+          code != null
+              ? "Fix the issue (" + code + ") and run preflight again."
+              : "Run preflight again after fixing the issue.";
+    }
+
+    return new CompanySourcePreflightResponse(
+        source.getId(),
+        source.getStatus(),
+        source.getVerificationStatus(),
+        source.getLastVerifiedAt(),
+        agentResp != null ? agentResp.reachable() : null,
+        agentResp != null ? agentResp.adapterSupported() : null,
+        agentResp != null ? agentResp.parserRegistered() : null,
+        agentResp != null ? agentResp.discoveredCount() : null,
+        agentResp != null ? agentResp.sampleParsedCount() : null,
+        agentResp != null ? agentResp.requiredFieldsValid() : null,
+        agentResp != null && agentResp.warnings() != null ? agentResp.warnings() : List.of(),
+        agentResp != null ? agentResp.failureCode() : "INTERNAL_ERROR",
+        overrideFailMessage != null
+            ? overrideFailMessage
+            : (agentResp != null ? agentResp.failureMessage() : null),
+        recommendedAction);
   }
 
   private String normalize(String value) {

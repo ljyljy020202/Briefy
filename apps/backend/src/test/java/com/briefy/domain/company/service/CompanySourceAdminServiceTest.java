@@ -7,6 +7,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.briefy.domain.briefing.client.AgentClient;
 import com.briefy.domain.company.dto.admin.CompanySourceAdminResponse;
 import com.briefy.domain.company.dto.admin.CreateCompanySourceRequest;
 import com.briefy.domain.company.dto.admin.UpdateCompanySourceRequest;
@@ -39,6 +40,7 @@ class CompanySourceAdminServiceTest {
 
   @Mock private CompanyRepository companyRepository;
   @Mock private CompanySourceRepository companySourceRepository;
+  @Mock private AgentClient agentClient;
 
   private CompanySourceAdminService service;
 
@@ -46,7 +48,7 @@ class CompanySourceAdminServiceTest {
   void setUp() {
     service =
         new CompanySourceAdminService(
-            companyRepository, companySourceRepository, new ObjectMapper());
+            companyRepository, companySourceRepository, new ObjectMapper(), agentClient);
   }
 
   // ── listSources ───────────────────────────────────────────────────────────
