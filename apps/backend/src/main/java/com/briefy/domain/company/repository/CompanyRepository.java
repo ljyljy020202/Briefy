@@ -3,6 +3,7 @@ package com.briefy.domain.company.repository;
 import com.briefy.domain.company.entity.Company;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -28,4 +29,10 @@ public interface CompanyRepository extends JpaRepository<Company, Long> {
 
   @Query("SELECT c FROM Company c WHERE c.active = true AND c.normalizedName IN :names")
   List<Company> findActiveByNormalizedNames(@Param("names") Collection<String> names);
+
+  Optional<Company> findByNormalizedName(String normalizedName);
+
+  boolean existsByNormalizedName(String normalizedName);
+
+  boolean existsByNormalizedNameAndIdNot(String normalizedName, Long id);
 }

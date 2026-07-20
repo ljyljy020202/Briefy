@@ -110,6 +110,19 @@ public class CompanySource extends BaseTimeEntity {
     return lastCollectedAt;
   }
 
+  public void deactivate() {
+    this.status = "INACTIVE";
+  }
+
+  public void update(
+      String sourceType, String sourceUrl, String adapterType, String status, String configJson) {
+    this.sourceType = sourceType;
+    this.sourceUrl = sourceUrl;
+    this.adapterType = adapterType;
+    this.status = status;
+    this.configJson = configJson;
+  }
+
   public void recordCollection(LocalDateTime collectedAt) {
     this.lastCollectedAt = collectedAt;
   }
