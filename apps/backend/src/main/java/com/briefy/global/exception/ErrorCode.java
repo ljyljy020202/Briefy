@@ -39,6 +39,9 @@ public enum ErrorCode {
   INVALID_SOURCE_STATUS(HttpStatus.BAD_REQUEST, "Invalid or disallowed source status"),
   INVALID_SOURCE_URL(HttpStatus.BAD_REQUEST, "Invalid source URL"),
   INVALID_CONFIG(HttpStatus.BAD_REQUEST, "Invalid config"),
+  SOURCE_NOT_VERIFIED(HttpStatus.CONFLICT, "Source must be VERIFIED before activation"),
+  SOURCE_ALREADY_ACTIVE(HttpStatus.CONFLICT, "Source is already ACTIVE"),
+  COMPANY_INACTIVE(HttpStatus.UNPROCESSABLE_ENTITY, "Company is not active"),
 
   // External
   AGENT_SERVER_ERROR(HttpStatus.BAD_GATEWAY, "Agent server error"),

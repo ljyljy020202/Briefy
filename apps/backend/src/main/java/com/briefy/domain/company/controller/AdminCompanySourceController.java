@@ -1,6 +1,7 @@
 package com.briefy.domain.company.controller;
 
 import com.briefy.domain.company.dto.admin.CompanySourceAdminResponse;
+import com.briefy.domain.company.dto.admin.CompanySourcePreflightResponse;
 import com.briefy.domain.company.dto.admin.CreateCompanySourceRequest;
 import com.briefy.domain.company.dto.admin.UpdateCompanySourceRequest;
 import com.briefy.domain.company.service.CompanySourceAdminService;
@@ -59,6 +60,26 @@ public class AdminCompanySourceController {
       @PathVariable Long id, @RequestBody UpdateCompanySourceRequest request) {
     return ResponseEntity.ok(
         ApiResponse.success(companySourceAdminService.updateSource(id, request)));
+  }
+
+  @Operation(
+      summary = "채용 소스 preflight 검증",
+      description =
+          "Agent를 호출해 source URL 접근 가능 여부와 파싱 가능 여부를 검증합니다. "
+              + "성공 시 verificationStatus=VERIFIED, 실패 시 FAILED로 기록됩니다.")
+  @PostMapping("/{id}/preflight")
+  public ResponseEntity<ApiResponse<CompanySourcePreflightResponse>> runPreflight(
+      @PathVariable Long id) {
+    return ResponseEntity.ok(ApiResponse.success(companySourceAdminService.runPreflight(id)));
+  }
+
+  @Operation(
+      summary = "채용 소스 활성화",
+      description = "verificationStatus=VERIFIED이고 company가 활성 상태인 source를 ACTIVE로 전환합니다.")
+  @PostMapping("/{id}/activate")
+  public ResponseEntity<ApiResponse<CompanySourceAdminResponse>> activateSource(
+      @PathVariable Long id) {
+    return ResponseEntity.ok(ApiResponse.success(companySourceAdminService.activateSource(id)));
   }
 
   @Operation(summary = "채용 소스 비활성화")
