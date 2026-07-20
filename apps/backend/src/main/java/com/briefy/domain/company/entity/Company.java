@@ -78,7 +78,19 @@ public class Company extends BaseTimeEntity {
     return active;
   }
 
+  public void activate() {
+    this.active = true;
+  }
+
   public void deactivate() {
     this.active = false;
+  }
+
+  public void update(
+      String canonicalName, String normalizedName, String companySize, String industryCodes) {
+    this.canonicalName = canonicalName;
+    this.normalizedName = normalizedName;
+    this.companySize = companySize;
+    this.industryCodes = industryCodes;
   }
 }

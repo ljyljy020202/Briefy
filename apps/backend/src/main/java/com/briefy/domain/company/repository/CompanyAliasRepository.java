@@ -6,6 +6,7 @@ import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.lang.NonNull;
 
 public interface CompanyAliasRepository extends JpaRepository<CompanyAlias, Long> {
 
@@ -20,4 +21,10 @@ public interface CompanyAliasRepository extends JpaRepository<CompanyAlias, Long
           + " AND a.normalizedAlias IN :normalizedAliases")
   List<CompanyAlias> findAllByNormalizedAliasIn(
       @Param("normalizedAliases") Collection<String> normalizedAliases);
+
+  boolean existsByNormalizedAlias(@NonNull String normalizedAlias);
+
+  List<CompanyAlias> findAllByCompany_Id(Long companyId);
+
+  List<CompanyAlias> findAllByCompany_IdIn(Collection<Long> companyIds);
 }

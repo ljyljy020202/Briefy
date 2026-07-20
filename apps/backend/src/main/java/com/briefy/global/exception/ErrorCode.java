@@ -27,6 +27,19 @@ public enum ErrorCode {
   COLLECTION_JOB_NOT_FOUND(HttpStatus.NOT_FOUND, "Collection job not found"),
   COLLECTION_JOB_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "Daily collection failed"),
 
+  // Company
+  COMPANY_NOT_FOUND(HttpStatus.NOT_FOUND, "Company not found"),
+  COMPANY_ALIAS_NOT_FOUND(HttpStatus.NOT_FOUND, "Company alias not found"),
+  COMPANY_SOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "Company source not found"),
+  DUPLICATE_COMPANY_NORMALIZED_NAME(
+      HttpStatus.CONFLICT, "Company with this normalized name already exists"),
+  DUPLICATE_COMPANY_ALIAS(HttpStatus.CONFLICT, "Company alias already exists"),
+  DUPLICATE_COMPANY_SOURCE(HttpStatus.CONFLICT, "Company source already exists"),
+  INVALID_ADAPTER_TYPE(HttpStatus.BAD_REQUEST, "Invalid adapter type"),
+  INVALID_SOURCE_STATUS(HttpStatus.BAD_REQUEST, "Invalid or disallowed source status"),
+  INVALID_SOURCE_URL(HttpStatus.BAD_REQUEST, "Invalid source URL"),
+  INVALID_CONFIG(HttpStatus.BAD_REQUEST, "Invalid config"),
+
   // External
   AGENT_SERVER_ERROR(HttpStatus.BAD_GATEWAY, "Agent server error"),
   DELIVERY_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "Email delivery failed"),
