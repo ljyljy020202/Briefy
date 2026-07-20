@@ -3,8 +3,20 @@
 Routes:
   SITEMAP — generic XML sitemap discovery + best-effort page title extraction
   RSS     — standard RSS 2.0 / Atom 1.0 feed parsing
-  CUSTOM  — per-company parser registry (empty by default; register instances in
-             _CUSTOM_REGISTRY to support a company without modifying the dispatcher)
+  CUSTOM  — parser registry; primary key is parser_key from config_json,
+             with a deprecated fallback to company_id for backward compatibility.
+
+CUSTOM dispatch priority:
+  1. config_json contains parser_key → look up _CUSTOM_REGISTRY_BY_KEY[parser_key]
+  2. config_json null or empty       → legacy _CUSTOM_REGISTRY[company_id] (DEPRECATED)
+  3. config_json present but broken  → warning + empty (invalid JSON / missing key)
+
+config_json contract for CUSTOM sources:
+  {
+    "parser_key": "GREETING",   # required; trim + uppercase applied before lookup
+    "max_discover": 50,          # optional; parsed by individual parsers as needed
+    "max_fetch": 20              # optional; parsed by individual parsers as needed
+  }
 
 Unsupported adapterTypes or missing CUSTOM registrations add warnings and
 never cause the overall collection to fail.
@@ -65,13 +77,24 @@ _TITLE_STRIP_SUFFIXES = [
 class CustomParser(ABC):
     """Abstract interface for per-company custom parsers.
 
-    Subclass and register an instance in _CUSTOM_REGISTRY to activate it
-    without modifying the dispatcher.
+    Register an instance in _CUSTOM_REGISTRY_BY_KEY (keyed by parser_key) to
+    activate it without modifying the dispatcher.  The parser receives the full
+    OfficialCompanySource (including config_json) so it can read max_discover /
+    max_fetch or any other config it needs.
+
+    Minimum contract:
+      Input:  source (OfficialCompanySource), profile (CompanyProfile | None),
+              options (CollectionOptions), collect_date (date).
+              Create an httpx.AsyncClient inside fetch() as needed.
+      Output: AdapterResult
     """
 
     @property
-    @abstractmethod
-    def company_id(self) -> int: ...
+    def company_id(self) -> int | None:
+        """DEPRECATED: used only by the legacy _CUSTOM_REGISTRY (company_id-keyed).
+        New parsers registered in _CUSTOM_REGISTRY_BY_KEY do not need to override this.
+        """
+        return None
 
     @abstractmethod
     async def fetch(
@@ -83,12 +106,53 @@ class CustomParser(ABC):
     ) -> AdapterResult: ...
 
 
-# Registry maps company_id → CustomParser instance.
-# Empty by default — add entries here as companies are onboarded.
+# Primary registry: parser_key (str, uppercase) → CustomParser instance.
+# Key must match config_json["parser_key"] after strip + uppercase.
+# Empty by default — add entries as companies are onboarded.
+_CUSTOM_REGISTRY_BY_KEY: dict[str, CustomParser] = {}
+
+# DEPRECATED legacy registry: company_id (int) → CustomParser instance.
+# Kept for backward compatibility when config_json is absent (null/empty).
+# Prefer _CUSTOM_REGISTRY_BY_KEY + config_json parser_key for new parsers.
 _CUSTOM_REGISTRY: dict[int, CustomParser] = {}
 
 
 # ── config helpers ────────────────────────────────────────────────────────────
+
+
+def _extract_parser_key(config_json: str | None) -> tuple[str | None, str | None]:
+    """Extract and normalize the parser_key from a CUSTOM source's config_json.
+
+    Returns ``(parser_key, error)`` where:
+
+    * ``parser_key`` is the normalized key (stripped + uppercase), or ``None``.
+    * ``error`` is one of ``None | "invalid_json" | "missing_key" | "empty_key"``.
+
+    Decision table:
+
+    =================== ========== ==========
+    config_json         parser_key error
+    =================== ========== ==========
+    None or ""          None       None       → caller should try legacy registry
+    invalid JSON        None       invalid_json
+    valid JSON, no key  None       missing_key
+    valid JSON, key=""  None       empty_key
+    valid JSON, key="x" "X"        None
+    =================== ========== ==========
+    """
+    if not config_json or not config_json.strip():
+        return None, None
+    try:
+        data = json.loads(config_json)
+    except json.JSONDecodeError:
+        return None, "invalid_json"
+
+    raw_key = data.get("parser_key")
+    if raw_key is None:
+        return None, "missing_key"
+    if not isinstance(raw_key, str) or not raw_key.strip():
+        return None, "empty_key"
+    return raw_key.strip().upper(), None
 
 
 @dataclass
@@ -629,15 +693,50 @@ class OfficialCompanyAdapter(JobBoardAdapter):
                 source, profile, options, collect_date, timeout, extra_warnings
             )
         elif adapter_type == "CUSTOM":
-            parser = _CUSTOM_REGISTRY.get(source.company_id)
-            if parser is None:
-                extra_warnings.append(
-                    f"official_company: no custom parser registered for"
-                    f" company_id={source.company_id}"
-                )
+            parser_key, key_error = _extract_parser_key(source.config_json)
+
+            if parser_key is not None:
+                # Primary path: parser_key → _CUSTOM_REGISTRY_BY_KEY
+                ck_parser = _CUSTOM_REGISTRY_BY_KEY.get(parser_key)
+                if ck_parser is not None:
+                    result = await ck_parser.fetch(
+                        source, profile, options, collect_date
+                    )
+                else:
+                    extra_warnings.append(
+                        f"official_company: no custom parser registered for"
+                        f" parser_key={parser_key}"
+                        f" (company_id={source.company_id})"
+                    )
+                    result = AdapterResult(source_stats=AdapterSourceStats())
+
+            elif key_error is not None:
+                # config_json was present but broken (invalid JSON / missing key)
+                if key_error == "invalid_json":
+                    extra_warnings.append(
+                        f"official_company: invalid config_json for"
+                        f" company_id={source.company_id}"
+                    )
+                else:  # missing_key or empty_key
+                    extra_warnings.append(
+                        f"official_company: missing custom parser_key for"
+                        f" company_id={source.company_id}"
+                    )
                 result = AdapterResult(source_stats=AdapterSourceStats())
+
             else:
-                result = await parser.fetch(source, profile, options, collect_date)
+                # config_json is null/empty: legacy company_id lookup (DEPRECATED)
+                legacy_parser = _CUSTOM_REGISTRY.get(source.company_id)
+                if legacy_parser is not None:
+                    result = await legacy_parser.fetch(
+                        source, profile, options, collect_date
+                    )
+                else:
+                    extra_warnings.append(
+                        f"official_company: no custom parser registered for"
+                        f" company_id={source.company_id}"
+                    )
+                    result = AdapterResult(source_stats=AdapterSourceStats())
         else:
             extra_warnings.append(
                 f"official_company: unsupported adapterType='{source.adapter_type}'"

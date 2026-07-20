@@ -16,8 +16,10 @@ from httpx import TimeoutException
 from app.adapters.base import AdapterResult, RawJobPosting
 from app.adapters.official_company import (
     _CUSTOM_REGISTRY,
+    _CUSTOM_REGISTRY_BY_KEY,
     CustomParser,
     OfficialCompanyAdapter,
+    _extract_parser_key,
     _parse_rss_config,
     _parse_sitemap_config,
     _source_id,
@@ -513,10 +515,239 @@ async def test_adapter_rss_atom_feed(monkeypatch):
     assert result.postings[0].title == "프론트엔드 개발자"
 
 
-# ── OfficialCompanyAdapter — CUSTOM ──────────────────────────────────────────
+# ── _extract_parser_key unit tests ───────────────────────────────────────────
+
+
+def test_extract_parser_key_none_config_returns_none_no_error():
+    key, err = _extract_parser_key(None)
+    assert key is None
+    assert err is None
+
+
+def test_extract_parser_key_empty_string_returns_none_no_error():
+    key, err = _extract_parser_key("")
+    assert key is None
+    assert err is None
+
+
+def test_extract_parser_key_whitespace_only_returns_none_no_error():
+    key, err = _extract_parser_key("   ")
+    assert key is None
+    assert err is None
+
+
+def test_extract_parser_key_invalid_json_returns_error():
+    key, err = _extract_parser_key("not-valid-json{")
+    assert key is None
+    assert err == "invalid_json"
+
+
+def test_extract_parser_key_missing_field_returns_error():
+    key, err = _extract_parser_key('{"max_fetch": 20}')
+    assert key is None
+    assert err == "missing_key"
+
+
+def test_extract_parser_key_empty_value_returns_error():
+    key, err = _extract_parser_key('{"parser_key": ""}')
+    assert key is None
+    assert err == "empty_key"
+
+
+def test_extract_parser_key_whitespace_value_returns_error():
+    key, err = _extract_parser_key('{"parser_key": "   "}')
+    assert key is None
+    assert err == "empty_key"
+
+
+def test_extract_parser_key_normalizes_lowercase_to_uppercase():
+    key, err = _extract_parser_key('{"parser_key": "greeting"}')
+    assert key == "GREETING"
+    assert err is None
+
+
+def test_extract_parser_key_strips_whitespace():
+    key, err = _extract_parser_key('{"parser_key": "  GREETING  "}')
+    assert key == "GREETING"
+    assert err is None
+
+
+def test_extract_parser_key_mixed_case_normalized():
+    key, err = _extract_parser_key('{"parser_key": "GreenHouse"}')
+    assert key == "GREENHOUSE"
+    assert err is None
+
+
+# ── OfficialCompanyAdapter — CUSTOM (parser_key path) ────────────────────────
+
+
+async def test_adapter_custom_parser_key_calls_parser(monkeypatch):
+    """Parser registered by parser_key is invoked when config_json has matching key."""
+
+    class _KeyParser(CustomParser):
+        async def fetch(self, source, profile, options, collect_date):
+            return AdapterResult(
+                postings=[
+                    RawJobPosting(
+                        source="company_1_custom",
+                        source_url=f"{_BASE}/jobs/key",
+                        company_name="카카오",
+                        title="parser_key 개발자",
+                    )
+                ]
+            )
+
+    monkeypatch.setitem(_CUSTOM_REGISTRY_BY_KEY, "GREETING", _KeyParser())
+
+    s = _source(
+        company_id=1,
+        adapter_type="CUSTOM",
+        config_json='{"parser_key": "GREETING"}',
+    )
+    adapter = OfficialCompanyAdapter([s], [_profile()])
+    result = await adapter.fetch(SeedKeywords(), _options(), _COLLECT_DATE)
+
+    assert len(result.postings) == 1
+    assert result.postings[0].title == "parser_key 개발자"
+    assert result.warnings == []
+
+    monkeypatch.delitem(_CUSTOM_REGISTRY_BY_KEY, "GREETING")
+
+
+async def test_adapter_custom_parser_key_lowercase_normalized(monkeypatch):
+    """Lowercase parser_key in config_json is normalized to uppercase for lookup."""
+    called = []
+
+    class _KeyParser(CustomParser):
+        async def fetch(self, source, profile, options, collect_date):
+            called.append(True)
+            return AdapterResult()
+
+    monkeypatch.setitem(_CUSTOM_REGISTRY_BY_KEY, "GREENHOUSE", _KeyParser())
+
+    s = _source(
+        company_id=2,
+        adapter_type="CUSTOM",
+        config_json='{"parser_key": "greenhouse"}',
+    )
+    adapter = OfficialCompanyAdapter([s], [_profile(company_id=2)])
+    result = await adapter.fetch(SeedKeywords(), _options(), _COLLECT_DATE)
+
+    assert called, "parser should have been called"
+    assert result.warnings == []
+
+    monkeypatch.delitem(_CUSTOM_REGISTRY_BY_KEY, "GREENHOUSE")
+
+
+async def test_adapter_custom_parser_key_stripped(monkeypatch):
+    """Whitespace around parser_key value is trimmed before lookup."""
+    called = []
+
+    class _KeyParser(CustomParser):
+        async def fetch(self, source, profile, options, collect_date):
+            called.append(True)
+            return AdapterResult()
+
+    monkeypatch.setitem(_CUSTOM_REGISTRY_BY_KEY, "GREETING", _KeyParser())
+
+    s = _source(
+        company_id=1,
+        adapter_type="CUSTOM",
+        config_json='{"parser_key": "  GREETING  "}',
+    )
+    adapter = OfficialCompanyAdapter([s], [_profile()])
+    result = await adapter.fetch(SeedKeywords(), _options(), _COLLECT_DATE)
+
+    assert called
+    assert result.warnings == []
+
+    monkeypatch.delitem(_CUSTOM_REGISTRY_BY_KEY, "GREETING")
+
+
+async def test_adapter_custom_unknown_parser_key_warns():
+    """Known config_json but parser_key not in _CUSTOM_REGISTRY_BY_KEY → warning."""
+    s = _source(
+        company_id=5,
+        adapter_type="CUSTOM",
+        config_json='{"parser_key": "UNKNOWN_PARSER"}',
+    )
+    adapter = OfficialCompanyAdapter([s], [_profile(company_id=5)])
+    result = await adapter.fetch(SeedKeywords(), _options(), _COLLECT_DATE)
+
+    assert result.postings == []
+    assert any("parser_key=UNKNOWN_PARSER" in w for w in result.warnings)
+
+
+async def test_adapter_custom_missing_parser_key_warns():
+    """config_json present but parser_key field absent → missing_key warning."""
+    s = _source(
+        company_id=6,
+        adapter_type="CUSTOM",
+        config_json='{"max_fetch": 20}',
+    )
+    adapter = OfficialCompanyAdapter([s], [_profile(company_id=6)])
+    result = await adapter.fetch(SeedKeywords(), _options(), _COLLECT_DATE)
+
+    assert result.postings == []
+    assert any("missing custom parser_key" in w for w in result.warnings)
+
+
+async def test_adapter_custom_invalid_config_json_warns():
+    """config_json is not valid JSON → invalid config_json warning."""
+    s = _source(
+        company_id=7,
+        adapter_type="CUSTOM",
+        config_json="not-valid-json{",
+    )
+    adapter = OfficialCompanyAdapter([s], [_profile(company_id=7)])
+    result = await adapter.fetch(SeedKeywords(), _options(), _COLLECT_DATE)
+
+    assert result.postings == []
+    assert any("invalid config_json" in w for w in result.warnings)
+
+
+async def test_adapter_custom_parser_key_reused_across_companies(monkeypatch):
+    """Same parser_key can serve multiple company sources."""
+    titles: list[str] = []
+
+    class _SharedParser(CustomParser):
+        async def fetch(self, source, profile, options, collect_date):
+            name = profile.canonical_name if profile else f"co_{source.company_id}"
+            titles.append(name)
+            return AdapterResult(
+                postings=[
+                    RawJobPosting(
+                        source=f"company_{source.company_id}_custom",
+                        source_url=f"{_BASE}/jobs/{source.company_id}",
+                        company_name=name,
+                        title="공고",
+                    )
+                ]
+            )
+
+    monkeypatch.setitem(_CUSTOM_REGISTRY_BY_KEY, "SHARED", _SharedParser())
+
+    cfg = '{"parser_key":"SHARED"}'
+    sources = [
+        _source(company_id=10, adapter_type="CUSTOM", config_json=cfg),
+        _source(company_id=11, adapter_type="CUSTOM", config_json=cfg),
+    ]
+    profiles = [_profile(10, "회사A"), _profile(11, "회사B")]
+    adapter = OfficialCompanyAdapter(sources, profiles)
+    result = await adapter.fetch(SeedKeywords(), _options(), _COLLECT_DATE)
+
+    assert len(result.postings) == 2
+    assert set(titles) == {"회사A", "회사B"}
+    assert result.warnings == []
+
+    monkeypatch.delitem(_CUSTOM_REGISTRY_BY_KEY, "SHARED")
+
+
+# ── OfficialCompanyAdapter — CUSTOM (legacy company_id path) ─────────────────
 
 
 async def test_adapter_custom_unregistered_warns():
+    """No config_json and company_id not in legacy _CUSTOM_REGISTRY → warning."""
     s = _source(company_id=999, adapter_type="CUSTOM")
     adapter = OfficialCompanyAdapter([s], [_profile(company_id=999)])
     result = await adapter.fetch(SeedKeywords(), _options(), _COLLECT_DATE)
@@ -524,7 +755,44 @@ async def test_adapter_custom_unregistered_warns():
     assert any("no custom parser" in w for w in result.warnings)
 
 
+async def test_adapter_custom_legacy_company_id_fallback(monkeypatch):
+    """DEPRECATED: no config_json → legacy _CUSTOM_REGISTRY[company_id] is tried."""
+
+    class _LegacyParser(CustomParser):
+        @property
+        def company_id(self) -> int:
+            return 88
+
+        async def fetch(self, source, profile, options, collect_date):
+            return AdapterResult(
+                postings=[
+                    RawJobPosting(
+                        source="company_88_custom",
+                        source_url=f"{_BASE}/jobs/legacy",
+                        company_name="LegacyCo",
+                        title="레거시 공고",
+                    )
+                ]
+            )
+
+    monkeypatch.setitem(_CUSTOM_REGISTRY, 88, _LegacyParser())
+
+    # No config_json → legacy path
+    s = _source(company_id=88, adapter_type="CUSTOM", config_json=None)
+    adapter = OfficialCompanyAdapter([s], [_profile(company_id=88, name="LegacyCo")])
+    result = await adapter.fetch(SeedKeywords(), _options(), _COLLECT_DATE)
+
+    assert len(result.postings) == 1
+    assert result.postings[0].title == "레거시 공고"
+    # legacy path: no warnings when parser is found
+    assert result.warnings == []
+
+    monkeypatch.delitem(_CUSTOM_REGISTRY, 88)
+
+
 async def test_adapter_custom_registered_calls_parser(monkeypatch):
+    """DEPRECATED legacy path: company_id-keyed registry works without config_json."""
+
     class _FakeParser(CustomParser):
         @property
         def company_id(self) -> int:
@@ -551,6 +819,29 @@ async def test_adapter_custom_registered_calls_parser(monkeypatch):
     assert result.warnings == []
 
     monkeypatch.delitem(_CUSTOM_REGISTRY, 77)
+
+
+async def test_adapter_custom_source_failure_continues():
+    """CUSTOM source with invalid config_json should warn but not abort next source."""
+    # First source: invalid config_json → warns + empty
+    broken = _source(
+        company_id=20,
+        adapter_type="CUSTOM",
+        config_json="{{not json",
+    )
+    # Second source: unregistered legacy → warns + empty
+    missing = _source(company_id=21, adapter_type="CUSTOM")
+
+    adapter = OfficialCompanyAdapter(
+        [broken, missing],
+        [_profile(20, "BrokenCo"), _profile(21, "MissingCo")],
+    )
+    result = await adapter.fetch(SeedKeywords(), _options(), _COLLECT_DATE)
+
+    assert result.postings == []
+    assert len(result.warnings) == 2
+    assert any("invalid config_json" in w for w in result.warnings)
+    assert any("no custom parser" in w for w in result.warnings)
 
 
 # ── OfficialCompanyAdapter — dispatcher ──────────────────────────────────────

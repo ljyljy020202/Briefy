@@ -17,6 +17,7 @@ Company and industry collection are not yet implemented (1.5 / 2nd MVP).
 
 import logging
 
+import app.adapters.greeting  # noqa: F401 — triggers GREETING registration
 from app.adapters.base import JobBoardAdapter, RawJobPosting
 from app.adapters.fixture import FixtureAdapter
 from app.adapters.jasoseol import JasoseolAdapter
