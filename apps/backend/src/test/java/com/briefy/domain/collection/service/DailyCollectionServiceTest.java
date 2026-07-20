@@ -716,6 +716,114 @@ class DailyCollectionServiceTest {
         .containsExactlyInAnyOrder("IT/소프트웨어", "핀테크", "게임");
   }
 
+  // ── resolveCompanyProfiles — seed-realistic alias verification ──────────────
+
+  @Test
+  void resolveCompanyProfiles_seedAlias_NAVER_resolvesToNaver() {
+    CollectionJob job = pendingJob();
+    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+
+    UserBriefingPreference pref = mock(UserBriefingPreference.class);
+    // "NAVER" typed by user → normalized 'naver' → alias match → 네이버
+    when(pref.getPreference()).thenReturn(Map.of("companies", List.of("NAVER")));
+    when(userBriefingPreferenceRepository.findAllByCategoryCodeAndActiveTrue(
+            BriefingCategoryCode.JOB_POSTING))
+        .thenReturn(List.of(pref));
+
+    when(companyRepository.findActiveByNormalizedNames(any())).thenReturn(List.of());
+
+    Company naver = mock(Company.class);
+    when(naver.getId()).thenReturn(1L);
+    when(naver.getCanonicalName()).thenReturn("네이버");
+    when(naver.getNormalizedName()).thenReturn("네이버");
+    when(naver.getCompanySize()).thenReturn("대기업");
+    when(naver.getIndustryCodes()).thenReturn("IT/소프트웨어");
+    CompanyAlias naverAlias = mockAlias(naver, "naver");
+    when(companyAliasRepository.findAllByNormalizedAliasIn(List.of("naver")))
+        .thenReturn(List.of(naverAlias));
+
+    ArgumentCaptor<AgentCollectionRequest> captor =
+        ArgumentCaptor.forClass(AgentCollectionRequest.class);
+    when(agentClient.triggerDailyCollection(captor.capture())).thenReturn(agentResponse(List.of()));
+    when(candidatePoolService.upsertJobPostings(any(), any()))
+        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+
+    dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
+
+    assertThat(captor.getValue().companyProfiles()).hasSize(1);
+    assertThat(captor.getValue().companyProfiles().get(0).id()).isEqualTo(1L);
+    assertThat(captor.getValue().companyProfiles().get(0).canonicalName()).isEqualTo("네이버");
+    assertThat(captor.getValue().companyProfiles().get(0).companySize()).isEqualTo("대기업");
+    assertThat(captor.getValue().companyProfiles().get(0).industryCodes())
+        .containsExactly("IT/소프트웨어");
+  }
+
+  @Test
+  void resolveCompanyProfiles_seedAlias_배달의민족_resolvesToUahanBrothers() {
+    CollectionJob job = pendingJob();
+    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+
+    UserBriefingPreference pref = mock(UserBriefingPreference.class);
+    // "배달의민족" typed by user → alias match → 우아한형제들
+    when(pref.getPreference()).thenReturn(Map.of("companies", List.of("배달의민족")));
+    when(userBriefingPreferenceRepository.findAllByCategoryCodeAndActiveTrue(
+            BriefingCategoryCode.JOB_POSTING))
+        .thenReturn(List.of(pref));
+
+    when(companyRepository.findActiveByNormalizedNames(any())).thenReturn(List.of());
+
+    Company woowa = mockCompany(12L, "우아한형제들", "우아한형제들");
+    CompanyAlias baedalAlias = mockAlias(woowa, "배달의민족");
+    when(companyAliasRepository.findAllByNormalizedAliasIn(List.of("배달의민족")))
+        .thenReturn(List.of(baedalAlias));
+
+    ArgumentCaptor<AgentCollectionRequest> captor =
+        ArgumentCaptor.forClass(AgentCollectionRequest.class);
+    when(agentClient.triggerDailyCollection(captor.capture())).thenReturn(agentResponse(List.of()));
+    when(candidatePoolService.upsertJobPostings(any(), any()))
+        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+
+    dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
+
+    assertThat(captor.getValue().companyProfiles()).hasSize(1);
+    assertThat(captor.getValue().companyProfiles().get(0).id()).isEqualTo(12L);
+    assertThat(captor.getValue().companyProfiles().get(0).canonicalName()).isEqualTo("우아한형제들");
+  }
+
+  @Test
+  void resolveCompanyProfiles_seedCompanySize_propagatesToProfile() {
+    CollectionJob job = pendingJob();
+    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+
+    UserBriefingPreference pref = mock(UserBriefingPreference.class);
+    when(pref.getPreference()).thenReturn(Map.of("companies", List.of("삼성전자")));
+    when(userBriefingPreferenceRepository.findAllByCategoryCodeAndActiveTrue(
+            BriefingCategoryCode.JOB_POSTING))
+        .thenReturn(List.of(pref));
+
+    Company samsung = mock(Company.class);
+    when(samsung.getId()).thenReturn(10L);
+    when(samsung.getCanonicalName()).thenReturn("삼성전자");
+    when(samsung.getNormalizedName()).thenReturn("삼성전자");
+    when(samsung.getCompanySize()).thenReturn("대기업");
+    when(samsung.getIndustryCodes()).thenReturn("IT/소프트웨어");
+    when(companyRepository.findActiveByNormalizedNames(List.of("삼성전자")))
+        .thenReturn(List.of(samsung));
+
+    ArgumentCaptor<AgentCollectionRequest> captor =
+        ArgumentCaptor.forClass(AgentCollectionRequest.class);
+    when(agentClient.triggerDailyCollection(captor.capture())).thenReturn(agentResponse(List.of()));
+    when(candidatePoolService.upsertJobPostings(any(), any()))
+        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+
+    dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
+
+    assertThat(captor.getValue().companyProfiles()).hasSize(1);
+    assertThat(captor.getValue().companyProfiles().get(0).companySize()).isEqualTo("대기업");
+    assertThat(captor.getValue().companyProfiles().get(0).industryCodes())
+        .containsExactly("IT/소프트웨어");
+  }
+
   // ── resolveOfficialSources (regression) ──────────────────────────────────────
 
   @Test
