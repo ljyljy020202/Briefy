@@ -26,9 +26,12 @@ import com.briefy.domain.collection.dto.DailyCollectionResult;
 import com.briefy.domain.collection.entity.CollectionJob;
 import com.briefy.domain.collection.entity.CollectionTriggerType;
 import com.briefy.domain.company.entity.Company;
+import com.briefy.domain.company.entity.CompanyAlias;
 import com.briefy.domain.company.entity.CompanySource;
+import com.briefy.domain.company.repository.CompanyAliasRepository;
 import com.briefy.domain.company.repository.CompanyRepository;
 import com.briefy.domain.company.repository.CompanySourceRepository;
+import com.briefy.domain.company.service.CompanyNameNormalizer;
 import com.briefy.global.exception.BusinessException;
 import com.briefy.global.exception.ErrorCode;
 import java.time.LocalDate;
@@ -52,10 +55,13 @@ class DailyCollectionServiceTest {
   @Mock private AgentClient agentClient;
   @Mock private CandidatePoolService candidatePoolService;
   @Mock private CompanyRepository companyRepository;
+  @Mock private CompanyAliasRepository companyAliasRepository;
   @Mock private CompanySourceRepository companySourceRepository;
 
   private static final CollectionProperties DEFAULT_COLLECTION_PROPS =
       new CollectionProperties(7, 300, 100, 100, 500);
+
+  private final CompanyNameNormalizer normalizer = new CompanyNameNormalizer();
 
   private DailyCollectionService dailyCollectionService;
 
@@ -70,9 +76,12 @@ class DailyCollectionServiceTest {
             agentClient,
             candidatePoolService,
             companyRepository,
+            companyAliasRepository,
             companySourceRepository,
+            normalizer,
             DEFAULT_COLLECTION_PROPS);
     when(companyRepository.findActiveByNormalizedNames(any())).thenReturn(List.of());
+    when(companyAliasRepository.findAllByNormalizedAliasIn(any())).thenReturn(List.of());
     when(companySourceRepository.findActiveByCompanyIds(any(), any())).thenReturn(List.of());
   }
 
@@ -113,6 +122,27 @@ class DailyCollectionServiceTest {
         new AgentCollectionStats(count, count, count, 0, 0, 0, count),
         List.of());
   }
+
+  // ── helper mocks ─────────────────────────────────────────────────────────────
+
+  private Company mockCompany(long id, String canonicalName, String normalizedName) {
+    Company c = mock(Company.class);
+    when(c.getId()).thenReturn(id);
+    when(c.getCanonicalName()).thenReturn(canonicalName);
+    when(c.getNormalizedName()).thenReturn(normalizedName);
+    when(c.getCompanySize()).thenReturn(null);
+    when(c.getIndustryCodes()).thenReturn(null);
+    return c;
+  }
+
+  private CompanyAlias mockAlias(Company company, String normalizedAlias) {
+    CompanyAlias a = mock(CompanyAlias.class);
+    when(a.getCompany()).thenReturn(company);
+    when(a.getNormalizedAlias()).thenReturn(normalizedAlias);
+    return a;
+  }
+
+  // ── core collection flow ──────────────────────────────────────────────────────
 
   @Test
   void triggerDailyCollection_success_returnsCompletedResult() {
@@ -386,6 +416,8 @@ class DailyCollectionServiceTest {
     assertThat(result.savedCount()).isEqualTo(0);
   }
 
+  // ── resolveCompanyProfiles — direct normalized_name match ────────────────────
+
   @Test
   void resolveCompanyProfiles_matchesCompanyByNormalizedName() {
     CollectionJob job = pendingJob();
@@ -397,12 +429,7 @@ class DailyCollectionServiceTest {
             BriefingCategoryCode.JOB_POSTING))
         .thenReturn(List.of(pref));
 
-    Company naver = mock(Company.class);
-    when(naver.getId()).thenReturn(1L);
-    when(naver.getCanonicalName()).thenReturn("네이버");
-    when(naver.getNormalizedName()).thenReturn("네이버");
-    when(naver.getCompanySize()).thenReturn("대기업");
-    when(naver.getIndustryCodes()).thenReturn(null);
+    Company naver = mockCompany(1L, "네이버", "네이버");
     when(companyRepository.findActiveByNormalizedNames(any())).thenReturn(List.of(naver));
 
     ArgumentCaptor<AgentCollectionRequest> captor =
@@ -418,9 +445,244 @@ class DailyCollectionServiceTest {
     assertThat(sent.companyProfiles().get(0).id()).isEqualTo(1L);
     assertThat(sent.companyProfiles().get(0).canonicalName()).isEqualTo("네이버");
     assertThat(sent.companyProfiles().get(0).normalizedName()).isEqualTo("네이버");
-    assertThat(sent.companyProfiles().get(0).companySize()).isEqualTo("대기업");
+    assertThat(sent.companyProfiles().get(0).companySize()).isNull();
     assertThat(sent.companyProfiles().get(0).industryCodes()).isEmpty();
   }
+
+  @Test
+  void resolveCompanyProfiles_uppercaseInput_normalizesBeforeDirectLookup() {
+    CollectionJob job = pendingJob();
+    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+
+    UserBriefingPreference pref = mock(UserBriefingPreference.class);
+    // user entered "KAKAO" — normalizer converts to "kakao"
+    when(pref.getPreference()).thenReturn(Map.of("companies", List.of("KAKAO")));
+    when(userBriefingPreferenceRepository.findAllByCategoryCodeAndActiveTrue(
+            BriefingCategoryCode.JOB_POSTING))
+        .thenReturn(List.of(pref));
+
+    Company kakao = mockCompany(2L, "Kakao", "kakao");
+    when(companyRepository.findActiveByNormalizedNames(List.of("kakao")))
+        .thenReturn(List.of(kakao));
+
+    ArgumentCaptor<AgentCollectionRequest> captor =
+        ArgumentCaptor.forClass(AgentCollectionRequest.class);
+    when(agentClient.triggerDailyCollection(captor.capture())).thenReturn(agentResponse(List.of()));
+    when(candidatePoolService.upsertJobPostings(any(), any()))
+        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+
+    dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
+
+    assertThat(captor.getValue().companyProfiles()).hasSize(1);
+    assertThat(captor.getValue().companyProfiles().get(0).id()).isEqualTo(2L);
+  }
+
+  @Test
+  void resolveCompanyProfiles_leadingTrailingSpaces_normalizesBeforeDirectLookup() {
+    CollectionJob job = pendingJob();
+    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+
+    UserBriefingPreference pref = mock(UserBriefingPreference.class);
+    when(pref.getPreference()).thenReturn(Map.of("companies", List.of("  토스  ")));
+    when(userBriefingPreferenceRepository.findAllByCategoryCodeAndActiveTrue(
+            BriefingCategoryCode.JOB_POSTING))
+        .thenReturn(List.of(pref));
+
+    Company toss = mockCompany(3L, "토스", "토스");
+    when(companyRepository.findActiveByNormalizedNames(List.of("토스"))).thenReturn(List.of(toss));
+
+    ArgumentCaptor<AgentCollectionRequest> captor =
+        ArgumentCaptor.forClass(AgentCollectionRequest.class);
+    when(agentClient.triggerDailyCollection(captor.capture())).thenReturn(agentResponse(List.of()));
+    when(candidatePoolService.upsertJobPostings(any(), any()))
+        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+
+    dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
+
+    assertThat(captor.getValue().companyProfiles()).hasSize(1);
+    assertThat(captor.getValue().companyProfiles().get(0).id()).isEqualTo(3L);
+  }
+
+  // ── resolveCompanyProfiles — alias match ──────────────────────────────────────
+
+  @Test
+  void resolveCompanyProfiles_aliasMatch_returnsCompanyWhenDirectMatchMisses() {
+    CollectionJob job = pendingJob();
+    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+
+    UserBriefingPreference pref = mock(UserBriefingPreference.class);
+    // user entered Korean alias — direct match will miss, alias match should succeed
+    when(pref.getPreference()).thenReturn(Map.of("companies", List.of("비바리퍼블리카")));
+    when(userBriefingPreferenceRepository.findAllByCategoryCodeAndActiveTrue(
+            BriefingCategoryCode.JOB_POSTING))
+        .thenReturn(List.of(pref));
+
+    // direct match returns nothing
+    when(companyRepository.findActiveByNormalizedNames(any())).thenReturn(List.of());
+
+    Company toss = mockCompany(3L, "토스", "토스");
+    CompanyAlias alias = mockAlias(toss, "비바리퍼블리카");
+    when(companyAliasRepository.findAllByNormalizedAliasIn(List.of("비바리퍼블리카")))
+        .thenReturn(List.of(alias));
+
+    ArgumentCaptor<AgentCollectionRequest> captor =
+        ArgumentCaptor.forClass(AgentCollectionRequest.class);
+    when(agentClient.triggerDailyCollection(captor.capture())).thenReturn(agentResponse(List.of()));
+    when(candidatePoolService.upsertJobPostings(any(), any()))
+        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+
+    dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
+
+    assertThat(captor.getValue().companyProfiles()).hasSize(1);
+    assertThat(captor.getValue().companyProfiles().get(0).id()).isEqualTo(3L);
+    assertThat(captor.getValue().companyProfiles().get(0).canonicalName()).isEqualTo("토스");
+  }
+
+  @Test
+  void resolveCompanyProfiles_aliasMatchUppercase_normalizesBeforeAliasLookup() {
+    CollectionJob job = pendingJob();
+    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+
+    UserBriefingPreference pref = mock(UserBriefingPreference.class);
+    // user entered uppercase alias "TOSS"; normalized → "toss" → alias lookup
+    when(pref.getPreference()).thenReturn(Map.of("companies", List.of("TOSS")));
+    when(userBriefingPreferenceRepository.findAllByCategoryCodeAndActiveTrue(
+            BriefingCategoryCode.JOB_POSTING))
+        .thenReturn(List.of(pref));
+
+    when(companyRepository.findActiveByNormalizedNames(any())).thenReturn(List.of());
+
+    Company toss = mockCompany(3L, "토스", "토스");
+    CompanyAlias alias = mockAlias(toss, "toss");
+    when(companyAliasRepository.findAllByNormalizedAliasIn(List.of("toss")))
+        .thenReturn(List.of(alias));
+
+    ArgumentCaptor<AgentCollectionRequest> captor =
+        ArgumentCaptor.forClass(AgentCollectionRequest.class);
+    when(agentClient.triggerDailyCollection(captor.capture())).thenReturn(agentResponse(List.of()));
+    when(candidatePoolService.upsertJobPostings(any(), any()))
+        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+
+    dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
+
+    assertThat(captor.getValue().companyProfiles()).hasSize(1);
+    assertThat(captor.getValue().companyProfiles().get(0).id()).isEqualTo(3L);
+  }
+
+  // ── resolveCompanyProfiles — deduplication ────────────────────────────────────
+
+  @Test
+  void resolveCompanyProfiles_directAndAliasSameCompany_deduplicatedById() {
+    CollectionJob job = pendingJob();
+    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+
+    UserBriefingPreference pref = mock(UserBriefingPreference.class);
+    // user entered canonical name AND alias for the same company
+    when(pref.getPreference()).thenReturn(Map.of("companies", List.of("토스", "비바리퍼블리카")));
+    when(userBriefingPreferenceRepository.findAllByCategoryCodeAndActiveTrue(
+            BriefingCategoryCode.JOB_POSTING))
+        .thenReturn(List.of(pref));
+
+    Company toss = mockCompany(3L, "토스", "토스");
+    // direct match finds "토스"
+    when(companyRepository.findActiveByNormalizedNames(any())).thenReturn(List.of(toss));
+
+    // alias match also returns the same company via "비바리퍼블리카"
+    CompanyAlias alias = mockAlias(toss, "비바리퍼블리카");
+    when(companyAliasRepository.findAllByNormalizedAliasIn(any())).thenReturn(List.of(alias));
+
+    ArgumentCaptor<AgentCollectionRequest> captor =
+        ArgumentCaptor.forClass(AgentCollectionRequest.class);
+    when(agentClient.triggerDailyCollection(captor.capture())).thenReturn(agentResponse(List.of()));
+    when(candidatePoolService.upsertJobPostings(any(), any()))
+        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+
+    dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
+
+    // must appear exactly once
+    assertThat(captor.getValue().companyProfiles()).hasSize(1);
+    assertThat(captor.getValue().companyProfiles().get(0).id()).isEqualTo(3L);
+  }
+
+  @Test
+  void resolveCompanyProfiles_multipleAliasesSameCompany_deduplicatedById() {
+    CollectionJob job = pendingJob();
+    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+
+    UserBriefingPreference pref = mock(UserBriefingPreference.class);
+    when(pref.getPreference()).thenReturn(Map.of("companies", List.of("TOSS", "비바리퍼블리카")));
+    when(userBriefingPreferenceRepository.findAllByCategoryCodeAndActiveTrue(
+            BriefingCategoryCode.JOB_POSTING))
+        .thenReturn(List.of(pref));
+
+    when(companyRepository.findActiveByNormalizedNames(any())).thenReturn(List.of());
+
+    Company toss = mockCompany(3L, "토스", "토스");
+    CompanyAlias alias1 = mockAlias(toss, "toss");
+    CompanyAlias alias2 = mockAlias(toss, "비바리퍼블리카");
+    when(companyAliasRepository.findAllByNormalizedAliasIn(any()))
+        .thenReturn(List.of(alias1, alias2));
+
+    ArgumentCaptor<AgentCollectionRequest> captor =
+        ArgumentCaptor.forClass(AgentCollectionRequest.class);
+    when(agentClient.triggerDailyCollection(captor.capture())).thenReturn(agentResponse(List.of()));
+    when(candidatePoolService.upsertJobPostings(any(), any()))
+        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+
+    dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
+
+    assertThat(captor.getValue().companyProfiles()).hasSize(1);
+    assertThat(captor.getValue().companyProfiles().get(0).id()).isEqualTo(3L);
+  }
+
+  // ── resolveCompanyProfiles — unregistered / empty ────────────────────────────
+
+  @Test
+  void resolveCompanyProfiles_unregisteredCompany_omittedFromProfiles() {
+    CollectionJob job = pendingJob();
+    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+
+    UserBriefingPreference pref = mock(UserBriefingPreference.class);
+    when(pref.getPreference()).thenReturn(Map.of("companies", List.of("없는회사")));
+    when(userBriefingPreferenceRepository.findAllByCategoryCodeAndActiveTrue(
+            BriefingCategoryCode.JOB_POSTING))
+        .thenReturn(List.of(pref));
+
+    when(companyRepository.findActiveByNormalizedNames(any())).thenReturn(List.of());
+    when(companyAliasRepository.findAllByNormalizedAliasIn(any())).thenReturn(List.of());
+
+    ArgumentCaptor<AgentCollectionRequest> captor =
+        ArgumentCaptor.forClass(AgentCollectionRequest.class);
+    when(agentClient.triggerDailyCollection(captor.capture())).thenReturn(agentResponse(List.of()));
+    when(candidatePoolService.upsertJobPostings(any(), any()))
+        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+
+    dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
+
+    assertThat(captor.getValue().companyProfiles()).isEmpty();
+    assertThat(captor.getValue().officialCompanySources()).isEmpty();
+    // unregistered name still in seedKeywords
+    assertThat(captor.getValue().seedKeywords().companies()).containsExactly("없는회사");
+  }
+
+  @Test
+  void resolveCompanyProfiles_emptyCompanies_skipsAllDbQueries() {
+    CollectionJob job = pendingJob();
+    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+    when(userBriefingPreferenceRepository.findAllByCategoryCodeAndActiveTrue(any()))
+        .thenReturn(List.of());
+    when(agentClient.triggerDailyCollection(any())).thenReturn(agentResponse(List.of()));
+    when(candidatePoolService.upsertJobPostings(any(), any()))
+        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+
+    dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
+
+    verify(companyRepository, never()).findActiveByNormalizedNames(any());
+    verify(companyAliasRepository, never()).findAllByNormalizedAliasIn(any());
+    verify(companySourceRepository, never()).findActiveByCompanyIds(any(), any());
+  }
+
+  // ── resolveCompanyProfiles — industryCodes parsing (regression) ──────────────
 
   @Test
   void resolveCompanyProfiles_populatesIndustryCodes() {
@@ -449,36 +711,12 @@ class DailyCollectionServiceTest {
 
     dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
 
-    AgentCollectionRequest sent = captor.getValue();
-    assertThat(sent.companyProfiles()).hasSize(1);
-    assertThat(sent.companyProfiles().get(0).industryCodes())
+    assertThat(captor.getValue().companyProfiles()).hasSize(1);
+    assertThat(captor.getValue().companyProfiles().get(0).industryCodes())
         .containsExactlyInAnyOrder("IT/소프트웨어", "핀테크", "게임");
   }
 
-  @Test
-  void resolveCompanyProfiles_noMatchingCompanies_sendsEmptyList() {
-    CollectionJob job = pendingJob();
-    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
-
-    UserBriefingPreference pref = mock(UserBriefingPreference.class);
-    when(pref.getPreference()).thenReturn(Map.of("companies", List.of("없는회사")));
-    when(userBriefingPreferenceRepository.findAllByCategoryCodeAndActiveTrue(
-            BriefingCategoryCode.JOB_POSTING))
-        .thenReturn(List.of(pref));
-
-    when(companyRepository.findActiveByNormalizedNames(any())).thenReturn(List.of());
-
-    ArgumentCaptor<AgentCollectionRequest> captor =
-        ArgumentCaptor.forClass(AgentCollectionRequest.class);
-    when(agentClient.triggerDailyCollection(captor.capture())).thenReturn(agentResponse(List.of()));
-    when(candidatePoolService.upsertJobPostings(any(), any()))
-        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
-
-    dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
-
-    assertThat(captor.getValue().companyProfiles()).isEmpty();
-    assertThat(captor.getValue().officialCompanySources()).isEmpty();
-  }
+  // ── resolveOfficialSources (regression) ──────────────────────────────────────
 
   @Test
   void resolveOfficialSources_loadsActiveSourcesForMatchedCompanies() {
@@ -491,12 +729,7 @@ class DailyCollectionServiceTest {
             BriefingCategoryCode.JOB_POSTING))
         .thenReturn(List.of(pref));
 
-    Company kakao = mock(Company.class);
-    when(kakao.getId()).thenReturn(2L);
-    when(kakao.getCanonicalName()).thenReturn("카카오");
-    when(kakao.getNormalizedName()).thenReturn("카카오");
-    when(kakao.getCompanySize()).thenReturn(null);
-    when(kakao.getIndustryCodes()).thenReturn(null);
+    Company kakao = mockCompany(2L, "카카오", "카카오");
     when(companyRepository.findActiveByNormalizedNames(any())).thenReturn(List.of(kakao));
 
     CompanySource source = mock(CompanySource.class);
@@ -551,7 +784,9 @@ class DailyCollectionServiceTest {
             agentClient,
             candidatePoolService,
             companyRepository,
+            companyAliasRepository,
             companySourceRepository,
+            normalizer,
             props);
 
     CollectionJob job = pendingJob();
