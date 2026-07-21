@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 import com.briefy.domain.collection.dto.DailyCollectionResult;
 import com.briefy.domain.collection.service.DailyCollectionService;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,7 +33,7 @@ class DailyCollectionSchedulerTest {
 
   @Test
   void runDailyCollection_delegatesToService() {
-    LocalDate today = LocalDate.now();
+    LocalDate today = LocalDate.now(ZoneId.of("Asia/Seoul"));
     when(dailyCollectionService.triggerScheduledDailyCollection(any()))
         .thenReturn(completedResult(today));
 
@@ -53,7 +54,7 @@ class DailyCollectionSchedulerTest {
 
   @Test
   void runDailyCollection_skippedResult_completesNormally() {
-    LocalDate today = LocalDate.now();
+    LocalDate today = LocalDate.now(ZoneId.of("Asia/Seoul"));
     when(dailyCollectionService.triggerScheduledDailyCollection(any()))
         .thenReturn(skippedResult(today));
 

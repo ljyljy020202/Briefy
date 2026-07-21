@@ -18,6 +18,7 @@ import com.briefy.domain.briefingpreference.entity.UserBriefingPreference;
 import com.briefy.domain.briefingpreference.repository.UserBriefingPreferenceRepository;
 import com.briefy.domain.delivery.service.EmailDeliveryService;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -39,7 +40,7 @@ class BriefingSchedulerTest {
 
   @Test
   void runScheduledBriefings_generatesForEachActiveUser() {
-    LocalDate today = LocalDate.now();
+    LocalDate today = LocalDate.now(ZoneId.of("Asia/Seoul"));
     UserBriefingPreference pref1 = mock(UserBriefingPreference.class);
     UserBriefingPreference pref2 = mock(UserBriefingPreference.class);
     when(pref1.getUserId()).thenReturn(1L);
@@ -61,7 +62,7 @@ class BriefingSchedulerTest {
 
   @Test
   void runScheduledBriefings_skipsUserWithExistingReport() {
-    LocalDate today = LocalDate.now();
+    LocalDate today = LocalDate.now(ZoneId.of("Asia/Seoul"));
     UserBriefingPreference pref = mock(UserBriefingPreference.class);
     when(pref.getUserId()).thenReturn(1L);
 
@@ -77,7 +78,7 @@ class BriefingSchedulerTest {
 
   @Test
   void runScheduledBriefings_continuesOnPerUserFailure() {
-    LocalDate today = LocalDate.now();
+    LocalDate today = LocalDate.now(ZoneId.of("Asia/Seoul"));
     UserBriefingPreference pref1 = mock(UserBriefingPreference.class);
     UserBriefingPreference pref2 = mock(UserBriefingPreference.class);
     when(pref1.getUserId()).thenReturn(1L);
@@ -100,7 +101,7 @@ class BriefingSchedulerTest {
 
   @Test
   void runScheduledBriefings_callsEmailDelivery_whenAutoSendEnabled() {
-    LocalDate today = LocalDate.now();
+    LocalDate today = LocalDate.now(ZoneId.of("Asia/Seoul"));
     UserBriefingPreference pref = mock(UserBriefingPreference.class);
     when(pref.getUserId()).thenReturn(1L);
 
@@ -119,7 +120,7 @@ class BriefingSchedulerTest {
 
   @Test
   void runScheduledBriefings_skipsEmailDelivery_whenAutoSendDisabled() {
-    LocalDate today = LocalDate.now();
+    LocalDate today = LocalDate.now(ZoneId.of("Asia/Seoul"));
     UserBriefingPreference pref = mock(UserBriefingPreference.class);
     when(pref.getUserId()).thenReturn(1L);
 
@@ -138,7 +139,7 @@ class BriefingSchedulerTest {
 
   @Test
   void runScheduledBriefings_continuesWhenEmailDeliveryFails() {
-    LocalDate today = LocalDate.now();
+    LocalDate today = LocalDate.now(ZoneId.of("Asia/Seoul"));
     UserBriefingPreference pref1 = mock(UserBriefingPreference.class);
     UserBriefingPreference pref2 = mock(UserBriefingPreference.class);
     when(pref1.getUserId()).thenReturn(1L);
