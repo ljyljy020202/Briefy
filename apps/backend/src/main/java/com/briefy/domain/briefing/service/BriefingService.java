@@ -25,6 +25,7 @@ import com.briefy.global.exception.ErrorCode;
 import com.briefy.global.response.PageResult;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -40,6 +41,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class BriefingService {
 
+  private static final ZoneId KST = ZoneId.of("Asia/Seoul");
   private static final int MAX_CANDIDATE_COUNT = 30;
   private static final int MAX_PER_COMPANY = 2;
   private static final int MAX_PER_TARGETED_COMPANY = 3;
@@ -108,7 +110,7 @@ public class BriefingService {
 
     try {
       Map<String, Object> preference = jobPref != null ? jobPref.getPreference() : Map.of();
-      LocalDate briefingDate = LocalDate.now();
+      LocalDate briefingDate = LocalDate.now(KST);
       List<AgentCandidateJobPosting> candidates = selectCandidates(briefingDate, preference);
       AgentCandidatePool candidatePool = new AgentCandidatePool(candidates, List.of(), List.of());
 
@@ -175,7 +177,7 @@ public class BriefingService {
   }
 
   private boolean isEligible(JobPosting posting, Map<String, Object> pref) {
-    if (posting.getDeadline() != null && posting.getDeadline().isBefore(LocalDate.now())) {
+    if (posting.getDeadline() != null && posting.getDeadline().isBefore(LocalDate.now(KST))) {
       return false;
     }
 
@@ -298,7 +300,7 @@ public class BriefingService {
 
     // deadline within 7 days: +10
     if (posting.getDeadline() != null) {
-      long days = ChronoUnit.DAYS.between(LocalDate.now(), posting.getDeadline());
+      long days = ChronoUnit.DAYS.between(LocalDate.now(KST), posting.getDeadline());
       if (days >= 0 && days <= 7) {
         score += SCORE_DEADLINE_SOON;
       }
@@ -306,7 +308,7 @@ public class BriefingService {
 
     // recently collected (within 3 days): +5
     if (posting.getCollectedDate() != null
-        && !posting.getCollectedDate().isBefore(LocalDate.now().minusDays(3))) {
+        && !posting.getCollectedDate().isBefore(LocalDate.now(KST).minusDays(3))) {
       score += SCORE_RECENT;
     }
 
@@ -382,7 +384,7 @@ public class BriefingService {
         userId,
         BriefingCategoryCode.JOB_POSTING.name(),
         preference,
-        LocalDate.now().toString(),
+        LocalDate.now(KST).toString(),
         "easy",
         candidatePool);
   }
@@ -406,7 +408,7 @@ public class BriefingService {
             agentResponse.title(),
             agentResponse.summary(),
             agentResponse.content(),
-            LocalDate.now(),
+            LocalDate.now(KST),
             "easy",
             tokenInput,
             tokenOutput,
