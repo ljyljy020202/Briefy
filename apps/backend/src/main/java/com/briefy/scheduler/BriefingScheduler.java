@@ -9,6 +9,7 @@ import com.briefy.domain.briefingpreference.entity.UserBriefingPreference;
 import com.briefy.domain.briefingpreference.repository.UserBriefingPreferenceRepository;
 import com.briefy.domain.delivery.service.EmailDeliveryService;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,7 +46,7 @@ public class BriefingScheduler {
       cron = "${briefy.scheduler.daily-briefing-cron:0 0 8 * * *}",
       zone = "${briefy.scheduler.zone:Asia/Seoul}")
   public void runScheduledBriefings() {
-    LocalDate today = LocalDate.now();
+    LocalDate today = LocalDate.now(ZoneId.of("Asia/Seoul"));
     log.info("Scheduled briefing generation started for {}", today);
 
     List<Long> userIds =
