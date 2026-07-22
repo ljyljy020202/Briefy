@@ -437,9 +437,7 @@ export default function MyPage() {
       <section id="briefing-email-settings">
         <Card>
           <CardContent className="p-6 sm:p-8">
-            <h2 className="text-base font-semibold text-foreground">
-              {user?.briefingEmailEnabled ? '이메일 브리핑 수신 설정' : '이메일 브리핑 수신 해제'}
-            </h2>
+            <h2 className="text-base font-semibold text-foreground">이메일 브리핑 수신 설정/해제</h2>
 
             <div className="mt-5 flex items-center justify-between gap-4">
               <div>
