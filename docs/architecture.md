@@ -80,13 +80,13 @@ Requires that the daily candidate pool has already been collected for the target
 1. Backend receives briefing request (scheduled or manual)
 2. Backend loads the user's active `user_briefing_preferences` from MySQL
 3. Backend creates a `briefing_jobs` record (status: `PENDING → PROCESSING`)
-4. Backend calls Agent: `POST /briefings/generate` with user preference JSON
+4. Backend calls Agent: `POST /briefings/generate` with user preference JSON + pre-scored candidate pool
 5. Agent runs `UserBriefingWorkflow` via LangGraph (1st MVP — job briefing):
-   - Load `job_postings` candidate pool for the target date from MySQL (no external calls)
-   - Filter postings by user's role / company / skill / location preferences (deterministic)
-   - Rank filtered postings by preference match score (deterministic)
-   - Summarize selected postings and generate matching reasons with LLM
-   - Format final Markdown briefing (new postings · deadline-near postings · recommended actions)
+   - Receive pre-scored candidate pool from Spring request body (Agent never accesses the DB)
+   - Filter postings by deadline / missing required fields (deterministic)
+   - Re-rank by combined score (preScore + agentScore), select top 7 (deterministic)
+   - Enrich selected postings with summary and matching reasons via LLM (deterministic fallback)
+   - Synthesize final Markdown briefing via LLM (deterministic fallback)
 6. Agent returns `{ title, summary, content, articles, tokenUsage }` to Backend
 7. Backend saves `briefing_reports` + `briefing_articles` to MySQL, marks job `COMPLETED`
 8. (Scheduler path) If `EMAIL_AUTO_SEND_ENABLED=true` and user has `briefing_email_enabled = true`, backend sends email and records result in `delivery_logs`

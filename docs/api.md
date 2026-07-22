@@ -659,7 +659,7 @@ GET /api/dashboard
 | `briefingPreferences` | Active preferences only, one entry per active category |
 | `nextDeliveryTime` | `null` — delivery-time personalization not yet implemented; scheduler runs at fixed 08:00 KST (`briefy.scheduler.enabled: false` by default) |
 | `latestBriefing` | Full `BriefingListItem` for the most recent report; `null` if no reports exist |
-| `latestDeliveryStatus` | Most recent delivery status (`SENT`, `PENDING`, or `FAILED`) from `delivery_logs`; `null` if no delivery has been attempted |
+| `latestDeliveryStatus` | `null` if no delivery has been attempted; otherwise `SENT`, `PENDING`, or `FAILED` from the latest `delivery_logs` row |
 | `recentReports` | Up to 3 most recent `BriefingListItem` records, ordered by date descending; empty array if no reports exist |
 
 **Possible errors:** `UNAUTHORIZED`
@@ -825,7 +825,9 @@ GET /api/briefings/{id}
 
 ## Feedback API
 
-### 7-1. Create Feedback for a Briefing Report
+> **Not yet implemented.** The `user_feedbacks` entity and `POST /api/briefings/{id}/feedback` endpoint are planned but not yet built. See `docs/database.md` for the planned schema.
+
+### 7-1. Create Feedback for a Briefing Report _(Planned)_
 
 ```
 POST /api/briefings/{id}/feedback
@@ -988,7 +990,90 @@ POST /api/admin/collections/daily
 
 ---
 
-### 8-4. Get Delivery Logs (Admin)
+### 8-3. Deliver Briefing Report by Email (Admin)
+
+```
+POST /api/admin/briefing-reports/{reportId}/deliver-email
+```
+
+**Auth:** Required, ADMIN only
+
+**Description:** Sends the stored briefing report to the user's report email via the configured email provider. The Markdown `content` is converted to HTML before sending. Each call creates a new `delivery_logs` row — duplicate calls are allowed for retry scenarios.
+
+**Path param:** `reportId` — `briefing_reports.id`
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "briefingReportId": 100,
+    "deliveryLogId": 70,
+    "status": "SENT",
+    "toEmail": "user@gmail.com",
+    "sentAt": "2026-07-14T08:01:00",
+    "errorMessage": null
+  },
+  "error": null
+}
+```
+
+| Field | Notes |
+|---|---|
+| `status` | `SENT` on success, `FAILED` on error |
+| `toEmail` | Uses `users.report_email` if set, otherwise `users.email` |
+| `errorMessage` | Populated only on `FAILED` status |
+
+**Possible errors:** `UNAUTHORIZED`, `FORBIDDEN`, `BRIEFING_REPORT_NOT_FOUND`
+
+---
+
+### 8-4. Send Test Email (Admin)
+
+```
+POST /api/admin/emails/test
+```
+
+**Auth:** Required, ADMIN only
+
+**Description:** Sends a raw test email via the currently configured email mode (`briefy.email.mode`). In local/dev environments uses `FakeEmailSender` (logs to console). In production uses `SesEmailSender`. Content is sent as-is without Markdown conversion.
+
+**Request:**
+
+```json
+{
+  "to": "test@example.com",
+  "subject": "테스트 이메일",
+  "content": "<p>Hello</p>"
+}
+```
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `to` | String | Yes | Recipient email address |
+| `subject` | String | Yes | Email subject |
+| `content` | String | Yes | Email body (HTML or plain text) |
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "success": true,
+    "providerMessageId": "...",
+    "errorMessage": null
+  },
+  "error": null
+}
+```
+
+**Possible errors:** `UNAUTHORIZED`, `FORBIDDEN`, `VALIDATION_ERROR`
+
+---
+
+### 8-5. Get Delivery Logs (Admin)
 
 ```
 GET /api/admin/delivery-logs?status=FAILED&page=0&size=20
