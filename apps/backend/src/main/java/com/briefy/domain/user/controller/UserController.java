@@ -1,6 +1,8 @@
 package com.briefy.domain.user.controller;
 
 import com.briefy.domain.auth.service.AuthService;
+import com.briefy.domain.user.dto.UpdateBriefingEmailSubscriptionRequest;
+import com.briefy.domain.user.dto.UpdateBriefingEmailSubscriptionResponse;
 import com.briefy.domain.user.dto.UpdateOnboardingRequest;
 import com.briefy.domain.user.dto.UpdateOnboardingResponse;
 import com.briefy.domain.user.dto.UserMeResponse;
@@ -50,6 +52,16 @@ public class UserController {
     AuthenticatedUser auth = currentUserProvider.getCurrentUser();
     return ResponseEntity.ok(
         ApiResponse.success(userService.completeOnboarding(auth.userId(), request)));
+  }
+
+  @Operation(summary = "이메일 브리핑 수신 설정", description = "이메일 브리핑 자동 수신 여부를 변경합니다.")
+  @PatchMapping("/me/briefing-email-subscription")
+  public ResponseEntity<ApiResponse<UpdateBriefingEmailSubscriptionResponse>>
+      updateBriefingEmailSubscription(
+          @RequestBody @Valid UpdateBriefingEmailSubscriptionRequest request) {
+    AuthenticatedUser auth = currentUserProvider.getCurrentUser();
+    return ResponseEntity.ok(
+        ApiResponse.success(userService.updateBriefingEmailSubscription(auth.userId(), request)));
   }
 
   @Operation(summary = "회원탈퇴", description = "계정과 모든 관련 데이터를 삭제하고 JWT 쿠키를 만료시킵니다.")

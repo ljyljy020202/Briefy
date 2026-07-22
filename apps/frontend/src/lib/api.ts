@@ -60,6 +60,12 @@ export const users = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ nickname, reportEmail }),
     }),
+  updateBriefingEmailSubscription: (enabled: boolean): Promise<{ briefingEmailEnabled: boolean }> =>
+    apiFetch<{ briefingEmailEnabled: boolean }>("/users/me/briefing-email-subscription", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled }),
+    }),
   deleteAccount: (): Promise<null> =>
     apiFetch<null>("/users/me", { method: "DELETE" }),
 };

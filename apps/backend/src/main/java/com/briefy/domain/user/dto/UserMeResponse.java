@@ -9,7 +9,8 @@ public record UserMeResponse(
     String reportEmail,
     String profileImageUrl,
     String role,
-    boolean onboardingCompleted) {
+    boolean onboardingCompleted,
+    boolean briefingEmailEnabled) {
 
   public static UserMeResponse from(User user) {
     return new UserMeResponse(
@@ -19,6 +20,7 @@ public record UserMeResponse(
         user.getReportEmail(),
         user.getProfileImageUrl(),
         user.getRole().name(),
-        user.isOnboardingCompleted());
+        user.isOnboardingCompleted(),
+        user.isBriefingEmailEnabled());
   }
 }
