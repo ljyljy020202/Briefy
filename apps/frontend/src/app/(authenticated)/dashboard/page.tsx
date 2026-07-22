@@ -6,7 +6,6 @@ import {
   ArrowRight,
   CalendarClock,
   Mail,
-  MailX,
   Settings2,
   Sparkles,
 } from 'lucide-react'
@@ -224,12 +223,12 @@ export default function DashboardPage() {
       {/* Next briefing */}
       <Card className="mt-6">
         <CardContent className="p-6">
+          <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <CalendarClock className="size-4 text-primary" />
+            다음 브리핑
+          </div>
           {user?.briefingEmailEnabled === false ? (
             <>
-              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                <MailX className="size-4" />
-                이메일 브리핑 수신 중지
-              </div>
               <p className="mt-3 text-sm text-muted-foreground">
                 현재 이메일 브리핑 수신이 중지되어 있어 다음 브리핑이 예약되어 있지 않아요.
               </p>
@@ -250,10 +249,6 @@ export default function DashboardPage() {
             </>
           ) : (
             <>
-              <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                <CalendarClock className="size-4 text-primary" />
-                다음 브리핑
-              </div>
               <p className="mt-3 text-lg font-semibold text-foreground">{nextDeliveryTime}</p>
               <p className="mt-1 text-sm text-muted-foreground">
                 설정한 조건을 기준으로 맞춤 브리핑이 생성되어 이메일로 발송됩니다.
