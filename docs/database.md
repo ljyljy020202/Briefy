@@ -23,6 +23,8 @@ erDiagram
         varchar role
         varchar status
         boolean onboarding_completed
+        varchar report_email
+        tinyint briefing_email_enabled
         datetime created_at
         datetime updated_at
     }
@@ -193,8 +195,8 @@ erDiagram
     }
 
     %% Planned (not yet implemented as Java entities):
-    %% user_feedbacks       — user reactions to briefing reports
-    %% notification_settings — per-user delivery time and channel toggles
+    %% user_feedbacks          — user reactions to briefing reports
+    %% notification_settings   — per-user delivery time; email toggle is already in users.briefing_email_enabled
 
     users ||--o{ user_briefing_preferences : "user_id"
     briefing_categories ||--o{ user_briefing_preferences : "category_id"
@@ -236,6 +238,8 @@ Stores Google OAuth users. Briefy supports only Google sign-in for MVP — there
 | `role` | VARCHAR(30) | NOT NULL | See `UserRole` |
 | `status` | VARCHAR(30) | NOT NULL | See `UserStatus` |
 | `onboarding_completed` | BOOLEAN | NOT NULL DEFAULT FALSE | True after first preference setup |
+| `report_email` | VARCHAR(255) | | Email address for briefing delivery; set during onboarding |
+| `briefing_email_enabled` | TINYINT(1) | NOT NULL DEFAULT 1 | `1` = subscribed to automatic email briefings. Toggled via `PATCH /api/users/me/briefing-email-subscription`. Added by V9 migration. |
 | `created_at` | DATETIME | | |
 | `updated_at` | DATETIME | | |
 
@@ -825,11 +829,13 @@ INDEX idx_user_feedbacks_report (briefing_report_id)
 
 One row per user. Stores the user's preferred delivery time and channel toggles. Optional for a minimal MVP but useful for the settings dashboard and future scheduled delivery.
 
+> **1st MVP note:** Basic email subscription (`email_enabled`) is handled by `users.briefing_email_enabled` (added in V9 migration) rather than this table. This table will be needed when per-user delivery-time customization is implemented.
+
 | Column | Type | Constraints | Notes |
 |---|---|---|---|
 | `id` | BIGINT | PK, AUTO_INCREMENT | |
 | `user_id` | BIGINT | FK `users.id` UNIQUE NOT NULL | 1:1 with users |
-| `email_enabled` | BOOLEAN | NOT NULL DEFAULT TRUE | |
+| `email_enabled` | BOOLEAN | NOT NULL DEFAULT TRUE | Superseded in 1st MVP by `users.briefing_email_enabled` |
 | `delivery_time` | TIME | | Preferred local time for daily briefing |
 | `timezone` | VARCHAR(50) | DEFAULT `'Asia/Seoul'` | IANA timezone identifier |
 | `created_at` | DATETIME | | |

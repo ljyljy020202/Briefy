@@ -29,7 +29,7 @@ The Agent is **stateless**. It does not connect to MySQL or any other database.
 | OfficialCompanyAdapter | Implemented — dispatches per-company sources from `officialCompanySources`; supports `SITEMAP`, `RSS`, `CUSTOM` adapter types |
 | LLM summarization / formatting | Implemented — 2-call strategy (enrichment + synthesis) via `gpt-4o-mini`; deterministic fallback when `OPENAI_API_KEY` is absent or LLM fails |
 | Job briefing filter + rank + Markdown | Implemented — deterministic filter/rank/select + LLM-enhanced enrichment and synthesis (with deterministic fallback) |
-| Scheduler (06:00 KST collection, 08:00 KST briefing) | Implemented, disabled by default (`briefy.scheduler.enabled: false`) |
+| Scheduler (06:00 KST collection, 08:00 KST briefing) | Implemented, disabled by default (`briefy.scheduler.enabled: false`); only generates briefings for users with `briefing_email_enabled = true` |
 | Company news briefing (1.5 MVP) | Not implemented; `companyIssues` is always `[]` |
 | Industry / market briefing (2nd MVP) | Not implemented; `industryIssues` is always `[]` |
 
@@ -572,6 +572,7 @@ Spring Scheduler / POST /api/admin/collections/daily
 [Briefing Generation — per user]
 User POST /api/briefings/generate  OR  Spring BriefingScheduler
     │
+    ├─ (Scheduler path only) Filter: only process users with briefing_email_enabled = true
     ├─ Spring: load user preferences from user_briefing_preferences
     ├─ Spring: load job_postings for today's date
     ├─ Spring: pre-score candidates; take top 30
@@ -579,7 +580,8 @@ User POST /api/briefings/generate  OR  Spring BriefingScheduler
     ├─ Spring → Agent: POST /briefings/generate (with candidatePool)
     ├─ Agent: filter → re-rank → select top 7 → enrich (LLM/fallback) → synthesize (LLM/fallback) → quality check
     ├─ Spring: save briefing_reports + briefing_articles
-    └─ Spring: mark briefing_jobs COMPLETED (or FAILED)
+    ├─ Spring: mark briefing_jobs COMPLETED (or FAILED)
+    └─ (Scheduler path, if EMAIL_AUTO_SEND_ENABLED=true) Spring: send email via EmailDeliveryService; record in delivery_logs
 ```
 
 The Agent server is called **only by the Spring Boot backend** (`AgentClient`). The frontend never calls the Agent directly. Agent endpoints do not use the `/api` prefix.

@@ -89,7 +89,7 @@ Requires that the daily candidate pool has already been collected for the target
    - Format final Markdown briefing (new postings · deadline-near postings · recommended actions)
 6. Agent returns `{ title, summary, content, articles, tokenUsage }` to Backend
 7. Backend saves `briefing_reports` + `briefing_articles` to MySQL, marks job `COMPLETED`
-8. Backend sends email and records result in `delivery_logs`
+8. (Scheduler path) If `EMAIL_AUTO_SEND_ENABLED=true` and user has `briefing_email_enabled = true`, backend sends email and records result in `delivery_logs`
 9. Frontend fetches and renders the Markdown briefing report
 
 ## Deployment Architecture
