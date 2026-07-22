@@ -11,6 +11,7 @@ import com.briefy.global.response.PageResult;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
@@ -39,7 +40,8 @@ public class AdminCompanyController {
   @Operation(summary = "기업 목록 조회")
   @GetMapping("/companies")
   public ResponseEntity<ApiResponse<PageResult<CompanyAdminResponse>>> listCompanies(
-      @PageableDefault(size = 20, sort = "canonicalName", direction = Sort.Direction.ASC)
+      @ParameterObject
+          @PageableDefault(size = 20, sort = "canonicalName", direction = Sort.Direction.ASC)
           Pageable pageable) {
     return ResponseEntity.ok(ApiResponse.success(companyAdminService.listCompanies(pageable)));
   }

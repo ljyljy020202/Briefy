@@ -10,6 +10,7 @@ import com.briefy.global.response.PageResult;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
@@ -36,7 +37,7 @@ public class AdminCompanySourceController {
   @Operation(summary = "채용 소스 목록 조회")
   @GetMapping
   public ResponseEntity<ApiResponse<PageResult<CompanySourceAdminResponse>>> listSources(
-      @PageableDefault(size = 20) Pageable pageable) {
+      @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
     return ResponseEntity.ok(ApiResponse.success(companySourceAdminService.listSources(pageable)));
   }
 
