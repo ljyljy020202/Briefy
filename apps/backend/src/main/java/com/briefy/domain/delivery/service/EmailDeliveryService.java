@@ -11,11 +11,15 @@ import com.briefy.email.EmailSendResult;
 import com.briefy.email.EmailSender;
 import com.briefy.global.exception.BusinessException;
 import com.briefy.global.exception.ErrorCode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class EmailDeliveryService {
+
+  private static final Logger log = LoggerFactory.getLogger(EmailDeliveryService.class);
 
   private final DeliveryLogRepository deliveryLogRepository;
   private final BriefingReportRepository briefingReportRepository;
@@ -31,6 +35,33 @@ public class EmailDeliveryService {
     this.briefingReportRepository = briefingReportRepository;
     this.userRepository = userRepository;
     this.emailSender = emailSender;
+  }
+
+  /**
+   * Scheduler-only path: re-checks briefingEmailEnabled immediately before sending to guard against
+   * subscription changes between scheduling and delivery.
+   */
+  @Transactional(noRollbackFor = Exception.class)
+  public DeliveryLog autoDeliverBriefingReport(Long reportId) {
+    BriefingReport report =
+        briefingReportRepository
+            .findById(reportId)
+            .orElseThrow(() -> new BusinessException(ErrorCode.BRIEFING_REPORT_NOT_FOUND));
+
+    User user =
+        userRepository
+            .findById(report.getUserId())
+            .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+    if (!user.isBriefingEmailEnabled()) {
+      log.info(
+          "Skipping auto email for user {} (reportId={}) — briefing email subscription is disabled",
+          user.getId(),
+          reportId);
+      return null;
+    }
+
+    return deliverBriefingReport(reportId);
   }
 
   /**

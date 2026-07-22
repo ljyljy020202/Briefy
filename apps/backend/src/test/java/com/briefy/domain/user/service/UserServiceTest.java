@@ -10,6 +10,8 @@ import static org.mockito.Mockito.when;
 import com.briefy.domain.briefing.repository.BriefingJobRepository;
 import com.briefy.domain.briefing.repository.BriefingReportRepository;
 import com.briefy.domain.briefingpreference.repository.UserBriefingPreferenceRepository;
+import com.briefy.domain.user.dto.UpdateBriefingEmailSubscriptionRequest;
+import com.briefy.domain.user.dto.UpdateBriefingEmailSubscriptionResponse;
 import com.briefy.domain.user.dto.UpdateOnboardingRequest;
 import com.briefy.domain.user.dto.UpdateOnboardingResponse;
 import com.briefy.domain.user.dto.UserMeResponse;
@@ -136,6 +138,54 @@ class UserServiceTest {
             ex ->
                 assertThat(((BusinessException) ex).getErrorCode())
                     .isEqualTo(ErrorCode.USER_NOT_FOUND));
+  }
+
+  @Test
+  void updateBriefingEmailSubscription_setsEnabledFalse() {
+    User user = sampleUser();
+    when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+    UpdateBriefingEmailSubscriptionResponse response =
+        userService.updateBriefingEmailSubscription(
+            1L, new UpdateBriefingEmailSubscriptionRequest(false));
+
+    assertThat(response.briefingEmailEnabled()).isFalse();
+    assertThat(user.isBriefingEmailEnabled()).isFalse();
+  }
+
+  @Test
+  void updateBriefingEmailSubscription_setsEnabledTrue() {
+    User user = sampleUser();
+    user.updateBriefingEmailEnabled(false);
+    when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+    UpdateBriefingEmailSubscriptionResponse response =
+        userService.updateBriefingEmailSubscription(
+            1L, new UpdateBriefingEmailSubscriptionRequest(true));
+
+    assertThat(response.briefingEmailEnabled()).isTrue();
+    assertThat(user.isBriefingEmailEnabled()).isTrue();
+  }
+
+  @Test
+  void updateBriefingEmailSubscription_throwsUserNotFound_whenUserMissing() {
+    when(userRepository.findById(99L)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(
+            () ->
+                userService.updateBriefingEmailSubscription(
+                    99L, new UpdateBriefingEmailSubscriptionRequest(false)))
+        .isInstanceOf(BusinessException.class)
+        .satisfies(
+            ex ->
+                assertThat(((BusinessException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.USER_NOT_FOUND));
+  }
+
+  @Test
+  void newUser_hasDefaultBriefingEmailEnabledTrue() {
+    User user = sampleUser();
+    assertThat(user.isBriefingEmailEnabled()).isTrue();
   }
 
   @Test

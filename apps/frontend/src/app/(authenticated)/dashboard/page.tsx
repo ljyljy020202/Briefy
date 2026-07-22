@@ -227,19 +227,33 @@ export default function DashboardPage() {
             <CalendarClock className="size-4 text-primary" />
             다음 브리핑
           </div>
-          {nextDeliveryTime ? (
+          {user?.briefingEmailEnabled === false ? (
             <>
-              <p className="mt-3 text-lg font-semibold text-foreground">
-                {nextDeliveryTime}
+              <p className="mt-3 text-sm text-muted-foreground">
+                현재 이메일 브리핑 수신이 중지되어 있어 다음 브리핑이 예약되어 있지 않아요.
               </p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                설정한 조건 기준으로 브리핑이 생성됩니다.
+              <p className="mt-2 text-xs text-muted-foreground">
+                마이페이지에서 수신을 다시 시작하면 다음 발송 일정부터 맞춤 브리핑을 받아볼 수
+                있어요.
               </p>
+              <Link
+                href="/mypage#briefing-email-settings"
+                className={cn(
+                  buttonVariants({ variant: 'outline', size: 'sm' }),
+                  'mt-4 inline-flex items-center gap-2',
+                )}
+              >
+                수신 설정하러 가기
+                <ArrowRight className="size-3.5" />
+              </Link>
             </>
           ) : (
-            <p className="mt-3 text-sm text-muted-foreground">
-              예정된 브리핑이 없습니다.
-            </p>
+            <>
+              <p className="mt-3 text-lg font-semibold text-foreground">{nextDeliveryTime}</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                설정한 조건을 기준으로 맞춤 브리핑이 생성되어 이메일로 발송됩니다.
+              </p>
+            </>
           )}
         </CardContent>
       </Card>

@@ -58,6 +58,9 @@ public class User extends BaseTimeEntity {
   @Column(length = 255)
   private String reportEmail;
 
+  @Column(nullable = false, columnDefinition = "TINYINT(1) DEFAULT 1")
+  private boolean briefingEmailEnabled = true;
+
   protected User() {}
 
   private User(
@@ -77,6 +80,7 @@ public class User extends BaseTimeEntity {
     this.role = role;
     this.status = status;
     this.onboardingCompleted = onboardingCompleted;
+    this.briefingEmailEnabled = true;
   }
 
   public static User create(
@@ -144,5 +148,13 @@ public class User extends BaseTimeEntity {
 
   public String getReportEmail() {
     return reportEmail;
+  }
+
+  public boolean isBriefingEmailEnabled() {
+    return briefingEmailEnabled;
+  }
+
+  public void updateBriefingEmailEnabled(boolean enabled) {
+    this.briefingEmailEnabled = enabled;
   }
 }

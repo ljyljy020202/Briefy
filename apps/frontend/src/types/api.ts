@@ -8,6 +8,7 @@ export interface User {
   profileImageUrl: string | null;
   role: "USER" | "ADMIN";
   onboardingCompleted: boolean;
+  briefingEmailEnabled: boolean;
 }
 
 export interface BriefingCategory {

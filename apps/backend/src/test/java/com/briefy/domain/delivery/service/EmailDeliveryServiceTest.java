@@ -42,12 +42,13 @@ class EmailDeliveryServiceTest {
   void setUp() {
     report = mock(BriefingReport.class);
     when(report.getUserId()).thenReturn(1L);
-    when(report.getTitle()).thenReturn("오늘의 채용 브리핑");
-    when(report.getContent()).thenReturn("<html>content</html>");
+    lenient().when(report.getTitle()).thenReturn("오늘의 채용 브리핑");
+    lenient().when(report.getContent()).thenReturn("<html>content</html>");
     when(briefingReportRepository.findById(10L)).thenReturn(Optional.of(report));
 
     user = mock(User.class);
     lenient().when(user.getEmail()).thenReturn("user@example.com");
+    lenient().when(user.isBriefingEmailEnabled()).thenReturn(true);
     when(userRepository.findById(1L)).thenReturn(Optional.of(user));
   }
 
@@ -104,5 +105,24 @@ class EmailDeliveryServiceTest {
     assertThat(result.getStatus()).isEqualTo(DeliveryStatus.FAILED);
     verify(briefingReportRepository, never()).delete(any());
     verify(briefingReportRepository, never()).save(any());
+  }
+
+  @Test
+  void autoDeliverBriefingReport_sendsEmail_whenSubscriptionEnabled() {
+    when(emailSender.send(any())).thenReturn(EmailSendResult.ok("msg-auto-123"));
+
+    DeliveryLog result = emailDeliveryService.autoDeliverBriefingReport(10L);
+
+    assertThat(result.getStatus()).isEqualTo(DeliveryStatus.SENT);
+  }
+
+  @Test
+  void autoDeliverBriefingReport_skipsEmail_whenSubscriptionDisabled() {
+    when(user.isBriefingEmailEnabled()).thenReturn(false);
+
+    DeliveryLog result = emailDeliveryService.autoDeliverBriefingReport(10L);
+
+    assertThat(result).isNull();
+    verify(emailSender, never()).send(any());
   }
 }
