@@ -4,6 +4,11 @@ All tests are offline: no real HTTP calls.
 - Pure-function tests: _parse_greeting_config, _discover_job_urls,
   _extract_job_id, _parse_greeting_job
 - Async adapter tests: mock httpx.AsyncClient via monkeypatch
+
+Self-hosted fixture types (synthetic DOM only — no real company HTML):
+  Type A : home page embeds job cards  (무신사 / musinsacareers.com style)
+  Type B : /apply has the job list     (현대오토에버 / hyundai-autoever.com style)
+  Type C : branding home + /apply list (CJ올리브영 / oliveyoung.com style)
 """
 
 import json
@@ -33,6 +38,24 @@ _LIST_URL = f"{_BASE}/companies/{_SLUG}"
 _JOB_URL_1 = f"{_BASE}/companies/{_SLUG}/jobs/101"
 _JOB_URL_2 = f"{_BASE}/companies/{_SLUG}/jobs/102"
 _COLLECT_DATE = date(2026, 7, 18)
+
+# ── Self-hosted constants ──────────────────────────────────────────────────────
+# Type A (무신사 style): home page itself contains job cards
+_SH_A_BASE = "https://www.musinsacareers.com"
+_SH_A_HOME = f"{_SH_A_BASE}/ko/home"
+_SH_A_JOB_1 = f"{_SH_A_BASE}/ko/o/101"
+_SH_A_JOB_2 = f"{_SH_A_BASE}/ko/o/102"
+
+# Type B (현대오토에버 style): /apply page contains the job list
+_SH_B_BASE = "https://career.hyundai-autoever.com"
+_SH_B_APPLY = f"{_SH_B_BASE}/ko/apply"
+_SH_B_JOB_1 = f"{_SH_B_BASE}/ko/o/201"
+_SH_B_JOB_2 = f"{_SH_B_BASE}/ko/o/202"
+
+# Type C (CJ올리브영 style): branding home + separate /apply job list
+_SH_C_BASE = "https://career.oliveyoung.com"
+_SH_C_APPLY = f"{_SH_C_BASE}/ko/apply"
+_SH_C_JOB_1 = f"{_SH_C_BASE}/ko/o/301"
 
 
 # ── fixtures & helpers ────────────────────────────────────────────────────────
@@ -548,3 +571,330 @@ async def test_greeting_preflight_sample_fetch_error_warns(monkeypatch):
     assert result["discovered_count"] == 1
     assert result["sample_parsed"] is None
     assert len(result["warnings"]) > 0
+
+
+# ── Self-hosted helper ────────────────────────────────────────────────────────
+
+
+def _sh_source(
+    base: str,
+    list_url: str,
+    company_id: int = 10,
+) -> OfficialCompanySource:
+    return OfficialCompanySource(
+        company_id=company_id,
+        source_type="OFFICIAL_CAREER",
+        source_url=list_url,
+        adapter_type="CUSTOM",
+        config_json=json.dumps({"parser_key": "GREETING"}),
+    )
+
+
+def _sh_list_html(
+    base: str, *job_ids: int, extra_links: list[str] | None = None
+) -> str:
+    """Synthetic Greeting self-hosted list page with /ko/o/{id} job cards."""
+    links = "".join(
+        f'<a href="/ko/o/{jid}">공고 {jid}</a>' for jid in job_ids
+    )
+    for href in extra_links or []:
+        links += f'<a href="{href}">기타</a>'
+    return f"<html><body>{links}</body></html>"
+
+
+def _sh_detail_html(
+    title: str = "백엔드 개발자", *, employment_type: str | None = None
+) -> str:
+    extras = employment_type or ""
+    return f"<html><body><main><h1>{title}</h1><p>{extras}</p></main></body></html>"
+
+
+# ── Type A: home page embeds job cards (무신사) ───────────────────────────────
+
+
+def test_selfhosted_discover_ko_locale_links():
+    """Type A: /ko/o/{id} links on the home page are discovered."""
+    html = _sh_list_html(_SH_A_BASE, 101, 102)
+    urls = _discover_job_urls(html, _SH_A_HOME, _GreetingConfig())
+    assert _SH_A_JOB_1 in urls
+    assert _SH_A_JOB_2 in urls
+
+
+def test_selfhosted_discover_en_locale_links():
+    """/en/o/{id} links are discovered."""
+    html = '<html><body><a href="/en/o/101">job</a></body></html>'
+    urls = _discover_job_urls(html, _SH_A_HOME, _GreetingConfig())
+    assert f"{_SH_A_BASE}/en/o/101" in urls
+
+
+def test_selfhosted_discover_no_locale_links():
+    """/o/{id} links (no locale prefix) are discovered."""
+    html = '<html><body><a href="/o/55">job</a></body></html>'
+    urls = _discover_job_urls(html, _SH_A_HOME, _GreetingConfig())
+    assert f"{_SH_A_BASE}/o/55" in urls
+
+
+def test_selfhosted_discover_relative_url_resolved():
+    """Relative /ko/o/{id} href is resolved to absolute using base_url origin."""
+    html = '<html><body><a href="/ko/o/999">job</a></body></html>'
+    urls = _discover_job_urls(html, _SH_A_HOME, _GreetingConfig())
+    assert f"{_SH_A_BASE}/ko/o/999" in urls
+
+
+def test_selfhosted_discover_external_url_excluded():
+    """External domain /ko/o/{id} link is NOT discovered (same-origin enforcement)."""
+    external = "https://other-domain.com/ko/o/999"
+    html = f'<html><body><a href="{external}">external job</a></body></html>'
+    urls = _discover_job_urls(html, _SH_A_HOME, _GreetingConfig())
+    assert external not in urls
+    assert urls == []
+
+
+def test_selfhosted_discover_deduplicates():
+    """Duplicate /ko/o/{id} links appear only once."""
+    html = (
+        '<html><body>'
+        '<a href="/ko/o/101">a</a>'
+        '<a href="/ko/o/101">b</a>'
+        '</body></html>'
+    )
+    urls = _discover_job_urls(html, _SH_A_HOME, _GreetingConfig())
+    assert urls.count(_SH_A_JOB_1) == 1
+
+
+def test_selfhosted_discover_non_job_links_excluded():
+    """Nav links like /ko/home and /ko/apply are NOT matched."""
+    html = (
+        '<html><body>'
+        '<a href="/ko/home">홈</a>'
+        '<a href="/ko/apply">공고 목록</a>'
+        '<a href="/about">회사 소개</a>'
+        '</body></html>'
+    )
+    urls = _discover_job_urls(html, _SH_A_HOME, _GreetingConfig())
+    assert urls == []
+
+
+def test_selfhosted_discover_max_discover_respected():
+    html = _sh_list_html(_SH_A_BASE, 1, 2, 3, 4, 5)
+    cfg = _GreetingConfig(max_discover=2)
+    urls = _discover_job_urls(html, _SH_A_HOME, cfg)
+    assert len(urls) == 2
+
+
+def test_selfhosted_extract_job_id_ko_locale():
+    assert _extract_job_id(_SH_A_JOB_1) == "101"
+
+
+def test_selfhosted_extract_job_id_no_locale():
+    assert _extract_job_id(f"{_SH_A_BASE}/o/42") == "42"
+
+
+async def test_selfhosted_type_a_fetch_discovers_and_parses(monkeypatch):
+    """Type A: home page with /ko/o/{id} cards — full fetch pipeline."""
+    list_html = _sh_list_html(_SH_A_BASE, 101)
+    detail_html = _sh_detail_html("프론트엔드 개발자", employment_type="정규직")
+    mock = _MockClient([(200, list_html), (200, detail_html)])
+    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+
+    src = _sh_source(_SH_A_BASE, _SH_A_HOME)
+    result = await GreetingParser().fetch(
+        src, _profile("무신사", 10), _options(), _COLLECT_DATE
+    )
+
+    assert len(result.postings) == 1
+    p = result.postings[0]
+    assert p.title == "프론트엔드 개발자"
+    assert p.employment_type == "정규직"
+    assert p.source_external_id == "101"
+    assert result.source_stats is not None
+    assert result.source_stats.discovered == 1
+    assert result.source_stats.parsed == 1
+
+
+async def test_selfhosted_type_a_no_jobs_on_home(monkeypatch):
+    """Type A edge: home page has no job cards → 0 discovered, no error."""
+    list_html = "<html><body><p>채용 준비 중</p></body></html>"
+    mock = _MockClient([(200, list_html)])
+    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+
+    src = _sh_source(_SH_A_BASE, _SH_A_HOME)
+    result = await GreetingParser().fetch(
+        src, _profile("무신사", 10), _options(), _COLLECT_DATE
+    )
+    assert result.postings == []
+    assert result.source_stats is not None
+    assert result.source_stats.discovered == 0
+
+
+# ── Type B: /apply page contains job list (현대오토에버) ──────────────────────
+
+
+async def test_selfhosted_type_b_apply_page_discovered(monkeypatch):
+    """Type B: source_url=/ko/apply, /ko/o/{id} links discovered on that page."""
+    list_html = _sh_list_html(_SH_B_BASE, 201, 202)
+    detail_html = _sh_detail_html("클라우드 엔지니어")
+    mock = _MockClient([(200, list_html), (200, detail_html), (200, detail_html)])
+    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+
+    src = _sh_source(_SH_B_BASE, _SH_B_APPLY, company_id=20)
+    result = await GreetingParser().fetch(
+        src, _profile("현대오토에버", 20), _options(), _COLLECT_DATE
+    )
+
+    assert result.source_stats is not None
+    assert result.source_stats.discovered == 2
+    assert len(result.postings) == 2
+    assert all(p.source_url.startswith(_SH_B_BASE) for p in result.postings)
+
+
+async def test_selfhosted_type_b_max_fetch_respected(monkeypatch):
+    """Type B: max_fetch=1 fetches only one of two discovered jobs."""
+    list_html = _sh_list_html(_SH_B_BASE, 201, 202)
+    detail_html = _sh_detail_html("SW 개발자")
+    mock = _MockClient([(200, list_html), (200, detail_html)])
+    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+
+    cfg = json.dumps({"parser_key": "GREETING", "max_fetch": 1})
+    src = _sh_source(_SH_B_BASE, _SH_B_APPLY, company_id=20)
+    src = OfficialCompanySource(
+        company_id=20,
+        source_type="OFFICIAL_CAREER",
+        source_url=_SH_B_APPLY,
+        adapter_type="CUSTOM",
+        config_json=cfg,
+    )
+    result = await GreetingParser().fetch(
+        src, _profile("현대오토에버", 20), _options(), _COLLECT_DATE
+    )
+
+    assert result.source_stats is not None
+    assert result.source_stats.discovered == 2
+    assert result.source_stats.fetched == 1
+    assert len(result.postings) == 1
+
+
+async def test_selfhosted_type_b_detail_title_missing_skipped(monkeypatch):
+    """Type B: detail page with no title → posting skipped, no crash."""
+    list_html = _sh_list_html(_SH_B_BASE, 201)
+    no_title_html = "<html><body><p>내용만 있는 페이지</p></body></html>"
+    mock = _MockClient([(200, list_html), (200, no_title_html)])
+    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+
+    src = _sh_source(_SH_B_BASE, _SH_B_APPLY, company_id=20)
+    result = await GreetingParser().fetch(
+        src, _profile("현대오토에버", 20), _options(), _COLLECT_DATE
+    )
+    assert result.postings == []
+    assert result.source_stats is not None
+    assert result.source_stats.discovered == 1
+    assert result.source_stats.parsed == 0
+
+
+async def test_selfhosted_type_b_optional_fields_absent(monkeypatch):
+    """Type B: detail page with title only — optional fields are None, not inferred."""
+    list_html = _sh_list_html(_SH_B_BASE, 201)
+    detail_html = "<html><body><main><h1>데이터 엔지니어</h1></main></body></html>"
+    mock = _MockClient([(200, list_html), (200, detail_html)])
+    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+
+    src = _sh_source(_SH_B_BASE, _SH_B_APPLY, company_id=20)
+    result = await GreetingParser().fetch(
+        src, _profile("현대오토에버", 20), _options(), _COLLECT_DATE
+    )
+
+    assert len(result.postings) == 1
+    p = result.postings[0]
+    assert p.title == "데이터 엔지니어"
+    assert p.employment_type is None
+    assert p.deadline is None
+    assert p.location is None
+
+
+async def test_selfhosted_type_b_partial_detail_failure_warns(monkeypatch):
+    """Type B: first detail 500, second OK → warning + partial success."""
+    list_html = _sh_list_html(_SH_B_BASE, 201, 202)
+    detail_html = _sh_detail_html("SW 개발자")
+    mock = _MockClient([
+        (200, list_html),
+        (500, "Internal Server Error"),
+        (200, detail_html),
+    ])
+    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+
+    src = _sh_source(_SH_B_BASE, _SH_B_APPLY, company_id=20)
+    result = await GreetingParser().fetch(
+        src, _profile("현대오토에버", 20), _options(), _COLLECT_DATE
+    )
+
+    assert len(result.postings) == 1
+    assert any("500" in w for w in result.warnings)
+
+
+# ── Type C: branding home + separate /apply list (CJ올리브영) ─────────────────
+
+
+async def test_selfhosted_type_c_apply_page_fetched(monkeypatch):
+    """Type C: source_url is /ko/apply (after migration fix); jobs discovered there."""
+    list_html = _sh_list_html(_SH_C_BASE, 301)
+    detail_html = _sh_detail_html("MD 기획자")
+    mock = _MockClient([(200, list_html), (200, detail_html)])
+    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+
+    src = _sh_source(_SH_C_BASE, _SH_C_APPLY, company_id=30)
+    result = await GreetingParser().fetch(
+        src, _profile("CJ올리브영", 30), _options(), _COLLECT_DATE
+    )
+
+    assert result.source_stats is not None
+    assert result.source_stats.discovered == 1
+    assert len(result.postings) == 1
+    assert result.postings[0].title == "MD 기획자"
+    assert result.postings[0].source_external_id == "301"
+
+
+async def test_selfhosted_type_c_preflight_success(monkeypatch):
+    """Type C preflight: reachable, discovered > 0, sample parsed."""
+    list_html = _sh_list_html(_SH_C_BASE, 301)
+    detail_html = _sh_detail_html("뷰티 MD")
+    mock = _MockClient([(200, list_html), (200, detail_html)])
+    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+
+    src = _sh_source(_SH_C_BASE, _SH_C_APPLY, company_id=30)
+    result = await greeting_preflight(src)
+
+    assert result["reachable"] is True
+    assert result["discovered_count"] == 1
+    assert result["sample_parsed"] is not None
+    assert result["sample_parsed"]["title"] == "뷰티 MD"
+    assert result["sample_parsed"]["source_external_id"] == "301"
+
+
+# ── Regression: hosted pattern still works after self-hosted support added ────
+
+
+def test_hosted_pattern_still_discovered_after_selfhosted_added():
+    """Regression: /companies/{slug}/jobs/{id} links still discovered."""
+    html = _list_html(101, 102)
+    urls = _discover_job_urls(html, _LIST_URL, _GreetingConfig())
+    assert _JOB_URL_1 in urls
+    assert _JOB_URL_2 in urls
+
+
+def test_hosted_extract_job_id_unchanged():
+    assert _extract_job_id(_JOB_URL_1) == "101"
+
+
+async def test_hosted_parser_fetch_regression(monkeypatch):
+    """Regression: existing hosted-pattern fetch pipeline unchanged."""
+    list_html = _list_html(101)
+    detail_html = _detail_html("백엔드 개발자", employment_type="정규직")
+    mock = _MockClient([(200, list_html), (200, detail_html)])
+    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+
+    result = await GreetingParser().fetch(
+        _source(), _profile(), _options(), _COLLECT_DATE
+    )
+    assert len(result.postings) == 1
+    assert result.postings[0].title == "백엔드 개발자"
+    assert result.postings[0].source_external_id == "101"

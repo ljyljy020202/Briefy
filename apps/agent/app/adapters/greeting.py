@@ -1,4 +1,4 @@
-"""GreetingParser — CUSTOM parser for careers.greeting.works company pages.
+"""GreetingParser — CUSTOM parser for Greeting-powered company career pages.
 
 Registered in _CUSTOM_REGISTRY_BY_KEY under parser_key="GREETING".
 
@@ -11,11 +11,20 @@ config_json contract (all fields optional except parser_key):
     "exclude_paths": []
   }
 
-source_url must be the company career page root:
-  https://careers.greeting.works/companies/{slug}
+Supported URL structures:
 
-Job detail URLs are discovered from the list page by matching hrefs against
-the /companies/{slug}/jobs/{id} pattern.  No browser automation is used.
+  Hosted on careers.greeting.works (central platform):
+    source_url : https://careers.greeting.works/companies/{slug}
+    job detail : /companies/{slug}/jobs/{id}
+
+  Self-hosted on company's own domain (e.g. musinsacareers.com):
+    source_url : https://{company-domain}/ko/apply   (or /ko/home when
+                 job cards are embedded there)
+    job detail : /{locale}/o/{numeric-id}   (locale = 2-5 lower-case letters)
+                 /o/{numeric-id}             (no locale prefix)
+
+Only same-origin links are accepted for the self-hosted pattern to prevent
+external links from being misidentified as job postings.
 """
 
 import json
@@ -48,7 +57,16 @@ _TITLE_STRIP_SUFFIXES = [
     " | Jobs",
     " | Careers",
 ]
+
+# careers.greeting.works central-hosted job detail path
 _JOB_PATH_RE = re.compile(r"/companies/[^/]+/jobs/([^/]+)$")
+
+# Self-hosted Greeting job detail path: /{locale}/o/{numeric-id} or /o/{numeric-id}.
+# Locale is 2–5 lower-case ASCII letters (e.g. ko, en, zh-tw would not match the
+# simple form — only plain locale codes supported for now).
+# Same-origin check is applied in _discover_job_urls; this regex is path-only.
+_SELFHOSTED_JOB_PATH_RE = re.compile(r"(?:/[a-z]{2,5})?/o/(\d+)$")
+
 _LOCATION_KEYWORDS = [
     "서울",
     "경기",
@@ -91,8 +109,17 @@ def _discover_job_urls(
     base_url: str,
     config: _GreetingConfig,
 ) -> list[str]:
-    """Extract job detail URLs from a Greeting company list page."""
+    """Extract job detail URLs from a Greeting company career page.
+
+    Supports two URL patterns:
+    - /companies/{slug}/jobs/{id}  (careers.greeting.works hosted)
+    - /{locale}/o/{numeric-id} or /o/{numeric-id}  (self-hosted, same-origin only)
+
+    Relative URLs are resolved against base_url.  Duplicates (after stripping
+    query and fragment) are removed, insertion order is preserved.
+    """
     soup = BeautifulSoup(html, "lxml")
+    base_netloc = urlparse(base_url).netloc
     seen: set[str] = set()
     urls: list[str] = []
 
@@ -105,8 +132,13 @@ def _discover_job_urls(
 
         parsed = urlparse(href)
         path = parsed.path.rstrip("/")
+        link_netloc = parsed.netloc
 
-        if not _JOB_PATH_RE.search(path):
+        if _JOB_PATH_RE.search(path):
+            pass  # hosted pattern — no same-origin restriction needed
+        elif link_netloc == base_netloc and _SELFHOSTED_JOB_PATH_RE.search(path):
+            pass  # self-hosted pattern — same-origin enforced above
+        else:
             continue
 
         if config.include_paths and not any(
@@ -128,8 +160,14 @@ def _discover_job_urls(
 
 
 def _extract_job_id(url: str) -> str | None:
-    m = _JOB_PATH_RE.search(urlparse(url).path.rstrip("/"))
-    return m.group(1) if m else None
+    path = urlparse(url).path.rstrip("/")
+    m = _JOB_PATH_RE.search(path)
+    if m:
+        return m.group(1)
+    m = _SELFHOSTED_JOB_PATH_RE.search(path)
+    if m:
+        return m.group(1)
+    return None
 
 
 def _parse_greeting_job(
