@@ -12,6 +12,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.briefy.domain.auth.service.AuthService;
+import com.briefy.domain.user.dto.UpdateBriefingEmailSubscriptionRequest;
+import com.briefy.domain.user.dto.UpdateBriefingEmailSubscriptionResponse;
 import com.briefy.domain.user.dto.UpdateOnboardingRequest;
 import com.briefy.domain.user.dto.UpdateOnboardingResponse;
 import com.briefy.domain.user.dto.UserMeResponse;
@@ -66,6 +68,7 @@ class UserControllerTest {
                 "report@example.com",
                 "https://img.example.com/photo.jpg",
                 "USER",
+                true,
                 true));
 
     mockMvc
@@ -164,6 +167,50 @@ class UserControllerTest {
             patch("/api/users/me/onboarding")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"reportEmail\":\"not-an-email\"}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
+  }
+
+  @Test
+  void updateBriefingEmailSubscription_disablesSubscription() throws Exception {
+    when(currentUserProvider.getCurrentUser()).thenReturn(new AuthenticatedUser(1L));
+    when(userService.updateBriefingEmailSubscription(
+            eq(1L), any(UpdateBriefingEmailSubscriptionRequest.class)))
+        .thenReturn(new UpdateBriefingEmailSubscriptionResponse(false));
+
+    mockMvc
+        .perform(
+            patch("/api/users/me/briefing-email-subscription")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"enabled\":false}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.data.briefingEmailEnabled").value(false));
+  }
+
+  @Test
+  void updateBriefingEmailSubscription_enablesSubscription() throws Exception {
+    when(currentUserProvider.getCurrentUser()).thenReturn(new AuthenticatedUser(1L));
+    when(userService.updateBriefingEmailSubscription(
+            eq(1L), any(UpdateBriefingEmailSubscriptionRequest.class)))
+        .thenReturn(new UpdateBriefingEmailSubscriptionResponse(true));
+
+    mockMvc
+        .perform(
+            patch("/api/users/me/briefing-email-subscription")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"enabled\":true}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.briefingEmailEnabled").value(true));
+  }
+
+  @Test
+  void updateBriefingEmailSubscription_returns400_whenEnabledMissing() throws Exception {
+    mockMvc
+        .perform(
+            patch("/api/users/me/briefing-email-subscription")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}"))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
   }

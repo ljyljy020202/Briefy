@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-@Tag(name = "관리자", description = "관리자 전용 API (ROLE_ADMIN 필요)")
+@Tag(name = "관리자 - 이메일", description = "테스트 이메일 발송 API (ROLE_ADMIN 필요)")
 @RestController
 @RequestMapping("/api/admin/emails")
 public class AdminEmailController {

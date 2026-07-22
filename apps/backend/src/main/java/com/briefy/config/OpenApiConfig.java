@@ -5,13 +5,31 @@ import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
-import io.swagger.v3.oas.models.tags.Tag;
-import java.util.List;
+import org.springdoc.core.models.GroupedOpenApi;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class OpenApiConfig {
+
+  @Bean
+  public GroupedOpenApi serviceApi() {
+    return GroupedOpenApi.builder()
+        .group("service")
+        .displayName("서비스 API")
+        .pathsToMatch("/api/**")
+        .pathsToExclude("/api/admin/**")
+        .build();
+  }
+
+  @Bean
+  public GroupedOpenApi adminApi() {
+    return GroupedOpenApi.builder()
+        .group("admin")
+        .displayName("관리자 API")
+        .pathsToMatch("/api/admin/**")
+        .build();
+  }
 
   @Bean
   public OpenAPI openAPI(JwtProperties jwtProperties) {
@@ -27,18 +45,12 @@ public class OpenApiConfig {
                         + "`"
                         + jwtProperties.cookieName()
                         + "` HttpOnly 쿠키로 인증합니다.\n\n"
-                        + "**로그인**: `GET /api/oauth2/authorize/google` 으로 이동하면 Google 인증 페이지로 리다이렉트됩니다.\n\n"
-                        + "**관리자 API** (`/api/admin/**`)는 `ROLE_ADMIN` 권한이 필요합니다.")
+                        + "**로그인**: `GET /api/oauth2/authorize/google` 으로 이동하면 "
+                        + "Google 인증 페이지로 리다이렉트됩니다.\n\n"
+                        + "**관리자 API** (`/api/admin/**`)는 `ROLE_ADMIN` 권한이 필요합니다. "
+                        + "상단 드롭다운에서 **관리자 API** 그룹을 선택하면 관리자 전용 엔드포인트를 "
+                        + "별도로 확인할 수 있습니다.")
                 .version("v1"))
-        .tags(
-            List.of(
-                new Tag().name("관리자").description("관리자 전용 API (ROLE_ADMIN 필요)"),
-                new Tag().name("인증").description("Google OAuth 로그인 및 로그아웃"),
-                new Tag().name("사용자").description("내 정보 조회 및 온보딩 설정"),
-                new Tag().name("브리핑").description("브리핑 조회"),
-                new Tag().name("브리핑 선호도").description("사용자 브리핑 선호도 관리"),
-                new Tag().name("브리핑 카테고리").description("브리핑 카테고리 목록 조회"),
-                new Tag().name("대시보드").description("대시보드 요약 데이터")))
         .addSecurityItem(new SecurityRequirement().addList(cookieSchemeName))
         .components(
             new Components()

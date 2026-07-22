@@ -18,6 +18,16 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
+import { Switch } from '@/components/ui/switch'
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogCancel,
+} from '@/components/ui/alert-dialog'
 import { JOB_KEYWORD_SUGGESTIONS } from '@/lib/mock-data'
 
 type PreferenceKey = keyof Required<JobPostingPreference>
@@ -71,6 +81,14 @@ export default function MyPage() {
   const [reportEmail, setReportEmail] = useState('')
   const [infoSaving, setInfoSaving] = useState(false)
   const [infoError, setInfoError] = useState<string | null>(null)
+
+  // ── Briefing email subscription ──────────────────────────────
+  const [subscriptionDialogOpen, setSubscriptionDialogOpen] = useState(false)
+  const [subscriptionPending, setSubscriptionPending] = useState(false)
+  const [subscriptionError, setSubscriptionError] = useState<string | null>(null)
+  const [subscriptionSuccess, setSubscriptionSuccess] = useState<string | null>(null)
+  // target = the value the user wants to switch TO
+  const [subscriptionTarget, setSubscriptionTarget] = useState<boolean>(true)
 
   // ── Logout / delete account ──────────────────────────────────
   const [loggingOut, setLoggingOut] = useState(false)
@@ -154,6 +172,32 @@ export default function MyPage() {
       setInfoError('저장 중 오류가 발생했습니다. 다시 시도해 주세요.')
     } finally {
       setInfoSaving(false)
+    }
+  }
+
+  function openSubscriptionDialog(targetEnabled: boolean) {
+    setSubscriptionTarget(targetEnabled)
+    setSubscriptionError(null)
+    setSubscriptionSuccess(null)
+    setSubscriptionDialogOpen(true)
+  }
+
+  async function confirmSubscriptionChange() {
+    setSubscriptionPending(true)
+    setSubscriptionError(null)
+    try {
+      await users.updateBriefingEmailSubscription(subscriptionTarget)
+      await refetchUser()
+      setSubscriptionSuccess(
+        subscriptionTarget
+          ? '이메일 브리핑 수신이 시작되었습니다.'
+          : '이메일 브리핑 수신이 중지되었습니다.',
+      )
+      setSubscriptionDialogOpen(false)
+    } catch {
+      setSubscriptionError('수신 설정을 변경하지 못했습니다. 잠시 후 다시 시도해 주세요.')
+    } finally {
+      setSubscriptionPending(false)
     }
   }
 
@@ -388,6 +432,84 @@ export default function MyPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* ── 이메일 브리핑 수신 설정 ───────────────────────────────── */}
+      <section id="briefing-email-settings">
+        <Card>
+          <CardContent className="p-6 sm:p-8">
+            <h2 className="text-base font-semibold text-foreground">이메일 브리핑 수신 설정/해제</h2>
+
+            <div className="mt-5 flex items-center justify-between gap-4">
+              <div>
+                {user?.briefingEmailEnabled ? (
+                  <p className="text-sm text-muted-foreground">
+                    매일 오전 8시에 설정한 조건을 기준으로 맞춤 브리핑을 보내드려요.
+                  </p>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    현재 이메일 브리핑 수신이 중지되어 있어요.
+                  </p>
+                )}
+              </div>
+              <Switch
+                aria-label="이메일 브리핑 수신 설정"
+                checked={user?.briefingEmailEnabled ?? true}
+                onCheckedChange={(next) => openSubscriptionDialog(next)}
+                disabled={subscriptionPending}
+              />
+            </div>
+
+            {subscriptionSuccess && (
+              <p className="mt-3 text-sm text-primary">{subscriptionSuccess}</p>
+            )}
+            {subscriptionError && (
+              <p className="mt-3 text-sm text-destructive">{subscriptionError}</p>
+            )}
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* ── 수신 설정 확인 모달 ────────────────────────────────────── */}
+      <AlertDialog open={subscriptionDialogOpen} onOpenChange={setSubscriptionDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {subscriptionTarget
+                ? '이메일 브리핑 수신을 다시 시작할까요?'
+                : '이메일 브리핑 수신을 중지할까요?'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {subscriptionTarget
+                ? '다음 발송 일정부터 설정한 조건을 기준으로 맞춤 브리핑을 생성해 이메일로 보내드려요.'
+                : '수신을 중지하면 다음 브리핑부터 자동 생성과 이메일 발송이 중단됩니다.\n기존 브리핑은 계속 확인할 수 있으며, 언제든 다시 수신할 수 있어요.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {subscriptionError && (
+            <p className="mt-3 text-sm text-destructive">{subscriptionError}</p>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={subscriptionPending}>취소</AlertDialogCancel>
+            <button
+              className={cn(
+                'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md px-4 py-2 text-sm font-medium transition-colors',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                'disabled:pointer-events-none disabled:opacity-50',
+                subscriptionTarget
+                  ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                  : 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
+              )}
+              disabled={subscriptionPending}
+              onClick={confirmSubscriptionChange}
+            >
+              {subscriptionPending
+                ? '처리 중…'
+                : subscriptionTarget
+                  ? '수신 시작'
+                  : '수신 중지'}
+            </button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* ── 브리핑 선호도 ──────────────────────────────────────── */}
       <Card>

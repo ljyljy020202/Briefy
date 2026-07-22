@@ -4,6 +4,8 @@ import com.briefy.domain.briefing.entity.BriefingReport;
 import com.briefy.domain.briefing.repository.BriefingJobRepository;
 import com.briefy.domain.briefing.repository.BriefingReportRepository;
 import com.briefy.domain.briefingpreference.repository.UserBriefingPreferenceRepository;
+import com.briefy.domain.user.dto.UpdateBriefingEmailSubscriptionRequest;
+import com.briefy.domain.user.dto.UpdateBriefingEmailSubscriptionResponse;
 import com.briefy.domain.user.dto.UpdateOnboardingRequest;
 import com.briefy.domain.user.dto.UpdateOnboardingResponse;
 import com.briefy.domain.user.dto.UserMeResponse;
@@ -58,6 +60,17 @@ public class UserService {
             .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
     user.completeOnboarding(request.nickname(), request.reportEmail());
     return new UpdateOnboardingResponse(user.isOnboardingCompleted());
+  }
+
+  @Transactional
+  public UpdateBriefingEmailSubscriptionResponse updateBriefingEmailSubscription(
+      Long userId, UpdateBriefingEmailSubscriptionRequest request) {
+    User user =
+        userRepository
+            .findById(userId)
+            .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+    user.updateBriefingEmailEnabled(request.enabled());
+    return new UpdateBriefingEmailSubscriptionResponse(user.isBriefingEmailEnabled());
   }
 
   @Transactional

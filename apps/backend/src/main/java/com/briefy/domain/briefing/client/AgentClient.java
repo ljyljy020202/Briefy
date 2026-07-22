@@ -5,6 +5,8 @@ import com.briefy.domain.briefing.client.dto.AgentBriefingRequest;
 import com.briefy.domain.briefing.client.dto.AgentBriefingResponse;
 import com.briefy.domain.briefing.client.dto.AgentCollectionRequest;
 import com.briefy.domain.briefing.client.dto.AgentCollectionResponse;
+import com.briefy.domain.briefing.client.dto.AgentSourcePreflightRequest;
+import com.briefy.domain.briefing.client.dto.AgentSourcePreflightResponse;
 import com.briefy.global.exception.BusinessException;
 import com.briefy.global.exception.ErrorCode;
 import java.time.Duration;
@@ -55,6 +57,45 @@ public class AgentClient {
       throw e;
     } catch (Exception e) {
       log.error("Agent call failed, userId={}: {}", request.userId(), e.getMessage());
+      throw new BusinessException(ErrorCode.AGENT_SERVER_ERROR, "Agent server error");
+    }
+  }
+
+  public AgentSourcePreflightResponse preflight(AgentSourcePreflightRequest request) {
+    log.info(
+        "Calling agent for source preflight, sourceId={} adapterType={}",
+        request.sourceId(),
+        request.adapterType());
+    try {
+      AgentSourcePreflightResponse response =
+          webClient
+              .post()
+              .uri("/official-sources/preflight")
+              .contentType(MediaType.APPLICATION_JSON)
+              .bodyValue(request)
+              .retrieve()
+              .onStatus(
+                  HttpStatusCode::isError,
+                  resp ->
+                      resp.bodyToMono(String.class)
+                          .defaultIfEmpty("")
+                          .map(
+                              body ->
+                                  new BusinessException(
+                                      ErrorCode.AGENT_SERVER_ERROR,
+                                      "Agent preflight returned "
+                                          + resp.statusCode()
+                                          + ": "
+                                          + body)))
+              .bodyToMono(AgentSourcePreflightResponse.class)
+              .timeout(Duration.ofSeconds(30))
+              .block();
+      log.info("Agent preflight succeeded, sourceId={}", request.sourceId());
+      return response;
+    } catch (BusinessException e) {
+      throw e;
+    } catch (Exception e) {
+      log.error("Agent preflight call failed, sourceId={}: {}", request.sourceId(), e.getMessage());
       throw new BusinessException(ErrorCode.AGENT_SERVER_ERROR, "Agent server error");
     }
   }

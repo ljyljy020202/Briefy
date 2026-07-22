@@ -19,7 +19,8 @@ import java.time.LocalDateTime;
     name = "company_sources",
     indexes = {
       @Index(name = "idx_company_sources_company_id", columnList = "company_id"),
-      @Index(name = "idx_company_sources_status", columnList = "status")
+      @Index(name = "idx_company_sources_status", columnList = "status"),
+      @Index(name = "idx_company_sources_verification_status", columnList = "verification_status")
     })
 public class CompanySource extends BaseTimeEntity {
 
@@ -46,6 +47,12 @@ public class CompanySource extends BaseTimeEntity {
   @Column(nullable = false, length = 30)
   private String status;
 
+  @Column(name = "verification_status", nullable = false, length = 30)
+  private String verificationStatus = "UNVERIFIED";
+
+  @Column(name = "verification_message", columnDefinition = "TEXT")
+  private String verificationMessage;
+
   @Column(name = "config_json", columnDefinition = "TEXT")
   private String configJson;
 
@@ -71,8 +78,58 @@ public class CompanySource extends BaseTimeEntity {
     s.adapterType = adapterType;
     s.status = status;
     s.configJson = configJson;
+    s.verificationStatus = "UNVERIFIED";
     return s;
   }
+
+  // ── state transitions ───────────────────────────────────────────────────────
+
+  public void activate() {
+    this.status = "ACTIVE";
+  }
+
+  public void deactivate() {
+    this.status = "INACTIVE";
+  }
+
+  public void markVerified(LocalDateTime verifiedAt, String message) {
+    this.verificationStatus = "VERIFIED";
+    this.lastVerifiedAt = verifiedAt;
+    this.verificationMessage = message;
+  }
+
+  public void markVerificationFailed(String message) {
+    this.verificationStatus = "FAILED";
+    this.lastVerifiedAt = null;
+    this.verificationMessage = message;
+  }
+
+  /** Reset to PENDING/UNVERIFIED when a core field is changed after verification. */
+  public void resetVerification() {
+    this.status = "PENDING";
+    this.verificationStatus = "UNVERIFIED";
+    this.lastVerifiedAt = null;
+    this.verificationMessage = null;
+  }
+
+  public void update(
+      String sourceType, String sourceUrl, String adapterType, String status, String configJson) {
+    this.sourceType = sourceType;
+    this.sourceUrl = sourceUrl;
+    this.adapterType = adapterType;
+    this.status = status;
+    this.configJson = configJson;
+  }
+
+  public void recordCollection(LocalDateTime collectedAt) {
+    this.lastCollectedAt = collectedAt;
+  }
+
+  public void recordVerification(LocalDateTime verifiedAt) {
+    this.lastVerifiedAt = verifiedAt;
+  }
+
+  // ── getters ─────────────────────────────────────────────────────────────────
 
   public Long getId() {
     return id;
@@ -98,6 +155,14 @@ public class CompanySource extends BaseTimeEntity {
     return status;
   }
 
+  public String getVerificationStatus() {
+    return verificationStatus;
+  }
+
+  public String getVerificationMessage() {
+    return verificationMessage;
+  }
+
   public String getConfigJson() {
     return configJson;
   }
@@ -108,13 +173,5 @@ public class CompanySource extends BaseTimeEntity {
 
   public LocalDateTime getLastCollectedAt() {
     return lastCollectedAt;
-  }
-
-  public void recordCollection(LocalDateTime collectedAt) {
-    this.lastCollectedAt = collectedAt;
-  }
-
-  public void recordVerification(LocalDateTime verifiedAt) {
-    this.lastVerifiedAt = verifiedAt;
   }
 }

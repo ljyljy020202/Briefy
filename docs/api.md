@@ -22,6 +22,8 @@ Treat `docs/database.md` as the companion reference for the underlying schema.
 13. [Frontend Integration Notes](#frontend-integration-notes)
 14. [MVP Implementation Order](#mvp-implementation-order)
 
+> **Recent additions:** `PATCH /api/users/me/briefing-email-subscription` (§2-3), `DELETE /api/users/me` (§2-4)
+
 ---
 
 ## Overview
@@ -220,11 +222,16 @@ GET /api/users/me
     "reportEmail": "user@gmail.com",
     "profileImageUrl": "https://lh3.googleusercontent.com/...",
     "role": "USER",
-    "onboardingCompleted": true
+    "onboardingCompleted": true,
+    "briefingEmailEnabled": true
   },
   "error": null
 }
 ```
+
+| Field | Notes |
+|---|---|
+| `briefingEmailEnabled` | `true` if the user is subscribed to automatic email briefings. Default: `true`. |
 
 **Possible errors:** `UNAUTHORIZED`
 
@@ -267,6 +274,70 @@ PATCH /api/users/me/onboarding
 ```
 
 **Possible errors:** `UNAUTHORIZED`, `VALIDATION_ERROR`
+
+---
+
+### 2-3. Update Briefing Email Subscription
+
+```
+PATCH /api/users/me/briefing-email-subscription
+```
+
+**Auth:** Required
+
+**Description:** Enables or disables automatic email delivery of scheduled briefings for the authenticated user. When disabled, the daily scheduler skips this user — no briefing is generated and no email is sent.
+
+**Request:**
+
+```json
+{
+  "enabled": false
+}
+```
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `enabled` | Boolean | Yes | `true` = subscribe, `false` = unsubscribe |
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "briefingEmailEnabled": false
+  },
+  "error": null
+}
+```
+
+**Possible errors:** `UNAUTHORIZED`, `VALIDATION_ERROR`, `USER_NOT_FOUND`
+
+---
+
+### 2-4. Delete Account
+
+```
+DELETE /api/users/me
+```
+
+**Auth:** Required
+
+**Description:** Permanently deletes the authenticated user's account and all associated data. Expires the JWT cookie in the response.
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "data": null,
+  "error": null
+}
+```
+
+The response includes a `Set-Cookie` header that expires the `briefy_access_token` cookie.
+
+**Possible errors:** `UNAUTHORIZED`
 
 ---
 
@@ -1405,7 +1476,7 @@ Do **not** store the JWT or any user session data in `localStorage` or `sessionS
 | `/dashboard` | 로그인 후 메인 화면. | `GET /api/dashboard` |
 | `/reports` | 브리핑 목록 (페이지네이션). | `GET /api/briefings` |
 | `/reports/[id]` | 브리핑 상세 보기. | `GET /api/briefings/{id}` |
-| `/mypage` | 계정 정보 및 브리핑 선호도 관리. 로그아웃 및 계정 삭제는 이 페이지에서만 가능. | `GET /api/me/briefing-preferences`, `GET /api/briefing-categories`, `PATCH /api/users/me/onboarding`, `POST /api/me/briefing-preferences`, `PATCH /api/me/briefing-preferences/{id}`, `DELETE /api/me/briefing-preferences/{id}`, `POST /api/auth/logout`, `DELETE /api/users/me` |
+| `/mypage` | 계정 정보 및 브리핑 선호도 관리. 이메일 수신 설정, 로그아웃, 계정 삭제는 이 페이지에서만 가능. | `GET /api/users/me`, `GET /api/me/briefing-preferences`, `GET /api/briefing-categories`, `PATCH /api/users/me/onboarding`, `POST /api/me/briefing-preferences`, `PATCH /api/me/briefing-preferences/{id}`, `DELETE /api/me/briefing-preferences/{id}`, `PATCH /api/users/me/briefing-email-subscription`, `POST /api/auth/logout`, `DELETE /api/users/me` |
 
 ---
 

@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-@Tag(name = "관리자", description = "관리자 전용 API (ROLE_ADMIN 필요)")
+@Tag(name = "관리자 - 이메일 발송", description = "브리핑 보고서 이메일 발송 API (ROLE_ADMIN 필요)")
 @RestController
 @RequestMapping("/api/admin/briefing-reports")
 public class AdminDeliveryController {

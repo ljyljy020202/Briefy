@@ -19,12 +19,17 @@ import com.briefy.domain.collection.dto.DailyCollectionResult;
 import com.briefy.domain.collection.entity.CollectionJob;
 import com.briefy.domain.collection.entity.CollectionJobStatus;
 import com.briefy.domain.collection.entity.CollectionTriggerType;
+import com.briefy.domain.company.entity.Company;
+import com.briefy.domain.company.entity.CompanyAlias;
+import com.briefy.domain.company.repository.CompanyAliasRepository;
 import com.briefy.domain.company.repository.CompanyRepository;
 import com.briefy.domain.company.repository.CompanySourceRepository;
+import com.briefy.domain.company.service.CompanyNameNormalizer;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -44,7 +49,9 @@ public class DailyCollectionService {
   private final AgentClient agentClient;
   private final CandidatePoolService candidatePoolService;
   private final CompanyRepository companyRepository;
+  private final CompanyAliasRepository companyAliasRepository;
   private final CompanySourceRepository companySourceRepository;
+  private final CompanyNameNormalizer companyNameNormalizer;
   private final CollectionProperties collectionProperties;
 
   public DailyCollectionService(
@@ -53,14 +60,18 @@ public class DailyCollectionService {
       AgentClient agentClient,
       CandidatePoolService candidatePoolService,
       CompanyRepository companyRepository,
+      CompanyAliasRepository companyAliasRepository,
       CompanySourceRepository companySourceRepository,
+      CompanyNameNormalizer companyNameNormalizer,
       CollectionProperties collectionProperties) {
     this.collectionJobService = collectionJobService;
     this.userBriefingPreferenceRepository = userBriefingPreferenceRepository;
     this.agentClient = agentClient;
     this.candidatePoolService = candidatePoolService;
     this.companyRepository = companyRepository;
+    this.companyAliasRepository = companyAliasRepository;
     this.companySourceRepository = companySourceRepository;
+    this.companyNameNormalizer = companyNameNormalizer;
     this.collectionProperties = collectionProperties;
   }
 
@@ -212,6 +223,70 @@ public class DailyCollectionService {
     return List.of();
   }
 
+  /**
+   * Resolve preference company names to registered CompanyProfiles.
+   *
+   * <p>Matching order:
+   *
+   * <ol>
+   *   <li>Normalize each name with {@link CompanyNameNormalizer}.
+   *   <li>Direct match against {@code companies.normalized_name} (exact).
+   *   <li>For names not matched in step 2, alias match against {@code
+   *       company_aliases.normalized_alias} (exact).
+   *   <li>Deduplicate by company id — direct match wins over alias match.
+   * </ol>
+   *
+   * <p>Names that match nothing are silently skipped; no exception is thrown.
+   */
+  private List<AgentCompanyProfile> resolveCompanyProfiles(List<String> companyNames) {
+    if (companyNames.isEmpty()) {
+      return List.of();
+    }
+
+    // Normalize all names; distinct to avoid redundant queries
+    List<String> normalized =
+        companyNames.stream().map(companyNameNormalizer::normalize).distinct().toList();
+
+    // Step 1: direct normalized_name match
+    List<Company> directMatches = companyRepository.findActiveByNormalizedNames(normalized);
+
+    Set<String> directMatchedNames =
+        directMatches.stream().map(Company::getNormalizedName).collect(Collectors.toSet());
+
+    // Step 2: alias match for names not found by direct lookup
+    List<String> unmatched =
+        normalized.stream().filter(n -> !directMatchedNames.contains(n)).toList();
+
+    List<Company> aliasMatches = List.of();
+    if (!unmatched.isEmpty()) {
+      aliasMatches =
+          companyAliasRepository.findAllByNormalizedAliasIn(unmatched).stream()
+              .map(CompanyAlias::getCompany)
+              .toList();
+    }
+
+    // Step 3: merge — direct match takes precedence; deduplicate by company id
+    LinkedHashMap<Long, Company> byId = new LinkedHashMap<>();
+    for (Company c : directMatches) {
+      byId.put(c.getId(), c);
+    }
+    for (Company c : aliasMatches) {
+      byId.putIfAbsent(c.getId(), c);
+    }
+
+    return byId.values().stream().map(this::toCompanyProfile).toList();
+  }
+
+  private AgentCompanyProfile toCompanyProfile(Company c) {
+    String codes = c.getIndustryCodes();
+    List<String> industryCodes =
+        (codes == null || codes.isBlank())
+            ? List.of()
+            : Arrays.stream(codes.split(",")).map(String::strip).filter(s -> !s.isEmpty()).toList();
+    return new AgentCompanyProfile(
+        c.getId(), c.getCanonicalName(), c.getNormalizedName(), c.getCompanySize(), industryCodes);
+  }
+
   private List<CollectedJobPostingData> mapToPostingData(
       List<AgentCollectedJobPosting> postings, LocalDate collectedDate) {
     if (postings == null || postings.isEmpty()) return List.of();
@@ -276,31 +351,6 @@ public class DailyCollectionService {
     return "["
         + categories.stream().map(c -> "\"" + c + "\"").collect(Collectors.joining(","))
         + "]";
-  }
-
-  private List<AgentCompanyProfile> resolveCompanyProfiles(List<String> companyNames) {
-    if (companyNames.isEmpty()) return List.of();
-    List<String> normalized =
-        companyNames.stream().map(n -> n.toLowerCase().trim()).distinct().toList();
-    return companyRepository.findActiveByNormalizedNames(normalized).stream()
-        .map(
-            c -> {
-              String codes = c.getIndustryCodes();
-              List<String> industryCodes =
-                  (codes == null || codes.isBlank())
-                      ? List.of()
-                      : Arrays.stream(codes.split(","))
-                          .map(String::strip)
-                          .filter(s -> !s.isEmpty())
-                          .toList();
-              return new AgentCompanyProfile(
-                  c.getId(),
-                  c.getCanonicalName(),
-                  c.getNormalizedName(),
-                  c.getCompanySize(),
-                  industryCodes);
-            })
-        .toList();
   }
 
   private List<AgentOfficialCompanySource> resolveOfficialSources(List<Long> companyIds) {

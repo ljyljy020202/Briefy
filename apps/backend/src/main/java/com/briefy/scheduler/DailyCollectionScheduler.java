@@ -3,6 +3,7 @@ package com.briefy.scheduler;
 import com.briefy.domain.collection.dto.DailyCollectionResult;
 import com.briefy.domain.collection.service.DailyCollectionService;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -25,7 +26,7 @@ public class DailyCollectionScheduler {
       cron = "${briefy.scheduler.daily-collection-cron:0 0 6 * * *}",
       zone = "${briefy.scheduler.zone:Asia/Seoul}")
   public void runDailyCollection() {
-    LocalDate today = LocalDate.now();
+    LocalDate today = LocalDate.now(ZoneId.of("Asia/Seoul"));
     log.info("Scheduled daily collection started for {}", today);
     try {
       DailyCollectionResult result = dailyCollectionService.triggerScheduledDailyCollection(today);

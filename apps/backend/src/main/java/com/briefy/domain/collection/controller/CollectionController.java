@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-@Tag(name = "관리자", description = "관리자 전용 API (ROLE_ADMIN 필요)")
+@Tag(name = "관리자 - 컬렉션", description = "일간 콘텐츠 수집 제어 API (ROLE_ADMIN 필요)")
 @RestController
 @RequestMapping("/api/admin/collections")
 public class CollectionController {
