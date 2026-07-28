@@ -19,6 +19,7 @@ import com.briefy.domain.briefing.dto.BriefingListItem;
 import com.briefy.domain.briefing.dto.GenerateResult;
 import com.briefy.domain.briefing.entity.BriefingJob;
 import com.briefy.domain.briefing.entity.BriefingReport;
+import com.briefy.domain.briefing.repository.BriefingArticleRepository;
 import com.briefy.domain.briefing.repository.BriefingJobRepository;
 import com.briefy.domain.briefing.repository.BriefingReportRepository;
 import com.briefy.domain.briefingpreference.entity.BriefingCategory;
@@ -56,6 +57,7 @@ class BriefingServiceTest {
 
   @Mock private BriefingJobRepository briefingJobRepository;
   @Mock private BriefingReportRepository briefingReportRepository;
+  @Mock private BriefingArticleRepository briefingArticleRepository;
   @Mock private UserBriefingPreferenceRepository userBriefingPreferenceRepository;
   @Mock private AgentClient agentClient;
   @Mock private CandidatePoolService candidatePoolService;
@@ -67,6 +69,9 @@ class BriefingServiceTest {
 
   @BeforeEach
   void setUp() {
+    // No prior exposures by default; individual tests can override.
+    when(briefingArticleRepository.findRecentExposuresByUserId(any(), any())).thenReturn(List.of());
+
     BriefingCategory category = mock(BriefingCategory.class);
     when(category.getCode()).thenReturn(BriefingCategoryCode.JOB_POSTING);
 

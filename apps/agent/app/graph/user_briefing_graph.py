@@ -150,13 +150,8 @@ def _agent_score(
             score += 5
             break
 
-    if posting.deadline:
-        try:
-            days = (date_cls.fromisoformat(posting.deadline) - today).days
-            if 0 <= days <= 7:
-                score += 10
-        except ValueError:
-            pass
+    # Deadline urgency is already reflected in the backend preScore (urgency bonus).
+    # Adding it here again would double-count, so this node only applies recency.
 
     # Recency bonus: collected within the last 3 days
     if posting.collected_date:

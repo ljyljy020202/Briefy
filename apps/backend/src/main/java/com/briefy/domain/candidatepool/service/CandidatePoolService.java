@@ -6,8 +6,7 @@ import com.briefy.domain.candidatepool.entity.JobPosting;
 import com.briefy.domain.candidatepool.entity.JobPostingSource;
 import com.briefy.domain.candidatepool.repository.JobPostingRepository;
 import com.briefy.domain.candidatepool.repository.JobPostingSourceRepository;
-import java.net.URI;
-import java.net.URISyntaxException;
+import com.briefy.global.util.UrlUtils;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -162,20 +161,9 @@ public class CandidatePoolService {
     }
   }
 
-  // Normalizes URL to lowercase scheme+host+path, strips query/fragment and trailing slashes
-  // from non-root paths. Matches Agent's canonicalize_url() contract.
+  // Delegates to UrlUtils so BriefingService and CandidatePoolService share
+  // the same canonicalization contract for URL comparison and deduplication.
   private static String canonicalizeUrl(String url) {
-    try {
-      URI uri = new URI(url);
-      String scheme = uri.getScheme() != null ? uri.getScheme().toLowerCase() : "";
-      String host = uri.getHost() != null ? uri.getHost().toLowerCase() : "";
-      String path = uri.getPath() != null ? uri.getPath() : "";
-      if (!path.equals("/") && path.endsWith("/")) {
-        path = path.replaceAll("/+$", "");
-      }
-      return scheme + "://" + host + path;
-    } catch (URISyntaxException e) {
-      return url.toLowerCase();
-    }
+    return UrlUtils.canonicalize(url);
   }
 }
