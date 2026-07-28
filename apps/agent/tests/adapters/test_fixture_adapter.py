@@ -176,12 +176,12 @@ async def test_fixture_adapter_deadlines_are_after_collect_date(monkeypatch):
 # ── Config defaults ───────────────────────────────────────────────────────────
 
 
-def test_config_fixture_enabled_by_default(monkeypatch):
+def test_config_fixture_disabled_by_default(monkeypatch):
     from app.core.config import Settings
 
     monkeypatch.delenv("JOB_COLLECTION_USE_FIXTURE", raising=False)
     s = Settings(_env_file=None)
-    assert s.job_collection_use_fixture is True
+    assert s.job_collection_use_fixture is False
 
 
 def test_config_real_sources_disabled_by_default(monkeypatch):

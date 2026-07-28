@@ -355,3 +355,33 @@ def test_score_skills_capped_at_2():
     many_skills = _posting(skills=["Java", "Spring", "Python", "Go", "Rust", "Kotlin"])
     seed = SeedKeywords(skills=["Java", "Spring", "Python", "Go", "Rust", "Kotlin"])
     assert _score(many_skills, seed) <= 2.0 + 0.3  # cap + description bonus
+
+
+# ── Partial source failure ─────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_partial_source_failure_preserves_successful_results(monkeypatch):
+    """한 소스 어댑터 실패 시 성공한 어댑터의 결과는 유지된다."""
+    monkeypatch.setattr(_USE_FIXTURE, True)
+    monkeypatch.setattr(_USE_REAL, True)
+
+    good_fetch = AsyncMock(return_value=AdapterResult(postings=[_raw("good")]))
+    bad_fetch = AsyncMock(side_effect=RuntimeError("source exploded"))
+
+    with (
+        patch("app.services.daily_collection.FixtureAdapter") as MockF,
+        patch("app.services.daily_collection.JasoseolAdapter") as MockJ,
+    ):
+        MockF.return_value.fetch = good_fetch
+        MockF.return_value.source_name = "fixture"
+        MockJ.return_value.fetch = bad_fetch
+        MockJ.return_value.source_name = "jasoseol"
+
+        svc = DailyCollectionService()
+        resp = await svc.collect(_request())
+
+    # 성공한 소스 결과는 보존됨
+    assert resp.stats.final_count == 1
+    # 실패한 소스에 대한 경고가 추가됨
+    assert any("jasoseol" in w for w in resp.warnings)

@@ -439,6 +439,29 @@ class CandidatePoolServiceTest {
     assertThat(upper).isEqualTo(lower);
   }
 
+  // ── Cross-language hash fixture ────────────────────────────────────────────
+  // These constants mirror test_identifiers.py::_CROSS_LANG_FIXTURE_*.
+  // Algorithm: SHA-256("{source}|{canonicalized_identifier}", UTF-8) → 64-char hex.
+  // Changing either side without updating the other breaks cross-service dedup.
+
+  private static final String CROSS_LANG_URL_KEY =
+      "dfcbdeefa29fe693c628dbe93941ba2b10bc58cf8a6ff16f4675577b390ed00e";
+  private static final String CROSS_LANG_EXT_KEY =
+      "80a037a4f5b02f9d29257900f862005202cabc58b2aab0006a47b16ac64c089e";
+
+  @Test
+  void buildSourceRecordKey_url_matches_cross_language_fixture() {
+    assertThat(
+            CandidatePoolService.buildSourceRecordKey("원티드", null, "https://wanted.co.kr/wd/123"))
+        .isEqualTo(CROSS_LANG_URL_KEY);
+  }
+
+  @Test
+  void buildSourceRecordKey_externalId_matches_cross_language_fixture() {
+    assertThat(CandidatePoolService.buildSourceRecordKey("점핏", "EXT-007", "https://jumpit.com/j/1"))
+        .isEqualTo(CROSS_LANG_EXT_KEY);
+  }
+
   private void stubSourceNotFound(String source, String url) {
     String key = CandidatePoolService.buildSourceRecordKey(source, null, url);
     when(jobPostingSourceRepository.findBySourceRecordKey(key)).thenReturn(Optional.empty());
