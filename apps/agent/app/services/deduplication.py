@@ -8,6 +8,10 @@ from app.utils.identifiers import (
     normalize_title,
 )
 
+# Postings whose deadline falls within this window are kept even when posted_at
+# is older than lookback_days.  Not configurable from Spring — agent-internal only.
+_DEADLINE_RESCUE_DAYS = 14
+
 
 @dataclass
 class DeduplicationStats:
@@ -230,7 +234,7 @@ def filter_postings_with_stats(
     is independent of the briefing candidate window on the Backend side.
     """
     earliest_posted = collect_date - timedelta(days=options.lookback_days)
-    deadline_horizon = collect_date + timedelta(days=options.deadline_within_days)
+    deadline_horizon = collect_date + timedelta(days=_DEADLINE_RESCUE_DAYS)
 
     active: list[CollectedJobPosting] = []
     expired_count = 0

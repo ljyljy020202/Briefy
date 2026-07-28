@@ -25,9 +25,6 @@ class CollectionOptions(BaseModel):
     )
 
     lookback_days: int = 7
-    # Postings whose deadline falls within this window are kept even when posted_at
-    # is older than lookback_days.  Separate from the briefing candidate window.
-    deadline_within_days: int = 14
     discovery_limit_per_source: int = 300
     detail_fetch_limit_per_source: int = 100
     max_results_per_source: int = 100

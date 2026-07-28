@@ -397,7 +397,7 @@ async def test_stale_rescued_when_deadline_within_window(monkeypatch):
     )
     fresh = _raw("fresh", deadline=_FUTURE)
     mock_fetch = AsyncMock(return_value=AdapterResult(postings=[rescued, fresh]))
-    options = CollectionOptions(lookback_days=7, deadline_within_days=14)
+    options = CollectionOptions(lookback_days=7)
     with patch("app.services.daily_collection.FixtureAdapter") as MockF:
         MockF.return_value.fetch = mock_fetch
         MockF.return_value.source_name = "fixture"
@@ -423,7 +423,7 @@ async def test_stale_not_rescued_when_deadline_beyond_window(monkeypatch):
     )
     fresh = _raw("fresh2", deadline=_FUTURE)
     mock_fetch = AsyncMock(return_value=AdapterResult(postings=[stale, fresh]))
-    options = CollectionOptions(lookback_days=7, deadline_within_days=14)
+    options = CollectionOptions(lookback_days=7)
     with patch("app.services.daily_collection.FixtureAdapter") as MockF:
         MockF.return_value.fetch = mock_fetch
         MockF.return_value.source_name = "fixture"
@@ -446,7 +446,7 @@ async def test_null_posted_at_is_always_kept(monkeypatch):
         deadline=None,
     )
     mock_fetch = AsyncMock(return_value=AdapterResult(postings=[no_date]))
-    options = CollectionOptions(lookback_days=7, deadline_within_days=14)
+    options = CollectionOptions(lookback_days=7)
     with patch("app.services.daily_collection.FixtureAdapter") as MockF:
         MockF.return_value.fetch = mock_fetch
         MockF.return_value.source_name = "fixture"
