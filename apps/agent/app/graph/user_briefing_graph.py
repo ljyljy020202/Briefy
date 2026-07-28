@@ -60,6 +60,45 @@ _REQUIRED_SECTIONS = [
     "한 줄 정리",
 ]
 
+# Experience labels that represent senior-only requirements
+_SENIOR_EXPERIENCE_LABELS: frozenset[str] = frozenset(
+    {"3년 이상", "5년 이상", "7년 이상", "10년 이상", "시니어"}
+)
+
+
+def _is_clear_role_mismatch(
+    posting: CandidateJobPosting,
+    pref: JobPostingPreference,
+) -> bool:
+    """True only when both sides have explicit roles with no overlap."""
+    if not pref.roles or not posting.roles:
+        return False  # Ambiguous → keep
+    pref_roles_lower = {r.lower() for r in pref.roles}
+    title_lower = (posting.title or "").lower()
+    position_lower = (posting.position or "").lower()
+    for role in pref.roles:
+        if role.lower() in title_lower or role.lower() in position_lower:
+            return False
+    for role in posting.roles:
+        if role.lower() in pref_roles_lower:
+            return False
+    return True
+
+
+def _is_entry_level_mismatch(
+    posting: CandidateJobPosting,
+    pref: JobPostingPreference,
+) -> bool:
+    """True when a 신입-only user encounters a posting that requires 3+ years."""
+    if "신입" not in pref.experience_levels:
+        return False
+    exp = posting.experience_level
+    if not exp:
+        return False  # Unknown experience → keep
+    if exp in pref.experience_levels:
+        return False
+    return exp in _SENIOR_EXPERIENCE_LABELS
+
 
 class UserBriefingState(TypedDict):
     request: BriefingGenerateRequest
@@ -90,6 +129,7 @@ def filter_job_postings_node(state: UserBriefingState) -> dict:
     except ValueError:
         today = date_cls.today()
 
+    pref = req.preference
     filtered = []
     for p in req.candidate_pool.job_postings:
         if not p.title or not p.company_name:
@@ -102,6 +142,10 @@ def filter_job_postings_node(state: UserBriefingState) -> dict:
                     continue
             except ValueError:
                 pass
+        if _is_clear_role_mismatch(p, pref):
+            continue
+        if _is_entry_level_mismatch(p, pref):
+            continue
         filtered.append(p)
 
     return {"filtered": filtered}
@@ -150,6 +194,17 @@ def _agent_score(
             score += 5
             break
 
+    # company_sizes and industries: rough heuristic against description (fallback only)
+    for size in pref.company_sizes:
+        if size and size in (posting.description or ""):
+            score += 5
+            break
+
+    for ind in pref.industries:
+        if ind and ind in (posting.description or ""):
+            score += 5
+            break
+
     # Deadline urgency is already reflected in the backend preScore (urgency bonus).
     # Adding it here again would double-count, so this node only applies recency.
 
@@ -174,15 +229,56 @@ def rank_job_postings_node(state: UserBriefingState) -> dict:
     except ValueError:
         today = date_cls.today()
 
-    def total_score(posting: CandidateJobPosting) -> int:
-        return posting.pre_score + _agent_score(posting, pref, today)
+    def final_score(posting: CandidateJobPosting) -> int:
+        # Backend is the authoritative personalization layer.
+        # When it supplies a computed score, use it as-is (even if 0).
+        # Only fall back to agent scoring for direct calls that bypass Backend.
+        if posting.pre_score_computed:
+            return posting.pre_score
+        return _agent_score(posting, pref, today)
 
-    ranked = sorted(state["filtered"], key=total_score, reverse=True)
+    ranked = sorted(state["filtered"], key=final_score, reverse=True)
     return {"ranked": ranked}
 
 
+def _build_top7(ranked: list[CandidateJobPosting]) -> list[CandidateJobPosting]:
+    """Select up to _TOP_N with candidateType-aware quotas.
+
+    NEW:    at most 3 (at least 2 if ≥2 available)
+    URGENT: at most 2 (at least 1 if ≥1 available)
+    Rest:   highest final_score regardless of type, to fill remaining slots
+    """
+    selected: list[CandidateJobPosting] = []
+    selected_ids: set = set()
+
+    def _key(p: CandidateJobPosting) -> object:
+        return p.id if p.id is not None else p.source_url
+
+    def _add(p: CandidateJobPosting) -> None:
+        k = _key(p)
+        if k not in selected_ids:
+            selected.append(p)
+            selected_ids.add(k)
+
+    new_group = [p for p in ranked if p.candidate_type == "NEW"]
+    urgent_group = [p for p in ranked if p.candidate_type == "URGENT"]
+
+    for p in new_group[:3]:
+        _add(p)
+
+    for p in urgent_group[:2]:
+        _add(p)
+
+    for p in ranked:
+        if len(selected) >= _TOP_N:
+            break
+        _add(p)  # no-op if already selected
+
+    return selected
+
+
 def select_top_items_node(state: UserBriefingState) -> dict:
-    return {"selected": state["ranked"][:_TOP_N]}
+    return {"selected": _build_top7(state["ranked"])}
 
 
 # ---------------------------------------------------------------------------

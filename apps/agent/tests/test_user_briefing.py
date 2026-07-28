@@ -30,19 +30,21 @@ _RANKING_REQUEST = {
     "candidatePool": {
         "jobPostings": [
             {
+                # Low-scoring backend posting — passes role/experience filter,
+                # but no company/location/employment match → scores lower
                 "id": 10,
                 "source": "원티드",
                 "sourceUrl": "https://www.wanted.co.kr/wd/00010",
-                "companyName": "알 수 없는 회사",
-                "title": "프론트엔드 개발자",
-                "position": "프론트엔드 개발자",
+                "companyName": "스타트업A",
+                "title": "백엔드 개발자",
+                "position": "백엔드 개발자",
                 "employmentType": "계약직",
-                "experienceLevel": "5년 이상",
+                "experienceLevel": "신입",
                 "location": "부산",
                 "deadline": "2026-07-20",
-                "skills": ["Vue.js", "TypeScript"],
-                "roles": ["프론트엔드 개발자"],
-                "description": "프론트엔드 개발자 채용",
+                "skills": ["Python"],
+                "roles": ["백엔드 개발자"],
+                "description": "스타트업 백엔드 개발자 채용",
                 "preScore": 10,
             },
             {
@@ -623,3 +625,357 @@ async def test_no_acceptance_probability_in_fallback_content(client):
         assert phrase not in content, (
             f"hallucination phrase {phrase!r} found in content"
         )
+
+
+# ---------------------------------------------------------------------------
+# preScoreComputed ranking contract
+# ---------------------------------------------------------------------------
+
+_BASE_PREF = {
+    "roles": ["백엔드 개발자"],
+    "companies": ["타겟회사"],
+    "skills": ["Spring Boot"],
+    "locations": ["서울"],
+    "experienceLevels": [],
+    "employmentTypes": ["정규직"],
+}
+
+
+def _pool(*postings: dict) -> dict:
+    return {"jobPostings": list(postings), "companyIssues": [], "industryIssues": []}
+
+
+def _posting(id: int, company: str, title: str, **extra) -> dict:
+    return {
+        "id": id,
+        "source": "test",
+        "sourceUrl": f"https://example.com/{id}",
+        "companyName": company,
+        "title": title,
+        "position": title,
+        "skills": [],
+        "roles": [],
+        **extra,
+    }
+
+
+async def test_pre_score_computed_true_uses_backend_score_not_agent_score(client):
+    """preScoreComputed=True: backend score is final; agent matching is not applied."""
+    # A has no preference matches but high preScore (backend authoritative)
+    # B has all preference matches but low preScore
+    # Both computed=True → ranking = preScore only → A first
+    posting_a = _posting(
+        1, "알수없는회사", "기타직무",
+        preScore=100, preScoreComputed=True,
+    )
+    posting_b = _posting(
+        2, "타겟회사", "백엔드 개발자",
+        skills=["Spring Boot"], roles=["백엔드 개발자"],
+        employmentType="정규직", location="서울",
+        preScore=10, preScoreComputed=True,
+    )
+    request = {
+        "userId": 1, "category": "JOB_POSTING",
+        "preference": _BASE_PREF, "briefingDate": "2026-07-01",
+        "candidatePool": _pool(posting_a, posting_b),
+    }
+    response = await client.post("/briefings/generate", json=request)
+    assert response.status_code == 200
+    articles = response.json()["articles"]
+    assert len(articles) == 2
+    assert articles[0]["companyName"] == "알수없는회사"
+
+
+async def test_pre_score_computed_true_zero_score_not_augmented(client):
+    """preScoreComputed=True with preScore=0: agent matching score is NOT added."""
+    # A: preScore=0 computed + strong preference match → would score high via agent
+    # B: preScore=1 computed + no match → tiny but authoritative score
+    # Expected: B ranks first (1 > 0 by preScore alone)
+    posting_a = _posting(
+        1, "타겟회사", "백엔드 개발자",
+        skills=["Spring Boot"], roles=["백엔드 개발자"],
+        employmentType="정규직", location="서울",
+        preScore=0, preScoreComputed=True,
+    )
+    posting_b = _posting(
+        2, "알수없는회사", "기타직무",
+        preScore=1, preScoreComputed=True,
+    )
+    request = {
+        "userId": 1, "category": "JOB_POSTING",
+        "preference": _BASE_PREF, "briefingDate": "2026-07-01",
+        "candidatePool": _pool(posting_a, posting_b),
+    }
+    response = await client.post("/briefings/generate", json=request)
+    assert response.status_code == 200
+    articles = response.json()["articles"]
+    assert len(articles) == 2
+    assert articles[0]["companyName"] == "알수없는회사"
+
+
+async def test_pre_score_computed_false_uses_agent_fallback(client):
+    """preScoreComputed=False: agent fallback score drives ranking, not preScore."""
+    # A: inflated preScore=1000 but computed=False → preScore ignored; no agent matches
+    # B: preScore=0, computed=False → agent matches → high fallback score
+    # Expected: B ranks first
+    posting_a = _posting(
+        1, "알수없는회사", "기타직무",
+        preScore=1000, preScoreComputed=False,
+    )
+    posting_b = _posting(
+        2, "타겟회사", "백엔드 개발자",
+        skills=["Spring Boot"], roles=["백엔드 개발자"],
+        employmentType="정규직", location="서울",
+        preScore=0, preScoreComputed=False,
+    )
+    request = {
+        "userId": 1, "category": "JOB_POSTING",
+        "preference": _BASE_PREF, "briefingDate": "2026-07-01",
+        "candidatePool": _pool(posting_a, posting_b),
+    }
+    response = await client.post("/briefings/generate", json=request)
+    assert response.status_code == 200
+    articles = response.json()["articles"]
+    assert len(articles) == 2
+    assert articles[0]["companyName"] == "타겟회사"
+
+
+async def test_pre_score_computed_absent_uses_fallback(client):
+    """preScoreComputed field omitted → treated as False → agent fallback scoring."""
+    # Same scenario as above but preScoreComputed is entirely absent from both postings
+    posting_a = _posting(1, "알수없는회사", "기타직무", preScore=1000)
+    posting_b = _posting(
+        2, "타겟회사", "백엔드 개발자",
+        skills=["Spring Boot"], roles=["백엔드 개발자"],
+        employmentType="정규직", location="서울",
+        preScore=0,
+    )
+    request = {
+        "userId": 1, "category": "JOB_POSTING",
+        "preference": _BASE_PREF, "briefingDate": "2026-07-01",
+        "candidatePool": _pool(posting_a, posting_b),
+    }
+    response = await client.post("/briefings/generate", json=request)
+    assert response.status_code == 200
+    articles = response.json()["articles"]
+    assert len(articles) == 2
+    assert articles[0]["companyName"] == "타겟회사"
+
+
+# ---------------------------------------------------------------------------
+# filter: role and experience guards
+# ---------------------------------------------------------------------------
+
+
+async def test_filter_excludes_clear_role_mismatch(client):
+    """프론트엔드 공고는 백엔드 선호 사용자의 브리핑에서 제외된다."""
+    postings = [
+        # Clear mismatch: both sides have explicit roles with no overlap
+        {
+            **_posting(1, "회사A", "프론트엔드 개발자"),
+            "roles": ["프론트엔드 개발자"],
+        },
+        {
+            **_posting(2, "회사B", "백엔드 개발자"),
+            "roles": ["백엔드 개발자"],
+        },
+    ]
+    request = {
+        "userId": 1, "category": "JOB_POSTING",
+        "preference": {**_BASE_PREF, "roles": ["백엔드 개발자"]},
+        "briefingDate": "2026-07-01",
+        "candidatePool": _pool(*postings),
+    }
+    response = await client.post("/briefings/generate", json=request)
+    assert response.status_code == 200
+    articles = response.json()["articles"]
+    assert len(articles) == 1
+    assert articles[0]["companyName"] == "회사B"
+
+
+async def test_filter_excludes_senior_only_for_entry_user(client):
+    """신입 사용자에게 5년 이상 경력직 공고는 최종 방어선에서 제거된다."""
+    postings = [
+        _posting(1, "회사Senior", "백엔드 개발자", experienceLevel="5년 이상"),
+        _posting(2, "회사Junior", "백엔드 개발자", experienceLevel="신입"),
+    ]
+    request = {
+        "userId": 1, "category": "JOB_POSTING",
+        "preference": {**_BASE_PREF, "experienceLevels": ["신입"]},
+        "briefingDate": "2026-07-01",
+        "candidatePool": _pool(*postings),
+    }
+    response = await client.post("/briefings/generate", json=request)
+    assert response.status_code == 200
+    articles = response.json()["articles"]
+    assert len(articles) == 1
+    assert articles[0]["companyName"] == "회사Junior"
+
+
+async def test_filter_keeps_unknown_experience_level(client):
+    """경력 수준이 미지정(None/빈 값)인 공고는 경력 필터에서 제거되지 않는다."""
+    postings = [
+        _posting(1, "회사Unknown", "백엔드 개발자"),           # experienceLevel omitted
+        _posting(2, "회사Senior", "백엔드 개발자", experienceLevel="5년 이상"),
+    ]
+    request = {
+        "userId": 1, "category": "JOB_POSTING",
+        "preference": {**_BASE_PREF, "experienceLevels": ["신입"]},
+        "briefingDate": "2026-07-01",
+        "candidatePool": _pool(*postings),
+    }
+    response = await client.post("/briefings/generate", json=request)
+    assert response.status_code == 200
+    articles = response.json()["articles"]
+    assert len(articles) == 1
+    assert articles[0]["companyName"] == "회사Unknown"
+
+
+# ---------------------------------------------------------------------------
+# fallback scoring: company_sizes and industries
+# ---------------------------------------------------------------------------
+
+
+async def test_fallback_score_reflects_industry_in_description(client):
+    """industries 선호가 description에 언급된 공고는 fallback 점수에서 우위를 갖는다."""
+    posting_a = _posting(
+        1, "회사A", "백엔드 개발자",
+        description="핀테크 서비스의 백엔드 채용",
+        preScore=0, preScoreComputed=False,
+    )
+    posting_b = _posting(
+        2, "회사B", "백엔드 개발자",
+        description="일반 물류 서비스 채용",
+        preScore=0, preScoreComputed=False,
+    )
+    request = {
+        "userId": 1, "category": "JOB_POSTING",
+        "preference": {**_BASE_PREF, "industries": ["핀테크"]},
+        "briefingDate": "2026-07-01",
+        "candidatePool": _pool(posting_a, posting_b),
+    }
+    response = await client.post("/briefings/generate", json=request)
+    assert response.status_code == 200
+    articles = response.json()["articles"]
+    assert len(articles) == 2
+    assert articles[0]["companyName"] == "회사A"
+
+
+async def test_fallback_score_handles_company_sizes_gracefully(client):
+    """companySizes 선호가 있어도 fallback 점수 계산이 오류 없이 완료된다."""
+    request = {
+        "userId": 1, "category": "JOB_POSTING",
+        "preference": {**_BASE_PREF, "companySizes": ["대기업", "중견기업"]},
+        "briefingDate": "2026-07-01",
+        "candidatePool": _pool(_posting(1, "회사A", "백엔드 개발자")),
+    }
+    response = await client.post("/briefings/generate", json=request)
+    assert response.status_code == 200
+    assert len(response.json()["articles"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# Top 7 candidateType quota selection
+# ---------------------------------------------------------------------------
+
+_QUOTA_PREF = {
+    "roles": [], "companies": [], "skills": [],
+    "locations": [], "experienceLevels": [], "employmentTypes": [],
+}
+
+
+def _scored_posting(id: int, candidate_type: str, pre_score: int) -> dict:
+    return {
+        "id": id,
+        "source": "test",
+        "sourceUrl": f"https://example.com/p{id}",
+        "companyName": f"회사{id}",
+        "title": "백엔드 개발자",
+        "position": "백엔드 개발자",
+        "skills": [], "roles": [],
+        "preScore": pre_score,
+        "preScoreComputed": True,
+        "candidateType": candidate_type,
+    }
+
+
+async def test_select_top7_includes_new_and_urgent_quotas(client):
+    """NEW≤3, URGENT≤2 가 보장되고 나머지는 preScore 상위로 채워진다."""
+    postings = [
+        # 3 NEW (preScore 50, 45, 40)
+        _scored_posting(1, "NEW", 50),
+        _scored_posting(2, "NEW", 45),
+        _scored_posting(3, "NEW", 40),
+        # 2 URGENT (35, 30)
+        _scored_posting(4, "URGENT", 35),
+        _scored_posting(5, "URGENT", 30),
+        # 4 EVERGREEN – top 2 fill remaining 2 slots (80, 70)
+        _scored_posting(6, "EVERGREEN", 80),
+        _scored_posting(7, "EVERGREEN", 70),
+        _scored_posting(8, "EVERGREEN", 60),
+        _scored_posting(9, "EVERGREEN", 55),
+    ]
+    request = {
+        "userId": 1, "category": "JOB_POSTING",
+        "preference": _QUOTA_PREF, "briefingDate": "2026-07-01",
+        "candidatePool": _pool(*postings),
+    }
+    response = await client.post("/briefings/generate", json=request)
+    assert response.status_code == 200
+    articles = response.json()["articles"]
+    assert len(articles) == 7
+
+    selected_companies = {a["companyName"] for a in articles}
+    # All 3 NEW and 2 URGENT included
+    assert {"회사1", "회사2", "회사3", "회사4", "회사5"}.issubset(selected_companies)
+    # Top-2 EVERGREEN fill remaining slots
+    assert "회사6" in selected_companies
+    assert "회사7" in selected_companies
+    # Lower EVERGREEN excluded
+    assert "회사8" not in selected_companies
+    assert "회사9" not in selected_companies
+
+
+async def test_select_top7_fills_when_new_group_insufficient(client):
+    """NEW가 1개뿐이면 나머지 슬롯은 최고 점수 후보로 보충된다."""
+    postings = [
+        _scored_posting(1, "NEW", 30),      # only 1 NEW
+        _scored_posting(2, "EVERGREEN", 90),
+        _scored_posting(3, "EVERGREEN", 85),
+        _scored_posting(4, "EVERGREEN", 80),
+        _scored_posting(5, "EVERGREEN", 75),
+        _scored_posting(6, "EVERGREEN", 70),
+        _scored_posting(7, "EVERGREEN", 65),
+        _scored_posting(8, "EVERGREEN", 60),
+    ]
+    request = {
+        "userId": 1, "category": "JOB_POSTING",
+        "preference": _QUOTA_PREF, "briefingDate": "2026-07-01",
+        "candidatePool": _pool(*postings),
+    }
+    response = await client.post("/briefings/generate", json=request)
+    assert response.status_code == 200
+    articles = response.json()["articles"]
+    assert len(articles) == 7
+
+    selected_companies = {a["companyName"] for a in articles}
+    assert "회사1" in selected_companies   # the only NEW is still included
+    assert "회사2" in selected_companies   # top EVERGREEN fills
+    assert "회사8" not in selected_companies  # lowest EVERGREEN excluded
+
+
+async def test_select_top7_no_duplicate_postings(client):
+    """동일 공고가 중복 선택되지 않는다."""
+    postings = [
+        _scored_posting(i, "NEW" if i <= 3 else "URGENT", 100 - i)
+        for i in range(1, 8)
+    ]
+    request = {
+        "userId": 1, "category": "JOB_POSTING",
+        "preference": _QUOTA_PREF, "briefingDate": "2026-07-01",
+        "candidatePool": _pool(*postings),
+    }
+    response = await client.post("/briefings/generate", json=request)
+    articles = response.json()["articles"]
+    urls = [a["url"] for a in articles]
+    assert len(urls) == len(set(urls))  # no duplicates
