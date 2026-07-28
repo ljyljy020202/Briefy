@@ -529,6 +529,82 @@ async def test_articles_ranked_order_matches_scoring(client):
 
 
 # ---------------------------------------------------------------------------
+# preScoreComputed contract
+# ---------------------------------------------------------------------------
+
+
+async def test_pre_score_computed_true_is_accepted_and_parsed(client):
+    """preScoreComputed=true from Backend is correctly deserialized."""
+    request = {
+        **_RANKING_REQUEST,
+        "candidatePool": {
+            "jobPostings": [
+                {
+                    **_RANKING_REQUEST["candidatePool"]["jobPostings"][1],
+                    "preScore": 0,
+                    "preScoreComputed": True,
+                }
+            ],
+            "companyIssues": [],
+            "industryIssues": [],
+        },
+    }
+    response = await client.post("/briefings/generate", json=request)
+    assert response.status_code == 200
+
+
+async def test_pre_score_computed_absent_defaults_to_false(client):
+    """preScoreComputed omitted (legacy call) defaults to False without error."""
+    request = {
+        **_RANKING_REQUEST,
+        "candidatePool": {
+            "jobPostings": [
+                {
+                    k: v
+                    for k, v in (
+                        _RANKING_REQUEST["candidatePool"]["jobPostings"][1].items()
+                    )
+                    if k != "preScoreComputed"
+                }
+            ],
+            "companyIssues": [],
+            "industryIssues": [],
+        },
+    }
+    response = await client.post("/briefings/generate", json=request)
+    assert response.status_code == 200
+
+
+async def test_pre_score_computed_false_when_field_omitted(client):
+    """A posting without preScoreComputed has pre_score_computed=False internally."""
+    from app.schemas.briefing import CandidateJobPosting
+
+    posting = CandidateJobPosting(
+        source="test",
+        source_url="https://example.com/1",
+        company_name="테스트회사",
+        title="백엔드 개발자",
+        pre_score=30,
+    )
+    assert posting.pre_score_computed is False
+
+
+async def test_pre_score_computed_true_when_set(client):
+    """A posting with preScoreComputed=True reflects correctly."""
+    from app.schemas.briefing import CandidateJobPosting
+
+    posting = CandidateJobPosting(
+        source="test",
+        source_url="https://example.com/2",
+        company_name="테스트회사",
+        title="백엔드 개발자",
+        pre_score=0,
+        pre_score_computed=True,
+    )
+    assert posting.pre_score_computed is True
+
+
+# ---------------------------------------------------------------------------
 # Hallucination guardrails
 # ---------------------------------------------------------------------------
 

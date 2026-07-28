@@ -16,7 +16,9 @@ class Settings(BaseSettings):
     backend_url: str = "http://localhost:8080"
 
     # Job collection
-    job_collection_use_fixture: bool = True
+    # Set JOB_COLLECTION_USE_FIXTURE=true only for local dev/testing.
+    # Defaults to false so that fixture data is never collected in production.
+    job_collection_use_fixture: bool = False
     job_collection_enable_jasoseol: bool = False
     job_collection_enable_saramin: bool = False
     job_collection_timeout_seconds: int = 10
