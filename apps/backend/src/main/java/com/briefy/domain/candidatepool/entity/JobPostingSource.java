@@ -143,4 +143,8 @@ public class JobPostingSource extends BaseTimeEntity {
   public boolean isActive() {
     return active;
   }
+
+  public void deactivate() {
+    this.active = false;
+  }
 }

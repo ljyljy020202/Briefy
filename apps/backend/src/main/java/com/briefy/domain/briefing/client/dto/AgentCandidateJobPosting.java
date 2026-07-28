@@ -19,4 +19,7 @@ public record AgentCandidateJobPosting(
     String postedAt,
     String collectedDate,
     String contentHash,
-    int preScore) {}
+    int preScore,
+    // Always true when Backend builds this DTO — even if preScore is 0.
+    // Agent uses this flag to distinguish "Backend scored 0" from "score not provided".
+    boolean preScoreComputed) {}

@@ -333,7 +333,7 @@ class CandidatePoolServiceTest {
   }
 
   @Test
-  void findJobPostingsByDate_delegatesToRepository() {
+  void findEligibleJobPostingsForBriefing_delegatesToRepository() {
     List<JobPosting> expected =
         List.of(
             JobPosting.create(
@@ -351,16 +351,17 @@ class CandidatePoolServiceTest {
                 null,
                 COLLECTED_DATE,
                 null));
-    when(jobPostingRepository.findAllByCollectedDateBetweenExcludingSources(any(), any(), any()))
+    when(jobPostingRepository.findEligibleJobPostingsForBriefing(any(), any()))
         .thenReturn(expected);
 
-    List<JobPosting> result = candidatePoolService.findJobPostingsByDate(COLLECTED_DATE);
+    List<JobPosting> result =
+        candidatePoolService.findEligibleJobPostingsForBriefing(COLLECTED_DATE);
 
     assertThat(result).hasSize(1);
     assertThat(result.get(0).getCompany()).isEqualTo("카카오");
+    // fixture sources are excluded; collected_date window is NOT passed
     verify(jobPostingRepository)
-        .findAllByCollectedDateBetweenExcludingSources(
-            COLLECTED_DATE.minusDays(7), COLLECTED_DATE, List.of("fixture"));
+        .findEligibleJobPostingsForBriefing(COLLECTED_DATE, List.of("fixture"));
   }
 
   // ---------------------------------------------------------------------------

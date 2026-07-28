@@ -12,6 +12,10 @@ import com.briefy.domain.briefing.entity.BriefingArticle;
 import com.briefy.domain.briefing.entity.BriefingJob;
 import com.briefy.domain.briefing.entity.BriefingReport;
 import com.briefy.domain.briefing.entity.BriefingTriggerType;
+import com.briefy.domain.briefing.policy.ExperienceParser;
+import com.briefy.domain.briefing.policy.ExperiencePolicy;
+import com.briefy.domain.briefing.policy.JobRolePolicy;
+import com.briefy.domain.briefing.policy.ParsedExperience;
 import com.briefy.domain.briefing.repository.BriefingJobRepository;
 import com.briefy.domain.briefing.repository.BriefingReportRepository;
 import com.briefy.domain.briefingpreference.entity.BriefingCategoryCode;
@@ -157,7 +161,7 @@ public class BriefingService {
 
   private List<AgentCandidateJobPosting> selectCandidates(
       LocalDate date, Map<String, Object> preference) {
-    List<JobPosting> postings = candidatePoolService.findJobPostingsByDate(date);
+    List<JobPosting> postings = candidatePoolService.findEligibleJobPostingsForBriefing(date);
     if (postings == null || postings.isEmpty()) return List.of();
 
     List<String> prefCompanies = extractStringList(preference, "companies");
@@ -177,18 +181,28 @@ public class BriefingService {
   }
 
   private boolean isEligible(JobPosting posting, Map<String, Object> pref) {
+    // ── 1. Expired postings ────────────────────────────────────────────────────
     if (posting.getDeadline() != null && posting.getDeadline().isBefore(LocalDate.now(KST))) {
       return false;
     }
 
-    List<String> prefExpLevels = extractStringList(pref, "experienceLevels");
-    String expLevel = posting.getExperienceLevel();
-    if (!prefExpLevels.isEmpty() && expLevel != null && !expLevel.isBlank()) {
-      if (prefExpLevels.stream().noneMatch(e -> e.equalsIgnoreCase(expLevel))) {
-        return false;
-      }
+    // ── 2. Role eligibility (hard filter) ─────────────────────────────────────
+    List<String> prefRoles = extractStringList(pref, "roles");
+    JobRolePolicy.Verdict roleVerdict =
+        JobRolePolicy.evaluate(prefRoles, posting.getTitle(), posting.getRoles());
+    if (roleVerdict == JobRolePolicy.Verdict.MISMATCH) {
+      return false;
     }
 
+    // ── 3. Experience eligibility (hard filter for new-grad users) ─────────────
+    List<String> prefExpLevels = extractStringList(pref, "experienceLevels");
+    ParsedExperience parsedExp = ExperienceParser.parse(posting.getExperienceLevel());
+    ExperiencePolicy.Verdict expVerdict = ExperiencePolicy.evaluate(prefExpLevels, parsedExp);
+    if (expVerdict == ExperiencePolicy.Verdict.EXCLUDE) {
+      return false;
+    }
+
+    // ── 4. Employment type (hard filter when both sides are explicit) ───────────
     List<String> prefEmpTypes = extractStringList(pref, "employmentTypes");
     String empType = posting.getEmploymentType();
     if (!prefEmpTypes.isEmpty() && empType != null && !empType.isBlank()) {
@@ -212,14 +226,11 @@ public class BriefingService {
     List<String> prefIndustries = extractStringList(pref, "industries");
     List<String> prefCompanySizes = extractStringList(pref, "companySizes");
 
-    // role/title match: +30
-    String titleLower = posting.getTitle() != null ? posting.getTitle().toLowerCase() : "";
-    String rolesStr = posting.getRoles() != null ? posting.getRoles().toLowerCase() : "";
-    for (String role : prefRoles) {
-      if (titleLower.contains(role.toLowerCase()) || rolesStr.contains(role.toLowerCase())) {
-        score += SCORE_ROLE_MATCH;
-        break;
-      }
+    // role/title match: +30 on MATCH; AMBIGUOUS gets no bonus (relative penalty)
+    JobRolePolicy.Verdict roleVerdict =
+        JobRolePolicy.evaluate(prefRoles, posting.getTitle(), posting.getRoles());
+    if (roleVerdict == JobRolePolicy.Verdict.MATCH) {
+      score += SCORE_ROLE_MATCH;
     }
 
     // target company match: +25
@@ -242,13 +253,11 @@ public class BriefingService {
     }
     score += skillScore;
 
-    // experience level match: +15
-    String expLevel = posting.getExperienceLevel() != null ? posting.getExperienceLevel() : "";
-    for (String prefExp : prefExpLevels) {
-      if (expLevel.equalsIgnoreCase(prefExp)) {
-        score += SCORE_EXPERIENCE;
-        break;
-      }
+    // experience compatibility: PASS_FULL → +15; PASS_PARTIAL → 0 (EXCLUDE already filtered)
+    ParsedExperience parsedExp = ExperienceParser.parse(posting.getExperienceLevel());
+    ExperiencePolicy.Verdict expVerdict = ExperiencePolicy.evaluate(prefExpLevels, parsedExp);
+    if (expVerdict == ExperiencePolicy.Verdict.PASS_FULL) {
+      score += SCORE_EXPERIENCE;
     }
 
     // industry match via linkedCompany: +12
@@ -355,7 +364,8 @@ public class BriefingService {
         p.getPublishedAt() != null ? p.getPublishedAt().toString() : null,
         p.getCollectedDate() != null ? p.getCollectedDate().toString() : null,
         p.getContentHash(),
-        preScore);
+        preScore,
+        true);
   }
 
   private List<String> extractStringList(Map<String, Object> pref, String key) {

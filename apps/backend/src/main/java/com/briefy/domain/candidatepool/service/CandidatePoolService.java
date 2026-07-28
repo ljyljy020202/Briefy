@@ -122,13 +122,18 @@ public class CandidatePoolService {
     return new CandidatePoolUpsertResult(postings.size(), saved, duplicates);
   }
 
-  private static final int BRIEFING_LOOKBACK_DAYS = 7;
-  private static final List<String> TEST_SOURCES = List.of("fixture");
+  private static final List<String> FIXTURE_SOURCES = List.of("fixture");
 
+  /**
+   * Returns all job postings eligible for a daily briefing candidate pool on the given date.
+   *
+   * <p>A posting qualifies when it has at least one active, non-fixture source record AND its
+   * deadline has not yet passed. Collection recency is NOT a criterion — an old posting that is
+   * still active and un-expired remains in the pool.
+   */
   @Transactional(readOnly = true)
-  public List<JobPosting> findJobPostingsByDate(LocalDate date) {
-    return jobPostingRepository.findAllByCollectedDateBetweenExcludingSources(
-        date.minusDays(BRIEFING_LOOKBACK_DAYS), date, TEST_SOURCES);
+  public List<JobPosting> findEligibleJobPostingsForBriefing(LocalDate referenceDate) {
+    return jobPostingRepository.findEligibleJobPostingsForBriefing(referenceDate, FIXTURE_SOURCES);
   }
 
   // SHA-256 hex of "source|identifier".
