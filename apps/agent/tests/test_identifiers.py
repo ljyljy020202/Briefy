@@ -187,3 +187,37 @@ def test_compute_canonical_fingerprint_does_not_include_description():
     fp1 = compute_canonical_fingerprint("네이버", "백엔드 개발자", date(2026, 7, 20))
     fp2 = compute_canonical_fingerprint("네이버", "백엔드 개발자", date(2026, 7, 20))
     assert fp1 == fp2
+
+
+# ── Cross-language sourceRecordKey contract ───────────────────────────────────
+# These fixed values are shared with the Spring implementation
+# (CandidatePoolService.buildSourceRecordKey).  Changing either side without
+# updating the other will break cross-service deduplication.
+#
+# Algorithm: SHA-256( "{source}|{identifier}" ), where
+#   identifier = source_external_id  (if present)
+#              = canonicalize_url(source_url)  (otherwise)
+#   format = 64-char lowercase hex
+
+_CROSS_LANG_FIXTURE_URL_KEY = (
+    "dfcbdeefa29fe693c628dbe93941ba2b10bc58cf8a6ff16f4675577b390ed00e"
+)
+_CROSS_LANG_FIXTURE_EXT_KEY = (
+    "80a037a4f5b02f9d29257900f862005202cabc58b2aab0006a47b16ac64c089e"
+)
+
+
+def test_source_record_key_url_matches_cross_language_fixture():
+    """sha256('원티드|https://wanted.co.kr/wd/123') must be stable across languages."""
+    assert (
+        compute_source_record_key("원티드", None, "https://wanted.co.kr/wd/123")
+        == _CROSS_LANG_FIXTURE_URL_KEY
+    )
+
+
+def test_source_record_key_external_id_matches_cross_language_fixture():
+    """sha256('점핏|EXT-007') must be stable across languages."""
+    assert (
+        compute_source_record_key("점핏", "EXT-007", "https://jumpit.com/j/1")
+        == _CROSS_LANG_FIXTURE_EXT_KEY
+    )

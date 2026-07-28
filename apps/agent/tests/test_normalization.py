@@ -76,7 +76,8 @@ def test_normalize_empty_skills_stay_empty():
 
 
 def test_normalize_empty_roles_stay_empty():
-    result = normalize(_raw(roles=[]))
+    # Title with no recognisable dev role keyword → no role inferred
+    result = normalize(_raw(title="일반 사무직", roles=[]))
     assert result.roles == []
 
 
@@ -244,3 +245,59 @@ def test_normalize_many_returns_list_of_collected_job_postings():
     results = normalize_many(raws)
     assert len(results) == 3
     assert all(isinstance(r, CollectedJobPosting) for r in results)
+
+
+# ── _infer_classification: intern separation ──────────────────────────────────
+
+
+def test_normalize_backend_intern_separates_role_and_employment():
+    result = normalize(
+        _raw(title="백엔드 인턴", roles=[], employment_type=None, experience_level=None)
+    )
+    assert result.roles == ["백엔드"]
+    assert result.employment_type == "인턴"
+    assert result.experience_level is None
+
+
+def test_normalize_marketing_intern_has_no_inferred_dev_role():
+    result = normalize(_raw(title="마케팅 인턴", roles=[], employment_type=None))
+    assert result.roles == []
+    assert result.employment_type == "인턴"
+
+
+def test_normalize_adapter_roles_take_precedence_over_title():
+    # Adapter explicitly says "백엔드" even though title says "프론트엔드"
+    result = normalize(_raw(title="프론트엔드 개발자", roles=["백엔드"]))
+    assert result.roles == ["백엔드"]
+
+
+# ── _infer_classification: experience from description ────────────────────────
+
+
+def test_normalize_experience_extracted_from_description():
+    result = normalize(_raw(
+        title="백엔드 개발자",
+        experience_level=None,
+        description="백엔드 개발자를 채용합니다. 5년 이상 경력 필수.",
+    ))
+    assert result.experience_level == "5년 이상"
+
+
+def test_normalize_adapter_experience_takes_precedence_over_description():
+    result = normalize(_raw(
+        experience_level="3년 이상",
+        description="10년 이상 필수.",
+    ))
+    assert result.experience_level == "3년 이상"
+
+
+def test_normalize_intern_in_experience_level_moves_to_employment_type():
+    # Some adapters put "인턴" in experience_level; it should move to employment_type
+    result = normalize(_raw(
+        title="백엔드 인턴",
+        experience_level="인턴",
+        employment_type=None,
+    ))
+    assert result.employment_type == "인턴"
+    # experience_level should not contain "인턴"
+    assert result.experience_level != "인턴"

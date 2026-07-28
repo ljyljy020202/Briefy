@@ -378,3 +378,81 @@ async def test_postings_have_source_record_key_and_fingerprint(monkeypatch):
         assert len(p.source_refs) >= 1
 
 
+# ── Stale rescue by deadline_within_days ──────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_stale_rescued_when_deadline_within_window(monkeypatch):
+    """Old posted_at + deadline within deadline_within_days → posting is kept."""
+    monkeypatch.setattr(_USE_FIXTURE, True)
+    monkeypatch.setattr(_USE_REAL, False)
+
+    # collect_date=2026-07-02, deadline_within_days=14 → horizon=2026-07-16
+    # deadline=2026-07-10 ≤ 2026-07-16 → rescued despite old posted_at
+    rescued = RawJobPosting(
+        source="mock", source_url="https://mock.local/jobs/rescued",
+        company_name="회사A", title="마감임박 공고",
+        posted_at=datetime(2026, 5, 1, 9, 0, 0),
+        deadline=date(2026, 7, 10),
+    )
+    fresh = _raw("fresh", deadline=_FUTURE)
+    mock_fetch = AsyncMock(return_value=AdapterResult(postings=[rescued, fresh]))
+    options = CollectionOptions(lookback_days=7)
+    with patch("app.services.daily_collection.FixtureAdapter") as MockF:
+        MockF.return_value.fetch = mock_fetch
+        MockF.return_value.source_name = "fixture"
+        resp = await DailyCollectionService().collect(_request(options=options))
+
+    assert resp.stats.filtered_count == 0
+    assert resp.stats.final_count == 2
+
+
+@pytest.mark.asyncio
+async def test_stale_not_rescued_when_deadline_beyond_window(monkeypatch):
+    """Old posted_at + deadline past deadline_within_days → posting is stale."""
+    monkeypatch.setattr(_USE_FIXTURE, True)
+    monkeypatch.setattr(_USE_REAL, False)
+
+    # collect_date=2026-07-02, deadline_within_days=14 → horizon=2026-07-16
+    # _FUTURE=2026-07-20 > 2026-07-16 → not rescued → stale
+    stale = RawJobPosting(
+        source="mock", source_url="https://mock.local/jobs/stale2",
+        company_name="회사B", title="오래된 공고",
+        posted_at=datetime(2026, 5, 1, 9, 0, 0),
+        deadline=_FUTURE,
+    )
+    fresh = _raw("fresh2", deadline=_FUTURE)
+    mock_fetch = AsyncMock(return_value=AdapterResult(postings=[stale, fresh]))
+    options = CollectionOptions(lookback_days=7)
+    with patch("app.services.daily_collection.FixtureAdapter") as MockF:
+        MockF.return_value.fetch = mock_fetch
+        MockF.return_value.source_name = "fixture"
+        resp = await DailyCollectionService().collect(_request(options=options))
+
+    assert resp.stats.filtered_count == 1
+    assert resp.stats.final_count == 1
+
+
+@pytest.mark.asyncio
+async def test_null_posted_at_is_always_kept(monkeypatch):
+    """Postings with posted_at=None are never treated as stale."""
+    monkeypatch.setattr(_USE_FIXTURE, True)
+    monkeypatch.setattr(_USE_REAL, False)
+
+    no_date = RawJobPosting(
+        source="mock", source_url="https://mock.local/jobs/no-date",
+        company_name="회사C", title="날짜없는 공고",
+        posted_at=None,
+        deadline=None,
+    )
+    mock_fetch = AsyncMock(return_value=AdapterResult(postings=[no_date]))
+    options = CollectionOptions(lookback_days=7)
+    with patch("app.services.daily_collection.FixtureAdapter") as MockF:
+        MockF.return_value.fetch = mock_fetch
+        MockF.return_value.source_name = "fixture"
+        resp = await DailyCollectionService().collect(_request(options=options))
+
+    assert resp.stats.filtered_count == 0
+    assert resp.stats.final_count == 1
+
+
