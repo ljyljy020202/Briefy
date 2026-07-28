@@ -25,7 +25,7 @@ _PAST = date(2026, 6, 1)
 
 _SVC_MODULE = "app.services.daily_collection.settings"
 _USE_FIXTURE = f"{_SVC_MODULE}.job_collection_use_fixture"
-_USE_REAL = f"{_SVC_MODULE}.job_collection_enable_real_sources"
+_USE_REAL = f"{_SVC_MODULE}.job_collection_enable_jasoseol"
 
 
 def _request(

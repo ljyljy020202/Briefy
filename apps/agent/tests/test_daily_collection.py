@@ -20,7 +20,7 @@ from app.services.daily_collection import DailyCollectionService
 _COLLECT_DATE = date(2026, 7, 2)
 _SVC_MODULE = "app.services.daily_collection.settings"
 _USE_FIXTURE = f"{_SVC_MODULE}.job_collection_use_fixture"
-_USE_REAL = f"{_SVC_MODULE}.job_collection_enable_real_sources"
+_USE_REAL = f"{_SVC_MODULE}.job_collection_enable_jasoseol"
 
 
 def _request(

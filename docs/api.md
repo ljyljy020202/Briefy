@@ -1163,7 +1163,7 @@ POST /collections/daily
 
 **Description:** Accepts seed keywords, Company Registry data, and official company sources assembled by Spring. Runs the V2 10-stage collection pipeline via the configured adapters and returns the processed list to Spring. Spring then upserts postings into `job_postings` and `job_posting_sources`. The Agent does not access the database.
 
-Default mode (`JOB_COLLECTION_USE_FIXTURE=true`) returns deterministic fixture postings with no network calls. Set `JOB_COLLECTION_ENABLE_REAL_SOURCES=true` and/or `JOB_COLLECTION_ENABLE_SARAMIN=true` to enable real source collection.
+Default mode (`JOB_COLLECTION_USE_FIXTURE=true`) returns deterministic fixture postings with no network calls. Set `JOB_COLLECTION_ENABLE_JASOSEOL=true` and/or `JOB_COLLECTION_ENABLE_SARAMIN=true` to enable real source collection.
 
 Must run before `POST /briefings/generate` so the candidate pool is populated.
 

@@ -200,7 +200,7 @@ DailyCollectRequest
       │
       ├─ [2] Build adapter list from config flags
       │         JOB_COLLECTION_USE_FIXTURE=true         → add FixtureAdapter
-      │         JOB_COLLECTION_ENABLE_REAL_SOURCES=true → add JasoseolAdapter
+      │         JOB_COLLECTION_ENABLE_JASOSEOL=true → add JasoseolAdapter
       │         JOB_COLLECTION_ENABLE_SARAMIN=true      → add SaraminAdapter
       │         officialCompanySources present          → add OfficialCompanyAdapter
       │         all false / empty → FixtureAdapter (safe fallback)
@@ -269,7 +269,7 @@ class JobBoardAdapter(ABC):
 
 **File:** `app/adapters/jasoseol.py`  
 **Source name:** `jasoseol`  
-**Default:** inactive; enabled when `JOB_COLLECTION_ENABLE_REAL_SOURCES=true`
+**Default:** inactive; enabled when `JOB_COLLECTION_ENABLE_JASOSEOL=true`
 
 #### Strategy
 
@@ -369,7 +369,7 @@ Set in `apps/agent/.env` (or environment variables):
 | Variable | Default | Effect |
 |---|---|---|
 | `JOB_COLLECTION_USE_FIXTURE` | `true` | Include FixtureAdapter in the pipeline |
-| `JOB_COLLECTION_ENABLE_REAL_SOURCES` | `false` | Include JasoseolAdapter |
+| `JOB_COLLECTION_ENABLE_JASOSEOL` | `false` | Include JasoseolAdapter |
 | `JOB_COLLECTION_ENABLE_SARAMIN` | `false` | Include SaraminAdapter |
 | `JOB_COLLECTION_TIMEOUT_SECONDS` | `10` | Per-request HTTP timeout for real adapters |
 | `JASOSEOL_BASE_URL` | `https://jasoseol.com` | Override Jasoseol base URL for testing |
@@ -675,7 +675,7 @@ Add the following to `apps/agent/.env` (create the file if it does not exist):
 
 ```
 JOB_COLLECTION_USE_FIXTURE=false
-JOB_COLLECTION_ENABLE_REAL_SOURCES=true
+JOB_COLLECTION_ENABLE_JASOSEOL=true
 ```
 
 Restart the agent, then send the same request above.
@@ -690,7 +690,7 @@ Expected:
 
 ```
 JOB_COLLECTION_USE_FIXTURE=true
-JOB_COLLECTION_ENABLE_REAL_SOURCES=true
+JOB_COLLECTION_ENABLE_JASOSEOL=true
 ```
 
 Postings from both sources are merged, deduplicated, and returned together.
@@ -791,7 +791,7 @@ poetry run uvicorn app.main:app --reload --log-level debug
 | File | Phase | Notes |
 |---|---|---|
 | `daily_collection.py` + `FixtureAdapter` | 1st MVP (current) | Active; fixture mode default |
-| `daily_collection.py` + `JasoseolAdapter` | 1st MVP (current) | Active; opt-in via `JOB_COLLECTION_ENABLE_REAL_SOURCES` |
+| `daily_collection.py` + `JasoseolAdapter` | 1st MVP (current) | Active; opt-in via `JOB_COLLECTION_ENABLE_JASOSEOL` |
 | `daily_collection.py` + `SaraminAdapter` | 1st MVP (current) | Active; opt-in via `JOB_COLLECTION_ENABLE_SARAMIN` + `SARAMIN_ACCESS_KEY` |
 | `daily_collection.py` + `OfficialCompanyAdapter` | 1st MVP (current) | Active when `officialCompanySources` non-empty in request |
 | `user_briefing_graph.py` (via `/briefings/generate`) | 1st MVP (current) | Active; LLM enrichment + synthesis with deterministic fallback |

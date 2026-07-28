@@ -49,7 +49,7 @@ def _build_adapters(request: DailyCollectRequest) -> list[JobBoardAdapter]:
     adapters: list[JobBoardAdapter] = []
     if settings.job_collection_use_fixture:
         adapters.append(FixtureAdapter())
-    if settings.job_collection_enable_real_sources:
+    if settings.job_collection_enable_jasoseol:
         adapters.append(JasoseolAdapter())
     if settings.job_collection_enable_saramin:
         adapters.append(SaraminAdapter())

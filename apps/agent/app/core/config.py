@@ -17,7 +17,7 @@ class Settings(BaseSettings):
 
     # Job collection
     job_collection_use_fixture: bool = True
-    job_collection_enable_real_sources: bool = False
+    job_collection_enable_jasoseol: bool = False
     job_collection_enable_saramin: bool = False
     job_collection_timeout_seconds: int = 10
     jasoseol_base_url: str = "https://jasoseol.com"
