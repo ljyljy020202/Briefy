@@ -21,6 +21,7 @@ import com.briefy.domain.candidatepool.entity.JobPosting;
 import com.briefy.domain.candidatepool.service.CandidatePoolService;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -52,7 +53,8 @@ class BriefingServiceExposureTest {
 
   @InjectMocks private BriefingService briefingService;
 
-  private static final LocalDate TODAY = LocalDate.now();
+  private static final ZoneId KST = ZoneId.of("Asia/Seoul");
+  private static final LocalDate TODAY = LocalDate.now(KST);
 
   private AgentBriefingResponse mockAgentResponse;
 
