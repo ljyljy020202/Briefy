@@ -19,11 +19,27 @@ public interface JobPostingRepository extends JpaRepository<JobPosting, Long> {
 
   List<JobPosting> findAllByCollectedDateBetween(LocalDate from, LocalDate to);
 
+  /**
+   * Returns all job postings eligible for a daily briefing candidate pool.
+   *
+   * <p>Eligibility criteria:
+   *
+   * <ul>
+   *   <li>Has at least one active {@link com.briefy.domain.candidatepool.entity.JobPostingSource}
+   *   <li>That active source's {@code source} is NOT in {@code excludedSources} (e.g. "fixture")
+   *   <li>The posting's deadline is in the future or unknown (null)
+   * </ul>
+   *
+   * <p>Collection recency ({@code collected_date}) is intentionally NOT a filter — a posting
+   * collected long ago but still active and un-expired remains in the candidate pool.
+   */
   @Query(
-      "SELECT j FROM JobPosting j WHERE j.collectedDate BETWEEN :from AND :to"
-          + " AND (j.source IS NULL OR j.source NOT IN :excludedSources)")
-  List<JobPosting> findAllByCollectedDateBetweenExcludingSources(
-      @Param("from") LocalDate from,
-      @Param("to") LocalDate to,
+      "SELECT DISTINCT j FROM JobPosting j, JobPostingSource s"
+          + " WHERE s.jobPosting = j"
+          + "   AND s.active = true"
+          + "   AND (s.source IS NULL OR s.source NOT IN :excludedSources)"
+          + "   AND (j.deadline IS NULL OR j.deadline >= :referenceDate)")
+  List<JobPosting> findEligibleJobPostingsForBriefing(
+      @Param("referenceDate") LocalDate referenceDate,
       @Param("excludedSources") Collection<String> excludedSources);
 }

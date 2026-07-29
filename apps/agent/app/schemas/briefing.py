@@ -35,6 +35,13 @@ class CandidateJobPosting(BaseModel):
     collected_date: str | None = None
     content_hash: str | None = None
     pre_score: int = 0
+    # True when Backend explicitly computed this score (even if the result is 0).
+    # False (default) when the field is absent, meaning Agent should treat pre_score
+    # as unset and may apply its own scoring as a fallback in a future iteration.
+    pre_score_computed: bool = False
+    # NEW | URGENT | EVERGREEN — classified by Backend before sending to Agent.
+    # None when the backend did not supply a type (forward-compat default).
+    candidate_type: str | None = None
 
 
 class CandidatePool(BaseModel):

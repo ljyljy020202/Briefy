@@ -72,12 +72,11 @@ Triggered by the Spring Boot scheduler (`DailyCollectionScheduler`) or the admin
     "keywords": []
   },
   "options": {
-    "lookbackDays": 3,
-    "deadlineWithinDays": 14,
-    "discoveryLimitPerSource": 50,
-    "detailFetchLimitPerSource": 50,
-    "maxResultsPerSource": 50,
-    "maxTotalResults": 200
+    "lookbackDays": 7,
+    "discoveryLimitPerSource": 300,
+    "detailFetchLimitPerSource": 100,
+    "maxResultsPerSource": 100,
+    "maxTotalResults": 500
   },
   "companyProfiles": [
     {
@@ -106,14 +105,15 @@ Triggered by the Spring Boot scheduler (`DailyCollectionScheduler`) or the admin
 | `seedKeywords` | Aggregated by Spring from all active `user_briefing_preferences` for each category |
 | `seedKeywords.companySizes` | Aggregated from `preference_json.companySizes` |
 | `seedKeywords.industries` | Aggregated from `preference_json.industries` |
-| `options.lookbackDays` | Collect postings published within the last N days (default: 3) |
-| `options.deadlineWithinDays` | Flag postings with deadline within N days (default: 14) |
-| `options.discoveryLimitPerSource` | Max URLs to enumerate per source (default: 50) |
-| `options.detailFetchLimitPerSource` | Max detail page fetches per source (default: 50) |
-| `options.maxResultsPerSource` | Max postings selected per source after pipeline (default: 50) |
-| `options.maxTotalResults` | Hard cap on total postings returned (default: 200) |
+| `options.lookbackDays` | Collect postings published within the last N days (default: **7**) |
+| `options.discoveryLimitPerSource` | Max URLs to enumerate per source (default: 300) |
+| `options.detailFetchLimitPerSource` | Max detail page fetches per source (default: 100) |
+| `options.maxResultsPerSource` | Max postings selected per source after pipeline (default: 100) |
+| `options.maxTotalResults` | Hard cap on total postings returned (default: 500) |
 | `companyProfiles` | Company Registry rows resolved by Spring for the companies in `seedKeywords.companies` |
 | `officialCompanySources` | Active `company_sources` rows for those companies; used by `OfficialCompanyAdapter` |
+
+> **Note:** `deadlineWithinDays` was removed from `CollectionOptions` in V2. The agent's internal deduplication rescue window (`_DEADLINE_RESCUE_DAYS = 14`) is a fixed constant — it is not a request parameter.
 
 ### Agent response (Agent → Spring)
 
@@ -152,18 +152,13 @@ Triggered by the Spring Boot scheduler (`DailyCollectionScheduler`) or the admin
   "companyIssues": [],
   "industryIssues": [],
   "stats": {
-    "discovered": 80,
-    "fetched": 50,
-    "parsed": 48,
-    "exactDuplicates": 3,
-    "crossSourceMerged": 2,
-    "expiredFiltered": 5,
-    "staleFiltered": 1,
-    "truncated": 0,
-    "final": 37,
-    "collectedCount": 80,
-    "deduplicatedCount": 3,
-    "jobPostingCount": 37
+    "discoveredCount": 80,
+    "fetchedCount": 50,
+    "parsedCount": 48,
+    "duplicateCount": 5,
+    "filteredCount": 6,
+    "truncatedCount": 0,
+    "finalCount": 37
   },
   "warnings": []
 }
@@ -174,18 +169,13 @@ Triggered by the Spring Boot scheduler (`DailyCollectionScheduler`) or the admin
 | `jobPostings[].sourceRecordKey` | SHA-256 identity key for this source record; stored in `job_posting_sources.source_record_key` |
 | `jobPostings[].canonicalFingerprint` | SHA-256(norm_company + norm_title + deadline); cross-source merge key |
 | `jobPostings[].sourceRefs` | All source records that were merged into this canonical posting |
-| `stats.discovered` | URLs enumerated across all adapters before any fetching |
-| `stats.fetched` | Detail pages actually fetched (bounded by `detailFetchLimitPerSource`) |
-| `stats.parsed` | Postings successfully parsed from fetched pages |
-| `stats.exactDuplicates` | Items removed by same-source `source_record_key` dedup |
-| `stats.crossSourceMerged` | Items merged across sources by `canonical_fingerprint` |
-| `stats.expiredFiltered` | Items removed because `deadline < collect_date` |
-| `stats.staleFiltered` | Items removed because `posted_at < collect_date - lookback_days` |
-| `stats.truncated` | Items cut by budget selection (`maxTotalResults`) |
-| `stats.final` | Final count of returned postings |
-| `stats.collectedCount` | Alias for `discovered` (backward compat) |
-| `stats.deduplicatedCount` | Alias for `exactDuplicates` (backward compat) |
-| `stats.jobPostingCount` | Alias for `final` (backward compat) |
+| `stats.discoveredCount` | URLs/records enumerated across all adapters before fetch budget |
+| `stats.fetchedCount` | Detail pages or API calls actually made |
+| `stats.parsedCount` | Postings successfully parsed (pre-service-level dedup) |
+| `stats.duplicateCount` | Source-level + cross-source duplicates removed |
+| `stats.filteredCount` | Expired or stale postings removed |
+| `stats.truncatedCount` | Valid candidates dropped by global budget cap (`maxTotalResults`) |
+| `stats.finalCount` | Postings in the `jobPostings` array |
 
 After receiving this response, Spring upserts all items in `jobPostings` into `job_postings` and `job_posting_sources` via `CandidatePoolService.upsertJobPostings`.
 
@@ -200,7 +190,7 @@ DailyCollectRequest
       │
       ├─ [2] Build adapter list from config flags
       │         JOB_COLLECTION_USE_FIXTURE=true         → add FixtureAdapter
-      │         JOB_COLLECTION_ENABLE_REAL_SOURCES=true → add JasoseolAdapter
+      │         JOB_COLLECTION_ENABLE_JASOSEOL=true → add JasoseolAdapter
       │         JOB_COLLECTION_ENABLE_SARAMIN=true      → add SaraminAdapter
       │         officialCompanySources present          → add OfficialCompanyAdapter
       │         all false / empty → FixtureAdapter (safe fallback)
@@ -269,7 +259,7 @@ class JobBoardAdapter(ABC):
 
 **File:** `app/adapters/jasoseol.py`  
 **Source name:** `jasoseol`  
-**Default:** inactive; enabled when `JOB_COLLECTION_ENABLE_REAL_SOURCES=true`
+**Default:** inactive; enabled when `JOB_COLLECTION_ENABLE_JASOSEOL=true`
 
 #### Strategy
 
@@ -369,7 +359,7 @@ Set in `apps/agent/.env` (or environment variables):
 | Variable | Default | Effect |
 |---|---|---|
 | `JOB_COLLECTION_USE_FIXTURE` | `true` | Include FixtureAdapter in the pipeline |
-| `JOB_COLLECTION_ENABLE_REAL_SOURCES` | `false` | Include JasoseolAdapter |
+| `JOB_COLLECTION_ENABLE_JASOSEOL` | `false` | Include JasoseolAdapter |
 | `JOB_COLLECTION_ENABLE_SARAMIN` | `false` | Include SaraminAdapter |
 | `JOB_COLLECTION_TIMEOUT_SECONDS` | `10` | Per-request HTTP timeout for real adapters |
 | `JASOSEOL_BASE_URL` | `https://jasoseol.com` | Override Jasoseol base URL for testing |
@@ -401,12 +391,13 @@ Triggered per user by Spring (`BriefingService.generateBriefing` or `generateSch
 | Step | Owner |
 |---|---|
 | Load user preferences from `user_briefing_preferences` | Spring |
-| Load today's `job_postings` candidate pool from DB | Spring |
-| Pre-score candidates against user preferences | Spring (`BriefingService.scorePosting`) |
-| Send top 30 pre-scored candidates to Agent | Spring (`AgentClient`) |
-| Filter (past-deadline, missing title/URL) | Agent (`filter_job_postings_node`) |
-| Re-rank by `preScore + agentScore` | Agent (`rank_job_postings_node`) |
-| Select top 7 | Agent (`select_top_items_node`) |
+| Load today's active, non-expired `job_postings` from DB (7-day exposure window) | Spring |
+| Pre-score and classify candidates (CandidateType, urgency bonus, exposure penalty) | Spring (`BriefingService.scorePosting`) |
+| Quota-select top 30 (NEW≤12, URGENT≤10, EVERGREEN≤8) and set `preScoreComputed=true` | Spring |
+| Send top 30 to Agent with `preScore`, `preScoreComputed`, `candidateType` | Spring (`AgentClient`) |
+| Filter: remove past-deadline, missing title/URL, clear role mismatch, entry-level mismatch | Agent (`filter_job_postings_node`) |
+| Rank: use `preScore` directly when `preScoreComputed=true`; agent fallback otherwise | Agent (`rank_job_postings_node`) |
+| Select top 7 with quota (NEW≤3, URGENT≤2, rest by score) | Agent (`select_top_items_node`) |
 | Enrich postings — LLM batch summary + matching reason (or deterministic fallback) | Agent (`enrich_selected_node`) |
 | Synthesize Markdown report — LLM full report + summary line (or deterministic fallback) | Agent (`synthesize_report_node`) |
 | Quality check (log-only guardrail) | Agent (`quality_check_node`) |
@@ -447,7 +438,9 @@ Triggered per user by Spring (`BriefingService.generateBriefing` or `generateSch
         "postedAt": "2026-07-01T09:00:00",
         "collectedDate": "2026-07-01",
         "contentHash": "a3f2...sha256hex...64chars",
-        "preScore": 75
+        "preScore": 75,
+        "preScoreComputed": true,
+        "candidateType": "NEW"
       }
     ],
     "companyIssues": [],
@@ -467,46 +460,85 @@ Triggered per user by Spring (`BriefingService.generateBriefing` or `generateSch
 
 ### Pre-scoring logic (Spring side)
 
-Spring scores each `job_postings` row before sending:
+`BriefingService.scorePosting()` scores each `job_postings` row. The score includes preference matching, urgency bonus, and exposure penalty:
+
+**Preference matching:**
 
 | Match | Score |
 |---|---|
 | Role or title matches `preference.roles` | +30 |
-| Company matches `preference.companies` | +25 |
-| Each matching skill (max 5 skills) | +5 each (max +25) |
+| Company in `preference.companies` (targeted) | +25 |
+| Each matching skill (max +25 total) | +5 each |
 | Experience level matches | +15 |
 | Industry matches (via Company Registry) | +12 |
 | Location matches `preference.locations` | +10 |
 | Employment type matches | +10 |
 | Company size matches (via Company Registry) | +8 |
-| Deadline within 7 days | +10 |
-| Collected within last 3 days | +5 |
+| Collected within last 3 days (`collectedDate` or `publishedAt`) | +5 |
 
-Spring sorts by `preScore` descending, takes the top 30, and sends them as `candidatePool.jobPostings`.
+**Urgency bonus (added on top of preference score):**
 
-### Agent re-scoring logic
+| Condition | Bonus |
+|---|---|
+| Deadline ≤ 1 day | +25 (`URGENCY_BONUS_CRITICAL`) |
+| Deadline ≤ 3 days | +15 (`URGENCY_BONUS_NEAR`) |
 
-Inside the Agent, each candidate is scored again (`agentScore`) using the same dimensions but different weights. The `totalScore = preScore + agentScore` is used for final ranking:
+**Exposure penalty (subtracted for recently shown postings):**
 
-| Match | Agent score |
+| Last exposure | Penalty |
+|---|---|
+| Shown yesterday or today | −40 |
+| Shown 2–3 days ago | −25 |
+| Shown 4–6 days ago | −10 |
+| Not shown in last 7 days | 0 |
+
+Spring classifies each candidate (`CandidateType`) before building the pool:
+
+| Type | Condition |
+|---|---|
+| `NEW` | `publishedAt` or `collectedDate` ≤ 3 days ago |
+| `URGENT` | Not NEW, and deadline within 7 days |
+| `EVERGREEN` | Active, un-expired, not NEW or URGENT |
+
+Spring quota-selects top 30 (NEW≤12, URGENT≤10, EVERGREEN≤8, MAX_PER_COMPANY=2, MAX_PER_TARGETED_COMPANY=3), sets `preScoreComputed=true` and `candidateType` on every DTO, and sends them as `candidatePool.jobPostings`.
+
+### Agent ranking logic
+
+When `preScoreComputed=true` (always the case for Spring-originated requests), the Agent uses `preScore` directly as the final ranking score. It does **not** add its own score on top — Backend is the authoritative personalization layer.
+
+When `preScoreComputed=false` (direct calls to Agent, bypassing Backend), the Agent falls back to its own scoring:
+
+| Match | Agent fallback score |
 |---|---|
 | Role match (title or position) | +30 |
 | Company match | +15 |
-| Each matching skill (max 5 skills) | +5 each (max +25) |
+| Each matching skill (max +25 total) | +5 each |
 | Location match | +10 |
 | Experience level match | +10 |
 | Employment type match | +5 |
-| Deadline within 7 days | +10 |
+| Company size (description heuristic) | +5 |
+| Industry (description heuristic) | +5 |
 | Collected within last 3 days | +5 |
+
+Note: Deadline urgency is intentionally omitted from the fallback score to avoid double-counting with the Backend's urgency bonus when `preScoreComputed` is later true.
+
+### Agent filter guards
+
+Before ranking, `filter_job_postings_node` removes two categories of clear mismatches (ambiguous cases always pass through):
+
+| Guard | Condition for removal |
+|---|---|
+| Role mismatch | Both user preferences AND posting have explicit roles, with no overlap in title/position/roles field |
+| Experience mismatch | User has `신입` as the sole experience level AND posting explicitly requires `3년 이상` or higher |
 
 ### Graph structure (implemented)
 
 ```python
-filter_job_postings_node      ← remove past-deadline or missing title/company_name/sourceUrl
+filter_job_postings_node      ← remove: past-deadline, missing title/company_name/sourceUrl,
+      ↓                          clear role mismatch, entry-level mismatch
+rank_job_postings_node        ← finalScore = preScore (if preScoreComputed) else _agent_score(); sort desc
       ↓
-rank_job_postings_node        ← totalScore = preScore + agentScore; sort desc
-      ↓
-select_top_items_node         ← top 7  (_TOP_N = 7)
+select_top_items_node         ← _build_top7(): NEW≤3, URGENT≤2, fill rest by score (_TOP_N = 7)
       ↓
 enrich_selected_node          ← LLM Call 1: batch enrichment (summary, matchingReason, matchedKeywords)
                                   on failure / no key → enrichments = {}
@@ -656,11 +688,10 @@ curl -s -X POST http://localhost:8000/collections/daily \
     },
     "options": {
       "lookbackDays": 7,
-      "deadlineWithinDays": 14,
-      "discoveryLimitPerSource": 25,
-      "detailFetchLimitPerSource": 25,
-      "maxResultsPerSource": 25,
-      "maxTotalResults": 100
+      "discoveryLimitPerSource": 300,
+      "detailFetchLimitPerSource": 100,
+      "maxResultsPerSource": 100,
+      "maxTotalResults": 500
     },
     "companyProfiles": [],
     "officialCompanySources": []
@@ -675,7 +706,7 @@ Add the following to `apps/agent/.env` (create the file if it does not exist):
 
 ```
 JOB_COLLECTION_USE_FIXTURE=false
-JOB_COLLECTION_ENABLE_REAL_SOURCES=true
+JOB_COLLECTION_ENABLE_JASOSEOL=true
 ```
 
 Restart the agent, then send the same request above.
@@ -690,7 +721,7 @@ Expected:
 
 ```
 JOB_COLLECTION_USE_FIXTURE=true
-JOB_COLLECTION_ENABLE_REAL_SOURCES=true
+JOB_COLLECTION_ENABLE_JASOSEOL=true
 ```
 
 Postings from both sources are merged, deduplicated, and returned together.
@@ -791,7 +822,7 @@ poetry run uvicorn app.main:app --reload --log-level debug
 | File | Phase | Notes |
 |---|---|---|
 | `daily_collection.py` + `FixtureAdapter` | 1st MVP (current) | Active; fixture mode default |
-| `daily_collection.py` + `JasoseolAdapter` | 1st MVP (current) | Active; opt-in via `JOB_COLLECTION_ENABLE_REAL_SOURCES` |
+| `daily_collection.py` + `JasoseolAdapter` | 1st MVP (current) | Active; opt-in via `JOB_COLLECTION_ENABLE_JASOSEOL` |
 | `daily_collection.py` + `SaraminAdapter` | 1st MVP (current) | Active; opt-in via `JOB_COLLECTION_ENABLE_SARAMIN` + `SARAMIN_ACCESS_KEY` |
 | `daily_collection.py` + `OfficialCompanyAdapter` | 1st MVP (current) | Active when `officialCompanySources` non-empty in request |
 | `user_briefing_graph.py` (via `/briefings/generate`) | 1st MVP (current) | Active; LLM enrichment + synthesis with deterministic fallback |

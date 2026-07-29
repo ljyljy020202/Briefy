@@ -1100,12 +1100,14 @@ GET /api/admin/delivery-logs?status=FAILED&page=0&size=20
         "id": 70,
         "briefingReportId": 100,
         "userId": 1,
-        "channel": "EMAIL",
         "status": "FAILED",
-        "recipient": "user@gmail.com",
-        "sentAt": null,
+        "toEmail": "user@gmail.com",
+        "subject": "오늘의 채용 브리핑",
+        "providerMessageId": null,
         "errorMessage": "Email delivery failed",
-        "createdAt": "2026-06-28T08:01:00"
+        "sentAt": null,
+        "createdAt": "2026-06-28T08:01:00",
+        "updatedAt": "2026-06-28T08:01:00"
       }
     ],
     "page": 0,
@@ -1163,7 +1165,7 @@ POST /collections/daily
 
 **Description:** Accepts seed keywords, Company Registry data, and official company sources assembled by Spring. Runs the V2 10-stage collection pipeline via the configured adapters and returns the processed list to Spring. Spring then upserts postings into `job_postings` and `job_posting_sources`. The Agent does not access the database.
 
-Default mode (`JOB_COLLECTION_USE_FIXTURE=true`) returns deterministic fixture postings with no network calls. Set `JOB_COLLECTION_ENABLE_REAL_SOURCES=true` and/or `JOB_COLLECTION_ENABLE_SARAMIN=true` to enable real source collection.
+Default mode (`JOB_COLLECTION_USE_FIXTURE=true`) returns deterministic fixture postings with no network calls. Set `JOB_COLLECTION_ENABLE_JASOSEOL=true` and/or `JOB_COLLECTION_ENABLE_SARAMIN=true` to enable real source collection.
 
 Must run before `POST /briefings/generate` so the candidate pool is populated.
 
@@ -1186,12 +1188,11 @@ Must run before `POST /briefings/generate` so the candidate pool is populated.
     "keywords": []
   },
   "options": {
-    "lookbackDays": 3,
-    "deadlineWithinDays": 14,
-    "discoveryLimitPerSource": 50,
-    "detailFetchLimitPerSource": 50,
-    "maxResultsPerSource": 50,
-    "maxTotalResults": 200
+    "lookbackDays": 7,
+    "discoveryLimitPerSource": 300,
+    "detailFetchLimitPerSource": 100,
+    "maxResultsPerSource": 100,
+    "maxTotalResults": 500
   },
   "companyProfiles": [
     {
@@ -1222,12 +1223,15 @@ Must run before `POST /briefings/generate` so the candidate pool is populated.
 | `seedKeywords` | Object | Aggregated by Spring from all active `user_briefing_preferences` |
 | `seedKeywords.companySizes` | Array\<String\> | From `preference_json.companySizes` |
 | `seedKeywords.industries` | Array\<String\> | From `preference_json.industries` |
-| `options.discoveryLimitPerSource` | Int | Max URLs enumerated per source (default: 50) |
-| `options.detailFetchLimitPerSource` | Int | Max detail fetches per source (default: 50) |
-| `options.maxResultsPerSource` | Int | Max postings selected per source (default: 50) |
-| `options.maxTotalResults` | Int | Hard cap on total returned postings (default: 200) |
+| `options.lookbackDays` | Int | Collect postings published within last N days (default: **7**) |
+| `options.discoveryLimitPerSource` | Int | Max URLs enumerated per source (default: 300) |
+| `options.detailFetchLimitPerSource` | Int | Max detail fetches per source (default: 100) |
+| `options.maxResultsPerSource` | Int | Max postings selected per source (default: 100) |
+| `options.maxTotalResults` | Int | Hard cap on total returned postings (default: 500) |
 | `companyProfiles` | Array | Company Registry rows for the companies in `seedKeywords.companies` |
 | `officialCompanySources` | Array | Active `company_sources` rows; dispatched by `OfficialCompanyAdapter` |
+
+> **Note:** `deadlineWithinDays` was removed from `CollectionOptions`. Sending this field returns `422 Unprocessable Entity`.
 
 **Response:**
 
@@ -1266,18 +1270,13 @@ Must run before `POST /briefings/generate` so the candidate pool is populated.
   "companyIssues": [],
   "industryIssues": [],
   "stats": {
-    "discovered": 5,
-    "fetched": 5,
-    "parsed": 5,
-    "exactDuplicates": 0,
-    "crossSourceMerged": 0,
-    "expiredFiltered": 0,
-    "staleFiltered": 0,
-    "truncated": 0,
-    "final": 5,
-    "collectedCount": 5,
-    "deduplicatedCount": 0,
-    "jobPostingCount": 5
+    "discoveredCount": 5,
+    "fetchedCount": 5,
+    "parsedCount": 5,
+    "duplicateCount": 0,
+    "filteredCount": 0,
+    "truncatedCount": 0,
+    "finalCount": 5
   },
   "warnings": []
 }
@@ -1292,17 +1291,13 @@ Must run before `POST /briefings/generate` so the candidate pool is populated.
 | `jobPostings[].sourceRefs` | All source records merged into this canonical posting |
 | `companyIssues` | Always `[]` in 1st MVP |
 | `industryIssues` | Always `[]` in 1st MVP |
-| `stats.discovered` | URLs enumerated before fetching |
-| `stats.fetched` | Detail pages actually fetched |
-| `stats.parsed` | Postings successfully parsed |
-| `stats.exactDuplicates` | Items removed by same-source dedup |
-| `stats.crossSourceMerged` | Items merged across sources |
-| `stats.expiredFiltered` | Items removed due to expired deadline |
-| `stats.staleFiltered` | Items removed due to lookback window |
-| `stats.final` | Final count returned |
-| `stats.collectedCount` | Alias for `discovered` (backward compat) |
-| `stats.deduplicatedCount` | Alias for `exactDuplicates` (backward compat) |
-| `stats.jobPostingCount` | Alias for `final` (backward compat) |
+| `stats.discoveredCount` | URLs/records enumerated before fetch budget |
+| `stats.fetchedCount` | Detail page or API fetches actually made |
+| `stats.parsedCount` | Postings successfully parsed (pre-service-level dedup) |
+| `stats.duplicateCount` | Source-level + cross-source duplicates removed |
+| `stats.filteredCount` | Expired or stale postings removed |
+| `stats.truncatedCount` | Valid candidates dropped by `maxTotalResults` cap |
+| `stats.finalCount` | Postings in the `jobPostings` array |
 | `warnings` | Non-fatal issues from adapters (timeouts, parse errors, HTTP errors) |
 
 **Error handling (backend side):** Log the failure and proceed; user briefing generation for the day may return empty results but should not fail hard.
@@ -1360,7 +1355,9 @@ LLM enrichment (enrichment + synthesis via `gpt-4o-mini`) is enabled when `OPENA
         "postedAt": "2026-07-01T09:00:00",
         "collectedDate": "2026-07-01",
         "contentHash": "a3f2...sha256hex...64chars",
-        "preScore": 75
+        "preScore": 75,
+        "preScoreComputed": true,
+        "candidateType": "NEW"
       }
     ],
     "companyIssues": [],
@@ -1377,7 +1374,9 @@ LLM enrichment (enrichment + synthesis via `gpt-4o-mini`) is enabled when `OPENA
 | `briefingDate` | String | ISO-8601 date (`YYYY-MM-DD`); used for deadline filtering |
 | `tone` | String | Forwarded from the frontend or scheduler; used as tone hint in LLM prompts |
 | `candidatePool.jobPostings` | Array | Top 30 pre-scored `job_postings` rows selected by Spring; sorted by `preScore` desc |
-| `candidatePool.jobPostings[].preScore` | Integer | Score assigned by Spring's preference-matching logic |
+| `candidatePool.jobPostings[].preScore` | Integer | Score assigned by Spring's preference-matching + urgency bonus + exposure penalty logic |
+| `candidatePool.jobPostings[].preScoreComputed` | Boolean | Always `true` when Spring builds this DTO. Agent uses this flag to distinguish "Backend scored 0" from "score not provided" |
+| `candidatePool.jobPostings[].candidateType` | String | `NEW`, `URGENT`, or `EVERGREEN` — classified by Backend before sending to Agent |
 | `candidatePool.companyIssues` | Array | Always `[]` in 1st MVP |
 | `candidatePool.industryIssues` | Array | Always `[]` in 1st MVP |
 

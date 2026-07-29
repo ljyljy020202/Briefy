@@ -6,8 +6,7 @@ import com.briefy.domain.candidatepool.entity.JobPosting;
 import com.briefy.domain.candidatepool.entity.JobPostingSource;
 import com.briefy.domain.candidatepool.repository.JobPostingRepository;
 import com.briefy.domain.candidatepool.repository.JobPostingSourceRepository;
-import java.net.URI;
-import java.net.URISyntaxException;
+import com.briefy.global.util.UrlUtils;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -122,13 +121,18 @@ public class CandidatePoolService {
     return new CandidatePoolUpsertResult(postings.size(), saved, duplicates);
   }
 
-  private static final int BRIEFING_LOOKBACK_DAYS = 7;
-  private static final List<String> TEST_SOURCES = List.of("fixture");
+  private static final List<String> FIXTURE_SOURCES = List.of("fixture");
 
+  /**
+   * Returns all job postings eligible for a daily briefing candidate pool on the given date.
+   *
+   * <p>A posting qualifies when it has at least one active, non-fixture source record AND its
+   * deadline has not yet passed. Collection recency is NOT a criterion — an old posting that is
+   * still active and un-expired remains in the pool.
+   */
   @Transactional(readOnly = true)
-  public List<JobPosting> findJobPostingsByDate(LocalDate date) {
-    return jobPostingRepository.findAllByCollectedDateBetweenExcludingSources(
-        date.minusDays(BRIEFING_LOOKBACK_DAYS), date, TEST_SOURCES);
+  public List<JobPosting> findEligibleJobPostingsForBriefing(LocalDate referenceDate) {
+    return jobPostingRepository.findEligibleJobPostingsForBriefing(referenceDate, FIXTURE_SOURCES);
   }
 
   // SHA-256 hex of "source|identifier".
@@ -157,20 +161,9 @@ public class CandidatePoolService {
     }
   }
 
-  // Normalizes URL to lowercase scheme+host+path, strips query/fragment and trailing slashes
-  // from non-root paths. Matches Agent's canonicalize_url() contract.
+  // Delegates to UrlUtils so BriefingService and CandidatePoolService share
+  // the same canonicalization contract for URL comparison and deduplication.
   private static String canonicalizeUrl(String url) {
-    try {
-      URI uri = new URI(url);
-      String scheme = uri.getScheme() != null ? uri.getScheme().toLowerCase() : "";
-      String host = uri.getHost() != null ? uri.getHost().toLowerCase() : "";
-      String path = uri.getPath() != null ? uri.getPath() : "";
-      if (!path.equals("/") && path.endsWith("/")) {
-        path = path.replaceAll("/+$", "");
-      }
-      return scheme + "://" + host + path;
-    } catch (URISyntaxException e) {
-      return url.toLowerCase();
-    }
+    return UrlUtils.canonicalize(url);
   }
 }

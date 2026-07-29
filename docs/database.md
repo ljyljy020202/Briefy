@@ -278,11 +278,9 @@ Each row represents a distinct type of briefing the service can produce. The 1st
 |---|---|---|---|
 | `id` | BIGINT | PK, AUTO_INCREMENT | |
 | `code` | VARCHAR(50) | UNIQUE NOT NULL | Enum key: `JOB_POSTING`, `COMPANY_NEWS`, `INDUSTRY_TREND` |
-| `name` | VARCHAR(100) | NOT NULL | Human-readable label |
-| `description` | VARCHAR(500) | | Shown on preference setup UI |
-| `phase` | VARCHAR(20) | NOT NULL | MVP phase: `FIRST`, `ONE_FIVE`, `SECOND` |
+| `display_name` | VARCHAR(100) | NOT NULL | Human-readable label shown in UI |
+| `phase` | VARCHAR(10) | NOT NULL | MVP phase: `FIRST`, `ONE_FIVE`, `SECOND` |
 | `is_active` | BOOLEAN | NOT NULL DEFAULT TRUE | Inactive rows are hidden from UI |
-| `display_order` | INT | | Controls ordering on UI |
 | `created_at` | DATETIME | | |
 | `updated_at` | DATETIME | | |
 
@@ -321,7 +319,7 @@ Unlike a flat keyword-per-topic model, this table stores all preference dimensio
 | `user_id` | BIGINT | FK `users.id` NOT NULL | |
 | `category_id` | BIGINT | FK `briefing_categories.id` NOT NULL | |
 | `is_active` | BOOLEAN | NOT NULL DEFAULT TRUE | Soft-delete: set to FALSE instead of hard-delete |
-| `preference_json` | JSON | NOT NULL | Category-specific preference data (see schema below) |
+| `preference_json` | TEXT | | Category-specific preference data as JSON string (see schema below); stored as TEXT per `@Column(columnDefinition = "TEXT")` |
 | `created_at` | DATETIME | | |
 | `updated_at` | DATETIME | | |
 
@@ -606,22 +604,23 @@ Candidate pool for industry / market briefings. Written by Agent `DailyCollectWo
 | Column | Type | Constraints | Notes |
 |---|---|---|---|
 | `id` | BIGINT | PK, AUTO_INCREMENT | |
-| `industry` | VARCHAR(100) | NOT NULL | e.g. `IT/AI`, `반도체`, `플랫폼`, `금융`, `콘텐츠` |
-| `title` | VARCHAR(500) | NOT NULL | News or trend headline |
-| `source` | VARCHAR(255) | | Publisher / domain name |
+| `category` | VARCHAR(100) | NOT NULL | e.g. `IT/AI`, `반도체`, `플랫폼`, `금융`, `콘텐츠` |
+| `title` | VARCHAR(255) | NOT NULL | News or trend headline |
 | `url` | VARCHAR(1000) | UNIQUE NOT NULL | Original URL |
 | `summary` | TEXT | | Agent-generated summary |
+| `content_hash` | VARCHAR(64) | | SHA-256 of content fields for change detection |
 | `published_at` | DATETIME | | Original publication time |
 | `collected_date` | DATE | NOT NULL | Date collected |
 | `created_at` | DATETIME | | |
+| `updated_at` | DATETIME | | |
 
 > **2nd MVP scope.** Content must be information-only. Never generate or suggest buy/sell recommendations anywhere in prompts, copy, or tool responses.
 
 **Indexes**
 
 ```sql
-UNIQUE INDEX uq_industry_issues_url       (url)
-INDEX        idx_industry_issues_industry (industry)
+UNIQUE INDEX uq_industry_issues_url      (url)
+INDEX        idx_industry_issues_category (category)
 INDEX        idx_industry_issues_date     (collected_date)
 ```
 

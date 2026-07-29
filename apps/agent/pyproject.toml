@@ -39,3 +39,12 @@ select = ["E", "F", "I"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "unit: pure function tests — no I/O, no FastAPI stack",
+    "integration: tests using the FastAPI ASGI stack (client fixture)",
+    "external: tests that require a real network or external service",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning:pytest_asyncio",
+    "ignore::DeprecationWarning:asyncio",
+]

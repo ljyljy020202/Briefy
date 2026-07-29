@@ -10,6 +10,7 @@ apps/frontend/.next/
 apps/frontend/out/
 apps/frontend/.vercel/
 apps/frontend/coverage/
+apps/frontend/tsconfig.tsbuildinfo
 
 # ── Backend (Gradle / Kotlin) ─────────────────────────────────────────────────
 apps/backend/build/
@@ -42,3 +43,4 @@ docker-compose.prod.yml
 
 # ── Misc ──────────────────────────────────────────────────────────────────────
 *.log
+build/

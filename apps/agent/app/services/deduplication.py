@@ -8,6 +8,10 @@ from app.utils.identifiers import (
     normalize_title,
 )
 
+# Postings whose deadline falls within this window are kept even when posted_at
+# is older than lookback_days.  Not configurable from Spring — agent-internal only.
+_DEADLINE_RESCUE_DAYS = 14
+
 
 @dataclass
 class DeduplicationStats:
@@ -155,26 +159,56 @@ def deduplicate(
     )
 
 
+def _is_stale(
+    posting: CollectedJobPosting,
+    collect_date: date,
+    earliest_posted: date,
+    deadline_horizon: date,
+) -> bool:
+    """Return True if the posting should be treated as stale.
+
+    A posting is stale only when ALL of the following hold:
+    - posted_at is known (not None)
+    - posted_at is older than earliest_posted
+    - deadline is either unknown or beyond the deadline rescue window
+
+    Absence of posted_at is NOT sufficient reason to discard a posting.
+    A soon-expiring deadline rescues an otherwise old posting.
+    """
+    posted_date = posting.posted_at.date() if posting.posted_at else None
+    if posted_date is None:
+        return False  # unknown age — keep
+
+    if posted_date >= earliest_posted:
+        return False  # recently posted — keep
+
+    # posted_at is old; check if deadline rescues it
+    if posting.deadline is not None and posting.deadline <= deadline_horizon:
+        return False  # deadline is soon — keep despite old posted_at
+
+    return True
+
+
 def filter_postings(
     postings: list[CollectedJobPosting],
     collect_date: date,
     lookback_days: int,
+    deadline_within_days: int = 0,
 ) -> list[CollectedJobPosting]:
-    """Filter out expired or out-of-range postings (backward-compat signature).
+    """Filter out expired or stale postings (backward-compat signature).
 
-    Keeps postings with missing deadline or posted_at — absence of data is not
-    a reason to discard.
+    ``deadline_within_days=0`` disables the deadline-rescue window, preserving
+    the original behaviour for callers that don't need it.
+    Absence of posted_at or deadline is never a reason to discard.
     """
     earliest_posted = collect_date - timedelta(days=lookback_days)
+    deadline_horizon = collect_date + timedelta(days=deadline_within_days)
     result = []
 
     for posting in postings:
         if posting.deadline is not None and posting.deadline < collect_date:
             continue
-        if (
-            posting.posted_at is not None
-            and posting.posted_at.date() < earliest_posted
-        ):
+        if _is_stale(posting, collect_date, earliest_posted, deadline_horizon):
             continue
         result.append(posting)
 
@@ -188,11 +222,19 @@ def filter_postings_with_stats(
 ) -> tuple[list[CollectedJobPosting], int, int]:
     """Stage 5 filter — returns (active, expired_count, stale_count).
 
-    Stale cutoff: collect_date - lookback_days.
-    """
-    from datetime import timedelta
+    Stale policy:
+    - A posting is kept when posted_at is within lookback_days.
+    - A posting is also kept when its deadline falls within deadline_within_days,
+      even if posted_at is older than lookback_days.  This prevents dropping
+      postings that are still actively closing.
+    - A posting with unknown posted_at (None) is always kept.
+    - Expired postings (deadline < collect_date) are always dropped.
 
-    collect_from = collect_date - timedelta(days=options.lookback_days)
+    Note: ``lookback_days`` here controls the *collection* candidate window and
+    is independent of the briefing candidate window on the Backend side.
+    """
+    earliest_posted = collect_date - timedelta(days=options.lookback_days)
+    deadline_horizon = collect_date + timedelta(days=_DEADLINE_RESCUE_DAYS)
 
     active: list[CollectedJobPosting] = []
     expired_count = 0
@@ -202,10 +244,7 @@ def filter_postings_with_stats(
         if posting.deadline is not None and posting.deadline < collect_date:
             expired_count += 1
             continue
-        if (
-            posting.posted_at is not None
-            and posting.posted_at.date() < collect_from
-        ):
+        if _is_stale(posting, collect_date, earliest_posted, deadline_horizon):
             stale_count += 1
             continue
         active.append(posting)

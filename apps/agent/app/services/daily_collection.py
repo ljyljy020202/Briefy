@@ -49,7 +49,7 @@ def _build_adapters(request: DailyCollectRequest) -> list[JobBoardAdapter]:
     adapters: list[JobBoardAdapter] = []
     if settings.job_collection_use_fixture:
         adapters.append(FixtureAdapter())
-    if settings.job_collection_enable_real_sources:
+    if settings.job_collection_enable_jasoseol:
         adapters.append(JasoseolAdapter())
     if settings.job_collection_enable_saramin:
         adapters.append(SaraminAdapter())
@@ -61,26 +61,83 @@ def _build_adapters(request: DailyCollectRequest) -> list[JobBoardAdapter]:
             )
         )
     if not adapters:
-        log.info("daily_collection: both flags off — using FixtureAdapter as fallback")
-        adapters.append(FixtureAdapter())
+        log.warning(
+            "daily_collection: no adapters enabled — "
+            "set JOB_COLLECTION_USE_FIXTURE=true or enable another adapter"
+        )
     return adapters
 
 
 def _score(posting: CollectedJobPosting, seed: SeedKeywords) -> float:
+    """Collection-phase relevance score (higher = more relevant to seed keywords).
+
+    Priority: roles (3.0) > companies (2.0) > skills (0.5 each, cap 2.0)
+              > industries (0.3) > locations (0.2) > experience (0.15)
+              > employment (0.1) > description presence (0.3).
+    Do NOT call LLMs here — pure keyword matching on normalised fields only.
+
+    Note: each source adapter is fetched with per-source limits
+    (discovery_limit_per_source / detail_fetch_limit_per_source) set in
+    CollectionOptions.  If a single source dominates the pool, lower its limits
+    rather than adjusting scores here.
+    """
     score = 0.0
     title_lower = posting.title.lower()
+    roles_lower = [r.lower() for r in posting.roles]
     company_lower = posting.company_name.lower()
+    skills_lower = [s.lower() for s in posting.skills]
+
+    # Roles: title match or normalised roles list match
     for role in seed.roles:
-        if role.lower() in title_lower:
-            score += 2.0
+        rl = role.lower()
+        if rl in title_lower or any(rl in r for r in roles_lower):
+            score += 3.0
+
+    # Companies: exact or substring match on company name
     for company in seed.companies:
         if company.lower() in company_lower:
-            score += 3.0
+            score += 2.0
+
+    # Skills: capped at 2.0 total so a posting with 10 matching skills doesn't
+    # dominate over a role/company match
+    skill_score = 0.0
     for skill in seed.skills:
-        if any(skill.lower() in s.lower() for s in posting.skills):
-            score += 1.0
+        if any(skill.lower() in s for s in skills_lower):
+            skill_score += 0.5
+    score += min(skill_score, 2.0)
+
+    # Industries: light signal when seed specifies industry preference
     if posting.description:
-        score += 0.5
+        desc_lower = posting.description.lower()
+        for industry in seed.industries:
+            if industry.lower() in desc_lower:
+                score += 0.3
+
+    # Locations: posted location matches user location preference
+    if posting.location:
+        loc_lower = posting.location.lower()
+        for location in seed.locations:
+            if location.lower() in loc_lower:
+                score += 0.2
+
+    # Experience level: mild signal, matching preferred level
+    if posting.experience_level:
+        exp_lower = posting.experience_level.lower()
+        for exp in seed.experience_levels:
+            if exp.lower() in exp_lower:
+                score += 0.15
+
+    # Employment type: mild signal
+    if posting.employment_type:
+        emp_lower = posting.employment_type.lower()
+        for emp in seed.employment_types:
+            if emp.lower() in emp_lower:
+                score += 0.1
+
+    # Description presence: tiny bonus for richer postings
+    if posting.description:
+        score += 0.3
+
     return score
 
 

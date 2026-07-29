@@ -224,3 +224,50 @@ def test_collection_stats_field_names():
     assert "collectedCount" not in data
     assert "deduplicatedCount" not in data
     assert "jobPostingCount" not in data
+
+
+# ── JobPostingPreference companySizes/industries contract ─────────────────────
+# Protects "ALREADY_FIXED: companySizes/industries preference 전달"
+# These fields must survive camelCase serialization so the Backend can populate
+# them from UserBriefingPreference and the Agent can read them in the fallback
+# scoring path.
+
+
+def test_job_posting_preference_company_sizes_and_industries_serialize_to_camel():
+    """companySizes and industries survive round-trip through camelCase JSON."""
+    from app.schemas.briefing import JobPostingPreference
+
+    pref = JobPostingPreference(
+        company_sizes=["대기업", "중견기업"],
+        industries=["IT/소프트웨어", "핀테크"],
+    )
+    data = pref.model_dump(by_alias=True)
+    assert "companySizes" in data, "companySizes must be present in camelCase output"
+    assert "industries" in data, "industries must be present in camelCase output"
+    assert data["companySizes"] == ["대기업", "중견기업"]
+    assert data["industries"] == ["IT/소프트웨어", "핀테크"]
+    assert "company_sizes" not in data
+    assert "company_sizes" not in data
+
+
+def test_job_posting_preference_company_sizes_defaults_to_empty_list():
+    """Absent companySizes/industries fields default to [] (not None)."""
+    from app.schemas.briefing import JobPostingPreference
+
+    pref = JobPostingPreference()
+    assert pref.company_sizes == []
+    assert pref.industries == []
+
+
+def test_job_posting_preference_camel_case_deserialization():
+    """Backend-sent camelCase JSON with companySizes/industries is parsed correctly."""
+    from app.schemas.briefing import JobPostingPreference
+
+    raw = {
+        "roles": ["백엔드 개발자"],
+        "companySizes": ["스타트업"],
+        "industries": ["헬스케어"],
+    }
+    pref = JobPostingPreference.model_validate(raw)
+    assert pref.company_sizes == ["스타트업"]
+    assert pref.industries == ["헬스케어"]

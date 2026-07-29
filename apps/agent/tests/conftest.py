@@ -1,3 +1,5 @@
+from unittest.mock import MagicMock
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -82,6 +84,57 @@ FULL_REQUEST = {
         "industryIssues": [],
     },
 }
+
+
+# ---------------------------------------------------------------------------
+# Network-call guards (autouse — applied to every test)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _disable_llm_client(monkeypatch):
+    """Block real OpenAI calls in all tests.
+
+    Tests that need a live LLM mock override this with
+    ``with patch("app.graph.user_briefing_graph.llm_client") as mock_llm:``
+    inside the test body; patch() temporarily replaces the monkeypatched
+    reference and restores it on exit.
+    """
+    import app.graph.user_briefing_graph as _graph
+
+    fake = MagicMock()
+    fake.enabled = False
+    monkeypatch.setattr(_graph, "llm_client", fake)
+
+
+@pytest.fixture(autouse=True)
+def _use_fixture_adapter(monkeypatch):
+    """Block real HTTP calls from job-board adapters in all tests.
+
+    Patches the adapter-enable flags on the daily_collection settings object so
+    that _build_adapters() uses only FixtureAdapter (deterministic, no network).
+
+    Tests in test_daily_collection.py that verify flag-to-adapter mapping
+    override these defaults with their own monkeypatch.setattr calls — the
+    last setattr on the same attribute wins within a single test.
+    Tests that replace _build_adapters entirely (e.g. via patch()) are
+    unaffected because this fixture only touches the settings attributes,
+    not the function itself.
+    """
+    monkeypatch.setattr(
+        "app.services.daily_collection.settings.job_collection_use_fixture", True
+    )
+    monkeypatch.setattr(
+        "app.services.daily_collection.settings.job_collection_enable_jasoseol", False
+    )
+    monkeypatch.setattr(
+        "app.services.daily_collection.settings.job_collection_enable_saramin", False
+    )
+
+
+# ---------------------------------------------------------------------------
+# FastAPI test client
+# ---------------------------------------------------------------------------
 
 
 @pytest.fixture

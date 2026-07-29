@@ -87,7 +87,7 @@ services:
       BACKEND_URL: http://backend:8080
       # 아래 변수들은 .env.prod 에서 주입됩니다:
       # OPENAI_API_KEY, LLM_MODEL, LLM_TEMPERATURE, LLM_TIMEOUT_SECONDS,
-      # JOB_COLLECTION_USE_FIXTURE, JOB_COLLECTION_ENABLE_REAL_SOURCES,
+      # JOB_COLLECTION_USE_FIXTURE, JOB_COLLECTION_ENABLE_JASOSEOL,
       # JOB_COLLECTION_ENABLE_SARAMIN, SARAMIN_ACCESS_KEY
     # ports: 외부에 노출하지 않음 — backend가 내부 네트워크로만 호출
     healthcheck:

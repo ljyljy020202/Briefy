@@ -12,6 +12,12 @@ import com.briefy.domain.briefing.entity.BriefingArticle;
 import com.briefy.domain.briefing.entity.BriefingJob;
 import com.briefy.domain.briefing.entity.BriefingReport;
 import com.briefy.domain.briefing.entity.BriefingTriggerType;
+import com.briefy.domain.briefing.policy.CandidateType;
+import com.briefy.domain.briefing.policy.ExperienceParser;
+import com.briefy.domain.briefing.policy.ExperiencePolicy;
+import com.briefy.domain.briefing.policy.JobRolePolicy;
+import com.briefy.domain.briefing.policy.ParsedExperience;
+import com.briefy.domain.briefing.repository.BriefingArticleRepository;
 import com.briefy.domain.briefing.repository.BriefingJobRepository;
 import com.briefy.domain.briefing.repository.BriefingReportRepository;
 import com.briefy.domain.briefingpreference.entity.BriefingCategoryCode;
@@ -23,6 +29,7 @@ import com.briefy.domain.company.entity.Company;
 import com.briefy.global.exception.BusinessException;
 import com.briefy.global.exception.ErrorCode;
 import com.briefy.global.response.PageResult;
+import com.briefy.global.util.UrlUtils;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -31,8 +38,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -42,10 +51,18 @@ import org.springframework.transaction.annotation.Transactional;
 public class BriefingService {
 
   private static final ZoneId KST = ZoneId.of("Asia/Seoul");
+
+  // ── Top-30 quota ──────────────────────────────────────────────────────────
   private static final int MAX_CANDIDATE_COUNT = 30;
+  private static final int QUOTA_NEW = 12;
+  private static final int QUOTA_URGENT = 10;
+  private static final int QUOTA_EVERGREEN = 8;
+
+  // ── Per-company diversity limits ──────────────────────────────────────────
   private static final int MAX_PER_COMPANY = 2;
   private static final int MAX_PER_TARGETED_COMPANY = 3;
 
+  // ── Personalisation score weights ──────────────────────────────────────────
   private static final int SCORE_ROLE_MATCH = 30;
   private static final int SCORE_TARGET_COMPANY = 25;
   private static final int SCORE_SKILL = 5;
@@ -55,11 +72,25 @@ public class BriefingService {
   private static final int SCORE_LOCATION = 10;
   private static final int SCORE_EMPLOYMENT_TYPE = 10;
   private static final int SCORE_COMPANY_SIZE = 8;
-  private static final int SCORE_DEADLINE_SOON = 10;
   private static final int SCORE_RECENT = 5;
+
+  // ── Deadline urgency bonus (replaces old SCORE_DEADLINE_SOON=10) ──────────
+  private static final int URGENCY_BONUS_CRITICAL = 25; // deadline ≤ 1 day
+  private static final int URGENCY_BONUS_NEAR = 15; // deadline ≤ 3 days
+
+  // ── Exposure penalty ──────────────────────────────────────────────────────
+  private static final int EXPOSURE_PENALTY_YESTERDAY = 40; // exposed yesterday or today
+  private static final int EXPOSURE_PENALTY_RECENT = 25; // exposed 2–3 days ago
+  private static final int EXPOSURE_PENALTY_STALE = 10; // exposed 4–6 days ago
+  private static final int EXPOSURE_LOOKBACK_DAYS = 7;
+
+  // ── CandidateType thresholds ──────────────────────────────────────────────
+  private static final int NEW_DAYS = 3; // published/collected within this many days → NEW
+  private static final int URGENT_DAYS = 7; // deadline within this many days → URGENT
 
   private final BriefingJobRepository briefingJobRepository;
   private final BriefingReportRepository briefingReportRepository;
+  private final BriefingArticleRepository briefingArticleRepository;
   private final UserBriefingPreferenceRepository userBriefingPreferenceRepository;
   private final AgentClient agentClient;
   private final CandidatePoolService candidatePoolService;
@@ -67,11 +98,13 @@ public class BriefingService {
   public BriefingService(
       BriefingJobRepository briefingJobRepository,
       BriefingReportRepository briefingReportRepository,
+      BriefingArticleRepository briefingArticleRepository,
       UserBriefingPreferenceRepository userBriefingPreferenceRepository,
       AgentClient agentClient,
       CandidatePoolService candidatePoolService) {
     this.briefingJobRepository = briefingJobRepository;
     this.briefingReportRepository = briefingReportRepository;
+    this.briefingArticleRepository = briefingArticleRepository;
     this.userBriefingPreferenceRepository = userBriefingPreferenceRepository;
     this.agentClient = agentClient;
     this.candidatePoolService = candidatePoolService;
@@ -111,7 +144,8 @@ public class BriefingService {
     try {
       Map<String, Object> preference = jobPref != null ? jobPref.getPreference() : Map.of();
       LocalDate briefingDate = LocalDate.now(KST);
-      List<AgentCandidateJobPosting> candidates = selectCandidates(briefingDate, preference);
+      List<AgentCandidateJobPosting> candidates =
+          selectCandidates(briefingDate, preference, userId);
       AgentCandidatePool candidatePool = new AgentCandidatePool(candidates, List.of(), List.of());
 
       AgentBriefingRequest agentRequest = buildAgentRequest(userId, preference, candidatePool);
@@ -155,17 +189,30 @@ public class BriefingService {
     return BriefingDetailResponse.from(report);
   }
 
+  // ---------------------------------------------------------------------------
+  // Candidate selection pipeline
+  // ---------------------------------------------------------------------------
+
   private List<AgentCandidateJobPosting> selectCandidates(
-      LocalDate date, Map<String, Object> preference) {
-    List<JobPosting> postings = candidatePoolService.findJobPostingsByDate(date);
+      LocalDate date, Map<String, Object> preference, Long userId) {
+    Map<String, LocalDate> exposureMap = loadExposureMap(userId, date);
+    List<JobPosting> postings = candidatePoolService.findEligibleJobPostingsForBriefing(date);
     if (postings == null || postings.isEmpty()) return List.of();
 
     List<String> prefCompanies = extractStringList(preference, "companies");
 
     List<AgentCandidateJobPosting> scored =
         postings.stream()
-            .filter(p -> isEligible(p, preference))
-            .map(p -> toAgentCandidateJobPosting(p, scorePosting(p, preference)))
+            .filter(p -> isEligible(p, preference, date))
+            .map(
+                p -> {
+                  int base = scorePosting(p, preference, date);
+                  int urgency = computeUrgencyBonus(p.getDeadline(), date);
+                  int penalty = computeExposurePenalty(p.getUrl(), exposureMap, date);
+                  int total = base + urgency - penalty;
+                  CandidateType type = classifyCandidateType(p, date);
+                  return toAgentCandidateJobPosting(p, total, type);
+                })
             .sorted(
                 Comparator.comparingInt(AgentCandidateJobPosting::preScore)
                     .reversed()
@@ -173,22 +220,36 @@ public class BriefingService {
                     .thenComparing(AgentCandidateJobPosting::title))
             .toList();
 
-    return applyDiversitySelection(scored, prefCompanies);
+    return buildTop30(scored, prefCompanies);
   }
 
-  private boolean isEligible(JobPosting posting, Map<String, Object> pref) {
-    if (posting.getDeadline() != null && posting.getDeadline().isBefore(LocalDate.now(KST))) {
+  // ---------------------------------------------------------------------------
+  // Eligibility filter
+  // ---------------------------------------------------------------------------
+
+  private boolean isEligible(JobPosting posting, Map<String, Object> pref, LocalDate today) {
+    // ── 1. Expired postings ────────────────────────────────────────────────────
+    if (posting.getDeadline() != null && posting.getDeadline().isBefore(today)) {
       return false;
     }
 
-    List<String> prefExpLevels = extractStringList(pref, "experienceLevels");
-    String expLevel = posting.getExperienceLevel();
-    if (!prefExpLevels.isEmpty() && expLevel != null && !expLevel.isBlank()) {
-      if (prefExpLevels.stream().noneMatch(e -> e.equalsIgnoreCase(expLevel))) {
-        return false;
-      }
+    // ── 2. Role eligibility (hard filter) ─────────────────────────────────────
+    List<String> prefRoles = extractStringList(pref, "roles");
+    JobRolePolicy.Verdict roleVerdict =
+        JobRolePolicy.evaluate(prefRoles, posting.getTitle(), posting.getRoles());
+    if (roleVerdict == JobRolePolicy.Verdict.MISMATCH) {
+      return false;
     }
 
+    // ── 3. Experience eligibility (hard filter for new-grad users) ─────────────
+    List<String> prefExpLevels = extractStringList(pref, "experienceLevels");
+    ParsedExperience parsedExp = ExperienceParser.parse(posting.getExperienceLevel());
+    ExperiencePolicy.Verdict expVerdict = ExperiencePolicy.evaluate(prefExpLevels, parsedExp);
+    if (expVerdict == ExperiencePolicy.Verdict.EXCLUDE) {
+      return false;
+    }
+
+    // ── 4. Employment type (hard filter when both sides are explicit) ───────────
     List<String> prefEmpTypes = extractStringList(pref, "employmentTypes");
     String empType = posting.getEmploymentType();
     if (!prefEmpTypes.isEmpty() && empType != null && !empType.isBlank()) {
@@ -200,7 +261,11 @@ public class BriefingService {
     return true;
   }
 
-  private int scorePosting(JobPosting posting, Map<String, Object> pref) {
+  // ---------------------------------------------------------------------------
+  // Personalisation scoring
+  // ---------------------------------------------------------------------------
+
+  private int scorePosting(JobPosting posting, Map<String, Object> pref, LocalDate today) {
     int score = 0;
 
     List<String> prefRoles = extractStringList(pref, "roles");
@@ -212,14 +277,11 @@ public class BriefingService {
     List<String> prefIndustries = extractStringList(pref, "industries");
     List<String> prefCompanySizes = extractStringList(pref, "companySizes");
 
-    // role/title match: +30
-    String titleLower = posting.getTitle() != null ? posting.getTitle().toLowerCase() : "";
-    String rolesStr = posting.getRoles() != null ? posting.getRoles().toLowerCase() : "";
-    for (String role : prefRoles) {
-      if (titleLower.contains(role.toLowerCase()) || rolesStr.contains(role.toLowerCase())) {
-        score += SCORE_ROLE_MATCH;
-        break;
-      }
+    // role/title match: +30 on MATCH; AMBIGUOUS gets no bonus (relative penalty)
+    JobRolePolicy.Verdict roleVerdict =
+        JobRolePolicy.evaluate(prefRoles, posting.getTitle(), posting.getRoles());
+    if (roleVerdict == JobRolePolicy.Verdict.MATCH) {
+      score += SCORE_ROLE_MATCH;
     }
 
     // target company match: +25
@@ -242,13 +304,11 @@ public class BriefingService {
     }
     score += skillScore;
 
-    // experience level match: +15
-    String expLevel = posting.getExperienceLevel() != null ? posting.getExperienceLevel() : "";
-    for (String prefExp : prefExpLevels) {
-      if (expLevel.equalsIgnoreCase(prefExp)) {
-        score += SCORE_EXPERIENCE;
-        break;
-      }
+    // experience compatibility: PASS_FULL → +15; PASS_PARTIAL → 0 (EXCLUDE already filtered)
+    ParsedExperience parsedExp = ExperienceParser.parse(posting.getExperienceLevel());
+    ExperiencePolicy.Verdict expVerdict = ExperiencePolicy.evaluate(prefExpLevels, parsedExp);
+    if (expVerdict == ExperiencePolicy.Verdict.PASS_FULL) {
+      score += SCORE_EXPERIENCE;
     }
 
     // industry match via linkedCompany: +12
@@ -298,46 +358,166 @@ public class BriefingService {
       }
     }
 
-    // deadline within 7 days: +10
-    if (posting.getDeadline() != null) {
-      long days = ChronoUnit.DAYS.between(LocalDate.now(KST), posting.getDeadline());
-      if (days >= 0 && days <= 7) {
-        score += SCORE_DEADLINE_SOON;
-      }
-    }
-
     // recently collected (within 3 days): +5
     if (posting.getCollectedDate() != null
-        && !posting.getCollectedDate().isBefore(LocalDate.now(KST).minusDays(3))) {
+        && !posting.getCollectedDate().isBefore(today.minusDays(3))) {
       score += SCORE_RECENT;
     }
 
     return score;
   }
 
-  private List<AgentCandidateJobPosting> applyDiversitySelection(
-      List<AgentCandidateJobPosting> sorted, List<String> targetCompanies) {
+  // ---------------------------------------------------------------------------
+  // Urgency bonus (replaces old flat SCORE_DEADLINE_SOON)
+  // ---------------------------------------------------------------------------
+
+  int computeUrgencyBonus(LocalDate deadline, LocalDate today) {
+    if (deadline == null) return 0;
+    long daysUntil = ChronoUnit.DAYS.between(today, deadline);
+    if (daysUntil <= 1) return URGENCY_BONUS_CRITICAL;
+    if (daysUntil <= 3) return URGENCY_BONUS_NEAR;
+    return 0;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Exposure penalty
+  // ---------------------------------------------------------------------------
+
+  private Map<String, LocalDate> loadExposureMap(Long userId, LocalDate today) {
+    LocalDate since = today.minusDays(EXPOSURE_LOOKBACK_DAYS);
+    List<BriefingArticleRepository.ExposedUrlInfo> rows =
+        briefingArticleRepository.findRecentExposuresByUserId(userId, since);
+    if (rows == null || rows.isEmpty()) return Map.of();
+
+    Map<String, LocalDate> map = new HashMap<>();
+    for (BriefingArticleRepository.ExposedUrlInfo row : rows) {
+      if (row.getUrl() == null) continue;
+      String canonical = UrlUtils.canonicalize(row.getUrl());
+      if (canonical != null) {
+        // If the same canonical URL appears multiple times (different raw forms),
+        // keep the most recent exposure date.
+        map.merge(canonical, row.getLastExposedDate(), (a, b) -> a.isAfter(b) ? a : b);
+      }
+    }
+    return map;
+  }
+
+  int computeExposurePenalty(String url, Map<String, LocalDate> exposureMap, LocalDate today) {
+    String canonical = UrlUtils.canonicalize(url);
+    if (canonical == null) return 0;
+    LocalDate lastExposed = exposureMap.get(canonical);
+    if (lastExposed == null) return 0;
+
+    long daysSince = ChronoUnit.DAYS.between(lastExposed, today);
+    if (daysSince <= 1) return EXPOSURE_PENALTY_YESTERDAY;
+    if (daysSince <= 3) return EXPOSURE_PENALTY_RECENT;
+    if (daysSince <= 6) return EXPOSURE_PENALTY_STALE;
+    return 0;
+  }
+
+  // ---------------------------------------------------------------------------
+  // CandidateType classification
+  // ---------------------------------------------------------------------------
+
+  CandidateType classifyCandidateType(JobPosting jp, LocalDate today) {
+    LocalDate newThreshold = today.minusDays(NEW_DAYS);
+
+    // NEW: publishedAt within 3 days; if null, use collectedDate as firstSeenAt
+    boolean isNew = false;
+    if (jp.getPublishedAt() != null) {
+      isNew = !jp.getPublishedAt().toLocalDate().isBefore(newThreshold);
+    } else if (jp.getCollectedDate() != null) {
+      isNew = !jp.getCollectedDate().isBefore(newThreshold);
+    }
+    if (isNew) return CandidateType.NEW;
+
+    // URGENT: not NEW and deadline within 7 days (inclusive)
+    if (jp.getDeadline() != null) {
+      long daysUntil = ChronoUnit.DAYS.between(today, jp.getDeadline());
+      if (daysUntil >= 0 && daysUntil <= URGENT_DAYS) {
+        return CandidateType.URGENT;
+      }
+    }
+
+    return CandidateType.EVERGREEN;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Top-30 quota selection with per-company diversity
+  // ---------------------------------------------------------------------------
+
+  private List<AgentCandidateJobPosting> buildTop30(
+      List<AgentCandidateJobPosting> allScored, List<String> targetedCompanies) {
     Map<String, Integer> companyCount = new HashMap<>();
+    Set<String> selectedUrls = new HashSet<>();
     List<AgentCandidateJobPosting> result = new ArrayList<>();
 
-    for (AgentCandidateJobPosting candidate : sorted) {
-      if (result.size() >= MAX_CANDIDATE_COUNT) break;
+    List<AgentCandidateJobPosting> newGroup =
+        allScored.stream().filter(c -> CandidateType.NEW.name().equals(c.candidateType())).toList();
+    List<AgentCandidateJobPosting> urgentGroup =
+        allScored.stream()
+            .filter(c -> CandidateType.URGENT.name().equals(c.candidateType()))
+            .toList();
+    List<AgentCandidateJobPosting> evergreenGroup =
+        allScored.stream()
+            .filter(c -> CandidateType.EVERGREEN.name().equals(c.candidateType()))
+            .toList();
+
+    result.addAll(
+        pickFromGroup(newGroup, targetedCompanies, companyCount, selectedUrls, QUOTA_NEW));
+    result.addAll(
+        pickFromGroup(urgentGroup, targetedCompanies, companyCount, selectedUrls, QUOTA_URGENT));
+    result.addAll(
+        pickFromGroup(
+            evergreenGroup, targetedCompanies, companyCount, selectedUrls, QUOTA_EVERGREEN));
+
+    // Fill remaining slots from any leftover candidates (cross-type, still respecting limits)
+    if (result.size() < MAX_CANDIDATE_COUNT) {
+      List<AgentCandidateJobPosting> leftovers =
+          allScored.stream().filter(c -> !selectedUrls.contains(c.sourceUrl())).toList();
+      result.addAll(
+          pickFromGroup(
+              leftovers,
+              targetedCompanies,
+              companyCount,
+              selectedUrls,
+              MAX_CANDIDATE_COUNT - result.size()));
+    }
+
+    return result;
+  }
+
+  private List<AgentCandidateJobPosting> pickFromGroup(
+      List<AgentCandidateJobPosting> group,
+      List<String> targetedCompanies,
+      Map<String, Integer> companyCount,
+      Set<String> selectedUrls,
+      int quota) {
+    List<AgentCandidateJobPosting> result = new ArrayList<>();
+    for (AgentCandidateJobPosting candidate : group) {
+      if (result.size() >= quota) break;
       String companyLower =
           candidate.companyName() != null ? candidate.companyName().toLowerCase() : "";
       boolean isTargeted =
           !companyLower.isEmpty()
-              && targetCompanies.stream().anyMatch(t -> t.toLowerCase().equals(companyLower));
+              && targetedCompanies.stream().anyMatch(t -> t.toLowerCase().equals(companyLower));
       int limit = isTargeted ? MAX_PER_TARGETED_COMPANY : MAX_PER_COMPANY;
       int current = companyCount.getOrDefault(companyLower, 0);
       if (current < limit) {
         result.add(candidate);
         companyCount.put(companyLower, current + 1);
+        if (candidate.sourceUrl() != null) selectedUrls.add(candidate.sourceUrl());
       }
     }
     return result;
   }
 
-  private AgentCandidateJobPosting toAgentCandidateJobPosting(JobPosting p, int preScore) {
+  // ---------------------------------------------------------------------------
+  // DTO builder
+  // ---------------------------------------------------------------------------
+
+  private AgentCandidateJobPosting toAgentCandidateJobPosting(
+      JobPosting p, int preScore, CandidateType candidateType) {
     return new AgentCandidateJobPosting(
         p.getId(),
         p.getSource(),
@@ -355,28 +535,14 @@ public class BriefingService {
         p.getPublishedAt() != null ? p.getPublishedAt().toString() : null,
         p.getCollectedDate() != null ? p.getCollectedDate().toString() : null,
         p.getContentHash(),
-        preScore);
+        preScore,
+        true,
+        candidateType != null ? candidateType.name() : null);
   }
 
-  private List<String> extractStringList(Map<String, Object> pref, String key) {
-    Object val = pref.get(key);
-    if (val instanceof List<?> list) {
-      return list.stream().filter(String.class::isInstance).map(String.class::cast).toList();
-    }
-    return List.of();
-  }
-
-  private List<String> parseJsonArray(String json) {
-    if (json == null || json.isBlank()) return List.of();
-    String trimmed = json.trim();
-    if (!trimmed.startsWith("[") || !trimmed.endsWith("]")) return List.of();
-    String inner = trimmed.substring(1, trimmed.length() - 1).trim();
-    if (inner.isBlank()) return List.of();
-    return Arrays.stream(inner.split(","))
-        .map(s -> s.trim().replaceAll("^\"|\"$", ""))
-        .filter(s -> !s.isBlank())
-        .toList();
-  }
+  // ---------------------------------------------------------------------------
+  // Agent request / report building
+  // ---------------------------------------------------------------------------
 
   private AgentBriefingRequest buildAgentRequest(
       Long userId, Map<String, Object> preference, AgentCandidatePool candidatePool) {
@@ -429,6 +595,30 @@ public class BriefingService {
     }
 
     return report;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Utilities
+  // ---------------------------------------------------------------------------
+
+  private List<String> extractStringList(Map<String, Object> pref, String key) {
+    Object val = pref.get(key);
+    if (val instanceof List<?> list) {
+      return list.stream().filter(String.class::isInstance).map(String.class::cast).toList();
+    }
+    return List.of();
+  }
+
+  private List<String> parseJsonArray(String json) {
+    if (json == null || json.isBlank()) return List.of();
+    String trimmed = json.trim();
+    if (!trimmed.startsWith("[") || !trimmed.endsWith("]")) return List.of();
+    String inner = trimmed.substring(1, trimmed.length() - 1).trim();
+    if (inner.isBlank()) return List.of();
+    return Arrays.stream(inner.split(","))
+        .map(s -> s.trim().replaceAll("^\"|\"$", ""))
+        .filter(s -> !s.isBlank())
+        .toList();
   }
 
   private LocalDateTime parsePublishedAt(String publishedAt) {

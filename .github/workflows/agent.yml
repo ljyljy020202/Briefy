@@ -13,7 +13,7 @@ defaults:
     working-directory: apps/agent
 
 jobs:
-  ci:
+  quality:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,7 +25,38 @@ jobs:
       - name: Install Poetry
         run: pip install poetry==2.4.1
 
+      - name: Cache Poetry virtualenv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pypoetry/virtualenvs
+          key: agent-poetry-${{ runner.os }}-py3.11-${{ hashFiles('apps/agent/poetry.lock') }}
+          restore-keys: |
+            agent-poetry-${{ runner.os }}-py3.11-
+
       - run: poetry install --no-interaction
 
       - run: poetry run ruff check .
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Poetry
+        run: pip install poetry==2.4.1
+
+      - name: Cache Poetry virtualenv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pypoetry/virtualenvs
+          key: agent-poetry-${{ runner.os }}-py3.11-${{ hashFiles('apps/agent/poetry.lock') }}
+          restore-keys: |
+            agent-poetry-${{ runner.os }}-py3.11-
+
+      - run: poetry install --no-interaction
+
       - run: poetry run pytest
