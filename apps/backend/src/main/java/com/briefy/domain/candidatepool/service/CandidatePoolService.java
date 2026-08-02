@@ -50,6 +50,21 @@ public class CandidatePoolService {
             jobPostingSourceRepository.findBySourceRecordKey(sourceRecordKey);
         if (existingSource.isPresent()) {
           existingSource.get().touch(now, collectedDate, data.contentHash());
+          // Also enrich metadata on the parent posting in case it was null before.
+          existingSource
+              .get()
+              .getJobPosting()
+              .refreshFrom(
+                  data.deadline(),
+                  data.description(),
+                  data.contentHash(),
+                  collectedDate,
+                  data.roles(),
+                  data.skills(),
+                  data.experienceLevel(),
+                  data.employmentType(),
+                  data.location(),
+                  data.publishedAt());
           duplicates++;
           continue;
         }
@@ -68,7 +83,17 @@ public class CandidatePoolService {
       if (canonical.isPresent()) {
         canonical
             .get()
-            .refreshFrom(data.deadline(), data.description(), data.contentHash(), collectedDate);
+            .refreshFrom(
+                data.deadline(),
+                data.description(),
+                data.contentHash(),
+                collectedDate,
+                data.roles(),
+                data.skills(),
+                data.experienceLevel(),
+                data.employmentType(),
+                data.location(),
+                data.publishedAt());
         if (sourceRecordKey != null) {
           jobPostingSourceRepository.save(
               JobPostingSource.create(

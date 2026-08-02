@@ -115,11 +115,25 @@ public class JobPosting extends BaseTimeEntity {
     return jp;
   }
 
+  /**
+   * Refreshes mutable fields from a newly collected posting.
+   *
+   * <p>Metadata update rule: if the incoming value is non-null / non-blank it replaces the stored
+   * value; if the incoming value is null / blank the existing value is preserved. This means a
+   * re-collection that now carries structured metadata can enrich a previously null-metadata record
+   * without ever overwriting a valid existing value with null.
+   */
   public void refreshFrom(
       LocalDate newDeadline,
       String newDescription,
       String newContentHash,
-      LocalDate collectedDate) {
+      LocalDate collectedDate,
+      String newRoles,
+      String newSkills,
+      String newExperienceLevel,
+      String newEmploymentType,
+      String newLocation,
+      LocalDateTime newPublishedAt) {
     if (newDeadline != null) {
       this.deadline = newDeadline;
     }
@@ -130,6 +144,58 @@ public class JobPosting extends BaseTimeEntity {
       this.contentHash = newContentHash;
     }
     this.collectedDate = collectedDate;
+    // Metadata enrichment: only overwrite when incoming value is present AND current is absent.
+    if (newRoles != null
+        && !newRoles.isBlank()
+        && (this.roles == null || this.roles.isBlank() || this.roles.equals("[]"))) {
+      this.roles = newRoles;
+    }
+    if (newSkills != null
+        && !newSkills.isBlank()
+        && (this.skills == null || this.skills.isBlank() || this.skills.equals("[]"))) {
+      this.skills = newSkills;
+    }
+    if (newExperienceLevel != null
+        && !newExperienceLevel.isBlank()
+        && (this.experienceLevel == null || this.experienceLevel.isBlank())) {
+      this.experienceLevel = newExperienceLevel;
+    }
+    if (newEmploymentType != null
+        && !newEmploymentType.isBlank()
+        && (this.employmentType == null || this.employmentType.isBlank())) {
+      this.employmentType = newEmploymentType;
+    }
+    if (newLocation != null
+        && !newLocation.isBlank()
+        && (this.location == null || this.location.isBlank())) {
+      this.location = newLocation;
+    }
+    if (newPublishedAt != null && this.publishedAt == null) {
+      this.publishedAt = newPublishedAt;
+    }
+  }
+
+  /**
+   * @deprecated Use {@link #refreshFrom(LocalDate, String, String, LocalDate, String, String,
+   *     String, String, String, LocalDateTime)} instead.
+   */
+  @Deprecated
+  public void refreshFrom(
+      LocalDate newDeadline,
+      String newDescription,
+      String newContentHash,
+      LocalDate collectedDate) {
+    refreshFrom(
+        newDeadline,
+        newDescription,
+        newContentHash,
+        collectedDate,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null);
   }
 
   public Long getId() {

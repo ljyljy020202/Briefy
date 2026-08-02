@@ -263,20 +263,7 @@ class DailyCollectionServiceTest {
   }
 
   @Test
-  void triggerScheduledDailyCollection_skipsWhenAlreadyActive() {
-    when(collectionJobService.isAlreadyActiveForDate(TEST_DATE)).thenReturn(true);
-
-    DailyCollectionResult result =
-        dailyCollectionService.triggerScheduledDailyCollection(TEST_DATE);
-
-    assertThat(result.status()).isEqualTo("SKIPPED");
-    assertThat(result.collectionJobId()).isNull();
-    verify(collectionJobService, never()).createPending(any(), any(), any());
-  }
-
-  @Test
-  void triggerScheduledDailyCollection_executesWhenNotActive() {
-    when(collectionJobService.isAlreadyActiveForDate(TEST_DATE)).thenReturn(false);
+  void triggerScheduledDailyCollection_alwaysExecutes() {
     CollectionJob job = pendingJob();
     when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
     when(userBriefingPreferenceRepository.findAllByCategoryCodeAndActiveTrue(
