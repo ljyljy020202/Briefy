@@ -26,6 +26,7 @@ import com.briefy.domain.briefingpreference.repository.UserBriefingPreferenceRep
 import com.briefy.domain.candidatepool.entity.JobPosting;
 import com.briefy.domain.candidatepool.service.CandidatePoolService;
 import com.briefy.domain.company.entity.Company;
+import com.briefy.domain.user.repository.UserRepository;
 import com.briefy.global.exception.BusinessException;
 import com.briefy.global.exception.ErrorCode;
 import com.briefy.global.response.PageResult;
@@ -94,6 +95,7 @@ public class BriefingService {
   private final UserBriefingPreferenceRepository userBriefingPreferenceRepository;
   private final AgentClient agentClient;
   private final CandidatePoolService candidatePoolService;
+  private final UserRepository userRepository;
 
   public BriefingService(
       BriefingJobRepository briefingJobRepository,
@@ -101,13 +103,15 @@ public class BriefingService {
       BriefingArticleRepository briefingArticleRepository,
       UserBriefingPreferenceRepository userBriefingPreferenceRepository,
       AgentClient agentClient,
-      CandidatePoolService candidatePoolService) {
+      CandidatePoolService candidatePoolService,
+      UserRepository userRepository) {
     this.briefingJobRepository = briefingJobRepository;
     this.briefingReportRepository = briefingReportRepository;
     this.briefingArticleRepository = briefingArticleRepository;
     this.userBriefingPreferenceRepository = userBriefingPreferenceRepository;
     this.agentClient = agentClient;
     this.candidatePoolService = candidatePoolService;
+    this.userRepository = userRepository;
   }
 
   /**
@@ -150,6 +154,24 @@ public class BriefingService {
 
       AgentBriefingRequest agentRequest = buildAgentRequest(userId, preference, candidatePool);
       AgentBriefingResponse agentResponse = agentClient.generate(agentRequest);
+
+      String nickname =
+          userRepository
+              .findById(userId)
+              .map(u -> u.getNickname())
+              .filter(n -> n != null && !n.isBlank())
+              .orElse(null);
+      if (nickname != null) {
+        String updated =
+            agentResponse.content().replace("# 오늘의 채용 브리핑", "# 오늘의 채용 브리핑 - " + nickname);
+        agentResponse =
+            new AgentBriefingResponse(
+                agentResponse.title(),
+                agentResponse.summary(),
+                updated,
+                agentResponse.articles(),
+                agentResponse.tokenUsage());
+      }
 
       BriefingReport report = buildReport(userId, job, agentResponse);
       BriefingReport saved = briefingReportRepository.save(report);
