@@ -29,6 +29,7 @@ import com.briefy.domain.briefingpreference.repository.UserBriefingPreferenceRep
 import com.briefy.domain.candidatepool.entity.JobPosting;
 import com.briefy.domain.candidatepool.service.CandidatePoolService;
 import com.briefy.domain.company.entity.Company;
+import com.briefy.domain.user.repository.UserRepository;
 import com.briefy.global.exception.BusinessException;
 import com.briefy.global.exception.ErrorCode;
 import com.briefy.global.response.PageResult;
@@ -61,6 +62,7 @@ class BriefingServiceTest {
   @Mock private UserBriefingPreferenceRepository userBriefingPreferenceRepository;
   @Mock private AgentClient agentClient;
   @Mock private CandidatePoolService candidatePoolService;
+  @Mock private UserRepository userRepository;
 
   @InjectMocks private BriefingService briefingService;
 
