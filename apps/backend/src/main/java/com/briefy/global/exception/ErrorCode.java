@@ -7,6 +7,8 @@ public enum ErrorCode {
   // Auth
   UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "Unauthorized"),
   FORBIDDEN(HttpStatus.FORBIDDEN, "Access denied"),
+  KAKAO_EMAIL_REQUIRED(HttpStatus.BAD_REQUEST, "Kakao account email is required"),
+  KAKAO_EMAIL_INVALID(HttpStatus.BAD_REQUEST, "Kakao account email is not valid or verified"),
 
   // Validation
   VALIDATION_ERROR(HttpStatus.BAD_REQUEST, "Validation failed"),
