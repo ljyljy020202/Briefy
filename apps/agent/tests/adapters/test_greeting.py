@@ -2,7 +2,8 @@
 
 All tests are offline: no real HTTP calls.
 - Pure-function tests: _parse_greeting_config, _discover_job_urls,
-  _extract_job_id, _parse_greeting_job
+  _extract_job_id, _parse_greeting_job, _career_to_experience_level,
+  _extract_greeting_metadata, _extract_next_data_openings
 - Async adapter tests: mock httpx.AsyncClient via monkeypatch
 
 Self-hosted fixture types (synthetic DOM only — no real company HTML):
@@ -19,11 +20,16 @@ from httpx import TimeoutException
 
 from app.adapters.greeting import (
     GreetingParser,
+    _build_self_hosted_job_url,
+    _career_to_experience_level,
     _discover_job_urls,
+    _extract_greeting_metadata,
     _extract_job_id,
+    _extract_next_data_openings,
     _GreetingConfig,
     _parse_greeting_config,
     _parse_greeting_job,
+    _postings_from_next_data,
     greeting_preflight,
 )
 from app.schemas.collection import (
@@ -898,3 +904,618 @@ async def test_hosted_parser_fetch_regression(monkeypatch):
     assert len(result.postings) == 1
     assert result.postings[0].title == "백엔드 개발자"
     assert result.postings[0].source_external_id == "101"
+
+
+# ── _career_to_experience_level ──────────────────────────────────────────────
+
+
+def test_career_new_comer():
+    assert _career_to_experience_level({"careerType": "NEW_COMER"}) == "신입"
+
+
+def test_career_not_matter():
+    assert _career_to_experience_level({"careerType": "NOT_MATTER"}) == "경력 무관"
+
+
+def test_career_new_comer_and_experienced():
+    assert (
+        _career_to_experience_level({"careerType": "NEW_COMER_AND_EXPERIENCED"})
+        == "신입/경력"
+    )
+
+
+def test_career_experienced_with_from():
+    assert (
+        _career_to_experience_level(
+            {"careerType": "EXPERIENCED", "careerFrom": 3, "careerTo": None}
+        )
+        == "3년 이상"
+    )
+
+
+def test_career_experienced_no_from():
+    assert (
+        _career_to_experience_level(
+            {"careerType": "EXPERIENCED", "careerFrom": None}
+        )
+        == "경력"
+    )
+
+
+def test_career_none_returns_none():
+    assert _career_to_experience_level(None) is None
+
+
+def test_career_unknown_type_returns_none():
+    assert _career_to_experience_level({"careerType": "UNKNOWN"}) is None
+
+
+# ── _extract_greeting_metadata ───────────────────────────────────────────────
+
+def _opening(
+    opening_id: int = 1001,
+    title: str = "백엔드 개발자",
+    job: str | None = "Backend Engineering",
+    occupation: str | None = None,
+    location: str = "서울",
+    career_type: str = "EXPERIENCED",
+    career_from: int | None = 3,
+    career_to: int | None = None,
+    employment_type: str = "FULL_TIME_WORKER",
+    open_date: str = "2026-07-01T09:00:00Z",
+    due_date: str | None = None,
+) -> dict:
+    """Build a synthetic Greeting 'openings' list entry."""
+    ws_job = {"id": 1, "job": job, "sortOrder": 1} if job else None
+    ws_occ = (
+        {"id": 2, "occupation": occupation, "sortOrder": 1} if occupation else None
+    )
+    return {
+        "openingId": opening_id,
+        "title": title,
+        "deploy": True,
+        "fixed": False,
+        "openDate": open_date,
+        "dueDate": due_date,
+        "deadlineDDay": None,
+        "workspaceDivision": None,
+        "group": {"name": "TestCo"},
+        "openingJobPosition": {
+            "openingJobPositionSetting": {"id": 100, "maxPriority": 1},
+            "openingJobPositions": [
+                {
+                    "id": 200,
+                    "workspaceField": None,
+                    "workspaceOccupation": ws_occ,
+                    "workspaceJob": ws_job,
+                    "workspacePlace": {
+                        "id": 300,
+                        "location": location,
+                        "place": None,
+                        "workFromHome": False,
+                    },
+                    "jobPositionCareer": {
+                        "id": 400,
+                        "careerFrom": career_from,
+                        "careerTo": career_to,
+                        "careerType": career_type,
+                    },
+                    "jobPositionEmployment": {
+                        "id": 500,
+                        "employmentType": employment_type,
+                    },
+                }
+            ],
+            "openingJobPositionCount": 1,
+        },
+    }
+
+
+def test_extract_metadata_dev_role_from_workspace_job():
+    meta = _extract_greeting_metadata(
+        _opening(job="Backend Engineering", occupation=None)
+    )
+    assert meta["roles"] == ["Backend Engineering"]
+
+
+def test_extract_metadata_role_from_occupation_when_no_job():
+    meta = _extract_greeting_metadata(
+        _opening(job=None, occupation="Design/VMD")
+    )
+    assert meta["roles"] == ["Design/VMD"]
+
+
+def test_extract_metadata_non_dev_role_preserved():
+    """Non-dev roles (MD, Sales, Design) must be stored as-is, not filtered."""
+    for role in ["MD", "Sales Manager", "BX Design", "Off-Line Operation"]:
+        meta = _extract_greeting_metadata(_opening(job=role))
+        assert meta["roles"] == [role], f"Expected [{role}], got {meta['roles']}"
+
+
+def test_extract_metadata_experience_level_3_year():
+    meta = _extract_greeting_metadata(
+        _opening(career_type="EXPERIENCED", career_from=3)
+    )
+    assert meta["experience_level"] == "3년 이상"
+
+
+def test_extract_metadata_experience_level_new_comer():
+    meta = _extract_greeting_metadata(
+        _opening(career_type="NEW_COMER", career_from=None)
+    )
+    assert meta["experience_level"] == "신입"
+
+
+def test_extract_metadata_experience_level_not_matter():
+    meta = _extract_greeting_metadata(
+        _opening(career_type="NOT_MATTER", career_from=None)
+    )
+    assert meta["experience_level"] == "경력 무관"
+
+
+def test_extract_metadata_employment_type_full_time():
+    meta = _extract_greeting_metadata(
+        _opening(employment_type="FULL_TIME_WORKER")
+    )
+    assert meta["employment_type"] == "정규직"
+
+
+def test_extract_metadata_employment_type_contract():
+    meta = _extract_greeting_metadata(
+        _opening(employment_type="CONTRACT_WORKER")
+    )
+    assert meta["employment_type"] == "계약직"
+
+
+def test_extract_metadata_location():
+    meta = _extract_greeting_metadata(_opening(location="서울/경기"))
+    assert meta["location"] == "서울/경기"
+
+
+def test_extract_metadata_open_date_sets_posted_at():
+    meta = _extract_greeting_metadata(
+        _opening(open_date="2026-07-01T09:00:00Z")
+    )
+    assert meta["posted_at"] is not None
+    assert meta["posted_at"].year == 2026
+    assert meta["posted_at"].month == 7
+
+
+def test_extract_metadata_due_date_sets_deadline():
+    meta = _extract_greeting_metadata(
+        _opening(due_date="2026-08-31T14:59:59Z")
+    )
+    assert meta["deadline"] == date(2026, 8, 31)
+
+
+def test_extract_metadata_no_positions_returns_empty():
+    opening = _opening()
+    opening["openingJobPosition"]["openingJobPositions"] = []
+    meta = _extract_greeting_metadata(opening)
+    assert meta["roles"] == []
+    assert meta["experience_level"] is None
+    assert meta["employment_type"] is None
+    assert meta["location"] is None
+
+
+# ── _extract_next_data_openings ───────────────────────────────────────────────
+
+def _next_data_html(openings: list[dict]) -> str:
+    """Build a minimal HTML page with __NEXT_DATA__ containing an openings query."""
+    payload = {
+        "props": {
+            "pageProps": {
+                "dehydratedState": {
+                    "queries": [
+                        {
+                            "queryKey": ["openings"],
+                            "state": {"data": openings},
+                        }
+                    ]
+                }
+            }
+        }
+    }
+    payload_json = json.dumps(payload, ensure_ascii=False)
+    return (
+        f'<html><head></head><body>'
+        f'<script id="__NEXT_DATA__" type="application/json">'
+        f'{payload_json}'
+        f'</script></body></html>'
+    )
+
+
+def test_extract_next_data_openings_returns_list():
+    openings = [_opening(1001), _opening(1002)]
+    html = _next_data_html(openings)
+    result = _extract_next_data_openings(html)
+    assert result is not None
+    assert len(result) == 2
+
+
+def test_extract_next_data_openings_not_found_returns_none():
+    result = _extract_next_data_openings("<html><body><p>no data</p></body></html>")
+    assert result is None
+
+
+def test_extract_next_data_openings_invalid_json_returns_none():
+    result = _extract_next_data_openings(
+        '<html><script id="__NEXT_DATA__">not json</script></html>'
+    )
+    assert result is None
+
+
+def test_extract_next_data_openings_empty_list_returns_empty():
+    html = _next_data_html([])
+    result = _extract_next_data_openings(html)
+    assert result == []
+
+
+# ── _postings_from_next_data ─────────────────────────────────────────────────
+
+def test_postings_from_next_data_basic():
+    openings = [
+        _opening(1001, "Backend Developer", job="Backend Engineering"),
+        _opening(1002, "Frontend Developer", job="Frontend Engineering"),
+    ]
+    base_url = "https://career.example.com/ko/apply"
+    stubs, warnings = _postings_from_next_data(
+        openings, base_url, "TestCo", "company_99_custom_greeting", _GreetingConfig()
+    )
+    assert len(stubs) == 2
+    assert stubs[0].title == "Backend Developer"
+    assert stubs[0].roles == ["Backend Engineering"]
+    assert stubs[0].source_external_id == "1001"
+    assert stubs[0].source_url == "https://career.example.com/ko/o/1001"
+    assert warnings == []
+
+
+def test_postings_from_next_data_non_dev_roles_preserved():
+    openings = [
+        _opening(2001, "MD 기획자", job="MD"),
+        _opening(2002, "BX Design", occupation="BX Design", job=None),
+        _opening(2003, "영업 담당", occupation="Off-Line Operation", job=None),
+    ]
+    stubs, _ = _postings_from_next_data(
+        openings, "https://career.example.com/ko/apply",
+        "TestCo", "src", _GreetingConfig()
+    )
+    assert stubs[0].roles == ["MD"]
+    assert stubs[1].roles == ["BX Design"]
+    assert stubs[2].roles == ["Off-Line Operation"]
+
+
+def test_postings_from_next_data_respects_max_discover():
+    openings = [_opening(i) for i in range(1001, 1010)]
+    stubs, _ = _postings_from_next_data(
+        openings, "https://career.example.com/ko/apply",
+        "TestCo", "src", _GreetingConfig(max_discover=3)
+    )
+    assert len(stubs) == 3
+
+
+def test_postings_from_next_data_experience_levels():
+    cases = [
+        ("NEW_COMER", None, "신입"),
+        ("NOT_MATTER", None, "경력 무관"),
+        ("EXPERIENCED", 3, "3년 이상"),
+        ("EXPERIENCED", None, "경력"),
+    ]
+    for i, (career_type, career_from, expected_level) in enumerate(cases):
+        openings = [
+            _opening(3000 + i, career_type=career_type, career_from=career_from)
+        ]
+        stubs, _ = _postings_from_next_data(
+            openings, "https://career.example.com/ko/apply",
+            "TestCo", "src", _GreetingConfig()
+        )
+        assert stubs[0].experience_level == expected_level, (
+            f"career_type={career_type} career_from={career_from}: "
+            f"expected {expected_level}, got {stubs[0].experience_level}"
+        )
+
+
+def test_postings_from_next_data_description_is_none():
+    """Stubs from __NEXT_DATA__ have description=None (filled later by detail fetch)."""
+    openings = [_opening(4001, "백엔드 개발자")]
+    stubs, _ = _postings_from_next_data(
+        openings, "https://career.example.com/ko/apply",
+        "TestCo", "src", _GreetingConfig()
+    )
+    assert stubs[0].description is None
+
+
+def test_postings_from_next_data_skips_opening_without_title():
+    openings = [
+        {
+            "openingId": 5001,
+            "title": "",
+            "openingJobPosition": {"openingJobPositions": []},
+        },
+        _opening(5002, "정상 공고"),
+    ]
+    stubs, _ = _postings_from_next_data(
+        openings, "https://career.example.com/ko/apply",
+        "TestCo", "src", _GreetingConfig()
+    )
+    assert len(stubs) == 1
+    assert stubs[0].title == "정상 공고"
+
+
+# ── _build_self_hosted_job_url ────────────────────────────────────────────────
+
+def test_build_job_url_ko_locale_from_home():
+    url = _build_self_hosted_job_url("https://www.musinsacareers.com/ko/home", 227433)
+    assert url == "https://www.musinsacareers.com/ko/o/227433"
+
+
+def test_build_job_url_ko_locale_from_apply():
+    base = "https://career.hyundai-autoever.com/ko/apply"
+    url = _build_self_hosted_job_url(base, 229348)
+    assert url == "https://career.hyundai-autoever.com/ko/o/229348"
+
+
+def test_build_job_url_no_locale():
+    url = _build_self_hosted_job_url("https://career.example.com/apply", 9999)
+    assert url == "https://career.example.com/o/9999"
+
+
+# ── GreetingParser.fetch with __NEXT_DATA__ path ─────────────────────────────
+
+def _next_data_list_html(openings: list[dict]) -> str:
+    """Full page HTML with __NEXT_DATA__ openings AND anchor links for job cards."""
+    payload = {
+        "props": {
+            "pageProps": {
+                "dehydratedState": {
+                    "queries": [
+                        {
+                            "queryKey": ["openings"],
+                            "state": {"data": openings},
+                        }
+                    ]
+                }
+            }
+        }
+    }
+    payload_json = json.dumps(payload, ensure_ascii=False)
+    # Also include the anchor links (as real Greeting pages do)
+    links = "".join(
+        '<a href="/ko/o/{}">{}</a>'.format(o["openingId"], o["title"])
+        for o in openings
+    )
+    return (
+        f'<html><head></head><body>{links}'
+        f'<script id="__NEXT_DATA__" type="application/json">'
+        f'{payload_json}'
+        f'</script></body></html>'
+    )
+
+
+def _detail_html_with_description(description: str = "채용 공고 상세 설명") -> str:
+    return (
+        f"<html><body><main><h1>공고 제목</h1>"
+        f"<div class='desc'>{description}</div></main></body></html>"
+    )
+
+
+async def test_fetch_next_data_path_extracts_metadata(monkeypatch):
+    """When __NEXT_DATA__ openings present, metadata comes from payload, not DOM."""
+    openings = [
+        _opening(
+            101,
+            "백엔드 개발자",
+            job="Backend Engineering",
+            career_type="EXPERIENCED",
+            career_from=3,
+            employment_type="FULL_TIME_WORKER",
+            location="서울",
+        )
+    ]
+    list_html = _next_data_list_html(openings)
+    detail_html = _detail_html_with_description("담당 업무: 서버 개발")
+    mock = _MockClient([(200, list_html), (200, detail_html)])
+    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+
+    src = _sh_source(_SH_A_BASE, _SH_A_HOME, company_id=10)
+    result = await GreetingParser().fetch(
+        src, _profile("무신사", 10), _options(), _COLLECT_DATE
+    )
+
+    assert len(result.postings) == 1
+    p = result.postings[0]
+    assert p.title == "백엔드 개발자"
+    assert p.roles == ["Backend Engineering"]
+    assert p.experience_level == "3년 이상"
+    assert p.employment_type == "정규직"
+    assert p.location == "서울"
+    assert p.source_external_id == "101"
+    assert result.source_stats is not None
+    assert result.source_stats.discovered == 1
+
+
+async def test_fetch_non_dev_role_not_misclassified(monkeypatch):
+    """Non-dev roles (Design/VMD, IT PM, MD) stored as-is from structured metadata."""
+    non_dev_cases = [
+        ("Design/VMD 담당자", "Design/VMD", None),
+        ("IT PM - CRM", None, "IT PM"),
+        ("물류 관리", None, "Logistics"),
+    ]
+    for title, job, occ in non_dev_cases:
+        openings = [_opening(200, title, job=job, occupation=occ)]
+        list_html = _next_data_list_html(openings)
+        detail_html = _detail_html_with_description("상세 설명")
+        mock = _MockClient([(200, list_html), (200, detail_html)])
+        monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+
+        src = _sh_source(_SH_B_BASE, _SH_B_APPLY, company_id=20)
+        result = await GreetingParser().fetch(
+            src, _profile("현대오토에버", 20), _options(), _COLLECT_DATE
+        )
+
+        assert len(result.postings) == 1
+        p = result.postings[0]
+        expected_role = job or occ or ""
+        assert p.roles == [expected_role], (
+            f"title={title}: expected [{expected_role}], got {p.roles}"
+        )
+
+
+async def test_fetch_next_data_empty_openings_returns_zero_with_warning(monkeypatch):
+    """__NEXT_DATA__ with empty openings list → 0 results + warning (not silent)."""
+    list_html = _next_data_list_html([])
+    mock = _MockClient([(200, list_html)])
+    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+
+    src = _sh_source(_SH_A_BASE, _SH_A_HOME, company_id=10)
+    result = await GreetingParser().fetch(
+        src, _profile("무신사", 10), _options(), _COLLECT_DATE
+    )
+
+    assert result.postings == []
+    assert result.source_stats is not None
+    assert result.source_stats.discovered == 0
+    # Must warn to distinguish from parse failure
+    assert any("empty" in w.lower() for w in result.warnings)
+
+
+async def test_fetch_next_data_detail_failure_keeps_stub(monkeypatch):
+    """When detail page fails, the posting is kept without description (not dropped)."""
+    openings = [_opening(301, "프론트엔드 개발자", job="Frontend Engineering")]
+    list_html = _next_data_list_html(openings)
+    mock = _MockClient([(200, list_html), (500, "Server Error")])
+    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+
+    src = _sh_source(_SH_C_BASE, _SH_C_APPLY, company_id=30)
+    result = await GreetingParser().fetch(
+        src, _profile("CJ올리브영", 30), _options(), _COLLECT_DATE
+    )
+
+    # Posting must NOT be dropped even though detail failed
+    assert len(result.postings) == 1
+    p = result.postings[0]
+    assert p.title == "프론트엔드 개발자"
+    assert p.roles == ["Frontend Engineering"]
+    assert p.description is None
+    assert any("500" in w for w in result.warnings)
+
+
+async def test_fetch_next_data_detail_timeout_keeps_stub(monkeypatch):
+    """When detail page times out, the posting is kept without description."""
+    openings = [_opening(302, "데이터 엔지니어", job="Data Engineering")]
+    list_html = _next_data_list_html(openings)
+    request = httpx.Request("GET", f"{_SH_C_BASE}/ko/o/302")
+    mock = _MockClient([(200, list_html), TimeoutException("timeout", request=request)])
+    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+
+    src = _sh_source(_SH_C_BASE, _SH_C_APPLY, company_id=30)
+    result = await GreetingParser().fetch(
+        src, _profile("CJ올리브영", 30), _options(), _COLLECT_DATE
+    )
+
+    assert len(result.postings) == 1
+    assert result.postings[0].description is None
+    assert any("timeout" in w for w in result.warnings)
+
+
+async def test_fetch_next_data_multiple_openings_respects_max_fetch(monkeypatch):
+    """max_fetch is respected when fetching detail pages for __NEXT_DATA__ openings."""
+    openings = [_opening(400 + i, f"공고 {i}") for i in range(5)]
+    list_html = _next_data_list_html(openings)
+    detail_html = _detail_html_with_description("상세 내용")
+    # Provide 3 detail pages for max_fetch=3
+    mock = _MockClient(
+        [(200, list_html)] + [(200, detail_html)] * 3
+    )
+    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+
+    cfg = json.dumps({"parser_key": "GREETING", "max_fetch": 3})
+    src = OfficialCompanySource(
+        company_id=40,
+        source_type="OFFICIAL_CAREER",
+        source_url=_SH_A_HOME,
+        adapter_type="CUSTOM",
+        config_json=cfg,
+    )
+    result = await GreetingParser().fetch(
+        src, _profile("TestCo", 40), _options(), _COLLECT_DATE
+    )
+
+    assert result.source_stats is not None
+    assert result.source_stats.discovered == 5
+    assert result.source_stats.fetched == 3
+    assert len(result.postings) == 3
+
+
+async def test_fetch_structured_data_over_inferred_roles(monkeypatch):
+    """Structured roles from __NEXT_DATA__ take precedence over title-inferred roles."""
+    # Title "백엔드 개발자" would normally infer roles=["백엔드"] from title.
+    # But explicit roles="Backend Engineering" from payload should win.
+    openings = [
+        _opening(501, "백엔드 개발자", job="Backend Engineering")
+    ]
+    list_html = _next_data_list_html(openings)
+    detail_html = _detail_html_with_description("서버 개발")
+    mock = _MockClient([(200, list_html), (200, detail_html)])
+    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+
+    src = _sh_source(_SH_A_BASE, _SH_A_HOME, company_id=10)
+    result = await GreetingParser().fetch(
+        src, _profile("무신사", 10), _options(), _COLLECT_DATE
+    )
+
+    assert result.postings[0].roles == ["Backend Engineering"]
+    # normalization will use this as-is (not infer "백엔드" from title)
+
+
+async def test_fetch_malformed_next_data_falls_back_to_anchor_links(monkeypatch):
+    """If __NEXT_DATA__ is present but malformed, fall back to anchor-link discovery."""
+    # Malformed: __NEXT_DATA__ is invalid JSON
+    list_html = (
+        '<html><body>'
+        '<a href="/ko/o/601">공고 601</a>'
+        '<script id="__NEXT_DATA__" type="application/json">invalid{json}</script>'
+        '</body></html>'
+    )
+    detail_html = _sh_detail_html("폴백 공고")
+    mock = _MockClient([(200, list_html), (200, detail_html)])
+    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+
+    src = _sh_source(_SH_A_BASE, _SH_A_HOME, company_id=10)
+    result = await GreetingParser().fetch(
+        src, _profile("무신사", 10), _options(), _COLLECT_DATE
+    )
+
+    # Falls back to anchor-link discovery: 1 job found
+    assert len(result.postings) == 1
+    assert result.postings[0].title == "폴백 공고"
+
+
+async def test_preflight_with_next_data_returns_metadata(monkeypatch):
+    """preflight returns experience_level and roles when __NEXT_DATA__ available."""
+    openings = [
+        _opening(
+            701,
+            "백엔드 개발자",
+            job="Backend Engineering",
+            career_type="EXPERIENCED",
+            career_from=3,
+            employment_type="FULL_TIME_WORKER",
+            location="서울",
+        )
+    ]
+    list_html = _next_data_list_html(openings)
+    detail_html = _detail_html_with_description("서버 개발")
+    mock = _MockClient([(200, list_html), (200, detail_html)])
+    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+
+    src = _sh_source(_SH_A_BASE, _SH_A_HOME, company_id=10)
+    result = await greeting_preflight(src)
+
+    assert result["reachable"] is True
+    assert result["discovered_count"] == 1
+    assert result["sample_parsed"] is not None
+    assert result["sample_parsed"]["roles"] == ["Backend Engineering"]
+    assert result["sample_parsed"]["experience_level"] == "3년 이상"
+    assert result["sample_parsed"]["employment_type"] == "정규직"
+    assert result["sample_parsed"]["location"] == "서울"

@@ -430,6 +430,111 @@ class CandidatePoolServiceTest {
     assertThat(withSlash).isEqualTo(withoutSlash);
   }
 
+  // ── Metadata enrichment via upsert ────────────────────────────────────────
+
+  private CollectedJobPostingData dataWithMetadata(
+      String url,
+      String contentHash,
+      String roles,
+      String experienceLevel,
+      String employmentType,
+      String location) {
+    return new CollectedJobPostingData(
+        "백엔드 개발자",
+        "네이버",
+        "원티드",
+        url,
+        location,
+        LocalDate.of(2026, 7, 15),
+        "설명",
+        roles,
+        null,
+        employmentType,
+        experienceLevel,
+        contentHash,
+        null,
+        null,
+        null,
+        null);
+  }
+
+  private JobPosting postingWithNullMetadata(String url) {
+    return JobPosting.create(
+        "백엔드 개발자",
+        "네이버",
+        "원티드",
+        url,
+        null, // location null
+        null,
+        "기존 설명",
+        null, // roles null
+        null,
+        null, // employmentType null
+        null, // experienceLevel null
+        "oldhash",
+        LocalDate.of(2026, 6, 1),
+        null);
+  }
+
+  @Test
+  void upsertJobPostings_canonicalByUrl_enrichesNullRoles() {
+    String url = "https://example.com/job/enrich1";
+    JobPosting existing = postingWithNullMetadata(url);
+
+    CollectedJobPostingData incoming =
+        dataWithMetadata(url, "newhash", "[\"Backend Engineering\"]", "3년 이상", "정규직", "서울");
+
+    stubSourceNotFound("원티드", url);
+    when(jobPostingRepository.findFirstByUrl(url)).thenReturn(Optional.of(existing));
+
+    candidatePoolService.upsertJobPostings(List.of(incoming), COLLECTED_DATE);
+
+    assertThat(existing.getRoles()).isEqualTo("[\"Backend Engineering\"]");
+    assertThat(existing.getExperienceLevel()).isEqualTo("3년 이상");
+    assertThat(existing.getEmploymentType()).isEqualTo("정규직");
+    assertThat(existing.getLocation()).isEqualTo("서울");
+  }
+
+  @Test
+  void upsertJobPostings_canonicalByUrl_doesNotOverwriteExistingRolesWithNull() {
+    String url = "https://example.com/job/enrich2";
+    JobPosting existing = existingPosting(url); // has "기존 설명" but no roles
+
+    // Override: set existing roles to a real value
+    CollectedJobPostingData seedData =
+        dataWithMetadata(url, "hash_seed", "[\"Backend\"]", "신입", "정규직", "서울");
+    stubSourceNotFound("원티드", url);
+    when(jobPostingRepository.findFirstByUrl(url)).thenReturn(Optional.of(existing));
+    candidatePoolService.upsertJobPostings(List.of(seedData), COLLECTED_DATE);
+    assertThat(existing.getRoles()).isEqualTo("[\"Backend\"]");
+
+    // Now re-collect with null roles — existing roles must survive
+    CollectedJobPostingData nullRoles = dataWithMetadata(url, "hash2", null, null, null, null);
+    when(jobPostingSourceRepository.findBySourceRecordKey(any())).thenReturn(Optional.empty());
+    when(jobPostingRepository.findFirstByUrl(url)).thenReturn(Optional.of(existing));
+    candidatePoolService.upsertJobPostings(List.of(nullRoles), COLLECTED_DATE);
+
+    assertThat(existing.getRoles()).isEqualTo("[\"Backend\"]");
+  }
+
+  @Test
+  void upsertJobPostings_sameContentHash_stillEnrichesMetadata() {
+    // Even if contentHash is same, metadata should be enriched when null
+    String url = "https://example.com/job/enrich3";
+    JobPosting existing = postingWithNullMetadata(url);
+
+    CollectedJobPostingData incoming =
+        dataWithMetadata(url, "oldhash", "[\"Backend Engineering\"]", "3년 이상", "정규직", "서울");
+
+    stubSourceNotFound("원티드", url);
+    when(jobPostingRepository.findFirstByUrl(url)).thenReturn(Optional.of(existing));
+
+    candidatePoolService.upsertJobPostings(List.of(incoming), COLLECTED_DATE);
+
+    assertThat(existing.getRoles()).isEqualTo("[\"Backend Engineering\"]");
+    assertThat(existing.getExperienceLevel()).isEqualTo("3년 이상");
+  }
+
   @Test
   void buildSourceRecordKey_uppercaseUrl_sameAsLowercase() {
     String upper =

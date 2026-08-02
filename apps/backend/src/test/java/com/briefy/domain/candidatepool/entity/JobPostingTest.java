@@ -121,4 +121,147 @@ class JobPostingTest {
 
     assertThat(jp.getContentHash()).isEqualTo(originalHash);
   }
+
+  // ── Metadata enrichment tests ──────────────────────────────────────────────
+
+  private JobPosting postingWithNullMetadata(String url) {
+    return JobPosting.create(
+        "백엔드 개발자", "네이버", "원티드", url, null, // location null
+        null, "기존 설명", null, // roles null
+        null, // skills null
+        null, // employmentType null
+        null, // experienceLevel null
+        "hash", COLLECTED, null);
+  }
+
+  @Test
+  void refreshFrom_enrichesNullRolesWithNewValue() {
+    JobPosting jp = postingWithNullMetadata("https://example.com/job/10");
+    assertThat(jp.getRoles()).isNull();
+
+    jp.refreshFrom(
+        null,
+        null,
+        "newhash",
+        COLLECTED,
+        "[\"Backend Engineering\"]",
+        null,
+        null,
+        null,
+        null,
+        null);
+
+    assertThat(jp.getRoles()).isEqualTo("[\"Backend Engineering\"]");
+  }
+
+  @Test
+  void refreshFrom_doesNotOverwriteExistingRolesWithNull() {
+    JobPosting jp = newPosting("https://example.com/job/11");
+    assertThat(jp.getRoles()).isEqualTo("[\"백엔드 개발자\"]");
+
+    jp.refreshFrom(null, null, "newhash", COLLECTED, null, null, null, null, null, null);
+
+    assertThat(jp.getRoles()).isEqualTo("[\"백엔드 개발자\"]");
+  }
+
+  @Test
+  void refreshFrom_doesNotOverwriteExistingRolesWithEmptyArray() {
+    JobPosting jp = newPosting("https://example.com/job/12");
+    String originalRoles = jp.getRoles();
+
+    jp.refreshFrom(null, null, "newhash", COLLECTED, "[]", null, null, null, null, null);
+
+    assertThat(jp.getRoles()).isEqualTo(originalRoles);
+  }
+
+  @Test
+  void refreshFrom_enrichesNullExperienceLevelWithNewValue() {
+    JobPosting jp = postingWithNullMetadata("https://example.com/job/13");
+
+    jp.refreshFrom(null, null, "newhash", COLLECTED, null, null, "3년 이상", null, null, null);
+
+    assertThat(jp.getExperienceLevel()).isEqualTo("3년 이상");
+  }
+
+  @Test
+  void refreshFrom_doesNotOverwriteExistingExperienceLevelWithNull() {
+    JobPosting jp = newPosting("https://example.com/job/14");
+    assertThat(jp.getExperienceLevel()).isEqualTo("신입");
+
+    jp.refreshFrom(null, null, "newhash", COLLECTED, null, null, null, null, null, null);
+
+    assertThat(jp.getExperienceLevel()).isEqualTo("신입");
+  }
+
+  @Test
+  void refreshFrom_enrichesNullEmploymentTypeWithNewValue() {
+    JobPosting jp = postingWithNullMetadata("https://example.com/job/15");
+
+    jp.refreshFrom(null, null, "newhash", COLLECTED, null, null, null, "정규직", null, null);
+
+    assertThat(jp.getEmploymentType()).isEqualTo("정규직");
+  }
+
+  @Test
+  void refreshFrom_enrichesNullLocationWithNewValue() {
+    JobPosting jp = postingWithNullMetadata("https://example.com/job/16");
+
+    jp.refreshFrom(null, null, "newhash", COLLECTED, null, null, null, null, "서울", null);
+
+    assertThat(jp.getLocation()).isEqualTo("서울");
+  }
+
+  @Test
+  void refreshFrom_doesNotOverwriteExistingLocationWithNull() {
+    JobPosting jp = newPosting("https://example.com/job/17");
+    assertThat(jp.getLocation()).isEqualTo("서울");
+
+    jp.refreshFrom(null, null, "newhash", COLLECTED, null, null, null, null, null, null);
+
+    assertThat(jp.getLocation()).isEqualTo("서울");
+  }
+
+  @Test
+  void refreshFrom_enrichesAllNullMetadataAtOnce() {
+    JobPosting jp = postingWithNullMetadata("https://example.com/job/18");
+
+    jp.refreshFrom(
+        LocalDate.of(2026, 8, 31),
+        "새 설명",
+        "newhash",
+        COLLECTED,
+        "[\"Backend Engineering\"]",
+        "[\"Java\"]",
+        "3년 이상",
+        "정규직",
+        "서울",
+        null);
+
+    assertThat(jp.getRoles()).isEqualTo("[\"Backend Engineering\"]");
+    assertThat(jp.getSkills()).isEqualTo("[\"Java\"]");
+    assertThat(jp.getExperienceLevel()).isEqualTo("3년 이상");
+    assertThat(jp.getEmploymentType()).isEqualTo("정규직");
+    assertThat(jp.getLocation()).isEqualTo("서울");
+  }
+
+  @Test
+  void refreshFrom_sameContentHash_stillEnrichesMetadata() {
+    // contentHash same doesn't block metadata enrichment
+    JobPosting jp = postingWithNullMetadata("https://example.com/job/19");
+
+    jp.refreshFrom(
+        null,
+        null,
+        "hash",
+        COLLECTED, // same hash as created with
+        "[\"Backend Engineering\"]",
+        null,
+        "신입",
+        "정규직",
+        "서울",
+        null);
+
+    assertThat(jp.getRoles()).isEqualTo("[\"Backend Engineering\"]");
+    assertThat(jp.getExperienceLevel()).isEqualTo("신입");
+  }
 }
