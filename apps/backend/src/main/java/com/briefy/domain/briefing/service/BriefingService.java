@@ -163,7 +163,7 @@ public class BriefingService {
               .orElse(null);
       if (nickname != null) {
         String updated =
-            agentResponse.content().replace("# 오늘의 채용 브리핑", "# 오늘의 채용 브리핑 - " + nickname);
+            agentResponse.content().replace("# 오늘의 채용 브리핑", "# 오늘의 채용 브리핑 - " + nickname + "님");
         agentResponse =
             new AgentBriefingResponse(
                 agentResponse.title(),
