@@ -34,7 +34,7 @@ Treat `docs/database.md` as the companion reference for the underlying schema.
 | Backend API prefix | `/api` |
 | Agent base URL (local) | `http://localhost:8000` |
 | Agent API prefix | _(none — no `/api` prefix)_ |
-| Auth mechanism | Google OAuth 2.0 Authorization Code Flow + JWT HttpOnly Cookie |
+| Auth mechanism | Google / Kakao OAuth 2.0 Authorization Code Flow + JWT HttpOnly Cookie |
 | MVP delivery channel | Email |
 | Report content format | Markdown |
 
@@ -103,6 +103,8 @@ The HTTP status code always reflects the outcome:
 | `UNAUTHORIZED` | 401 | JWT cookie is missing or expired |
 | `FORBIDDEN` | 403 | Authenticated but not authorized (wrong role or not the owner) |
 | `VALIDATION_ERROR` | 400 | Request body or query param failed validation |
+| `KAKAO_EMAIL_REQUIRED` | 400 | Kakao account has no email or email consent not granted |
+| `KAKAO_EMAIL_INVALID` | 400 | Kakao account email is not valid or not verified |
 | `USER_NOT_FOUND` | 404 | Target user does not exist |
 | `BRIEFING_CATEGORY_NOT_FOUND` | 404 | Referenced briefing category does not exist or is inactive |
 | `BRIEFING_PREFERENCE_NOT_FOUND` | 404 | The preference row does not exist or is not owned by the caller |
@@ -117,6 +119,8 @@ The HTTP status code always reflects the outcome:
 
 ## Auth API
 
+Both Google and Kakao use Authorization Code Flow. The backend generates a CSRF `state` token on each authorize request, stores it in Redis (10-minute TTL), and sets an `oauth_state` HttpOnly cookie. On callback the state from the query parameter is compared with the cookie value and the Redis entry is consumed (one-time use).
+
 ### 1-1. Start Google OAuth Login
 
 ```
@@ -125,12 +129,13 @@ GET /api/oauth2/authorize/google
 
 **Auth:** Public
 
-**Description:** Redirects the browser to the Google OAuth consent page. The frontend navigates to this URL when the user clicks the Google login button.
+**Description:** Generates a CSRF `state`, then redirects the browser to the Google OAuth consent page.
 
 **Response:**
 
 ```
 302 Redirect → Google OAuth consent page
+Set-Cookie: oauth_state={state}; HttpOnly; SameSite=Lax; Path=/api/oauth2; Max-Age=600
 ```
 
 ---
@@ -138,18 +143,19 @@ GET /api/oauth2/authorize/google
 ### 1-2. Google OAuth Callback
 
 ```
-GET /api/oauth2/callback/google?code={code}
+GET /api/oauth2/callback/google?code={code}&state={state}
 ```
 
 **Auth:** Public
 
 **Description:**
-Handles the redirect from Google after the user grants consent. The backend:
-1. Exchanges the `code` for a Google access token
-2. Fetches Google user info (email, name, profile image)
-3. Finds the existing user by `(provider=GOOGLE, providerId)` or creates a new one
-4. Issues a JWT as an HttpOnly cookie
-5. Redirects the browser to the appropriate frontend page
+Handles the redirect from Google. The backend:
+1. Validates the `state` parameter against the `oauth_state` cookie and Redis (one-time use)
+2. Exchanges the `code` for a Google access token
+3. Fetches Google user info (email, name, profile image)
+4. Finds the existing user by `(provider=GOOGLE, providerId)` or creates a new one
+5. Issues a JWT as an HttpOnly cookie
+6. Redirects the browser to the appropriate frontend page
 
 **Cookie set:**
 
@@ -167,16 +173,63 @@ Handles the redirect from Google after the user grants consent. The backend:
 |---|---|
 | `onboardingCompleted = false` | `{FRONTEND_URL}/onboarding` |
 | `onboardingCompleted = true` | `{FRONTEND_URL}/dashboard` |
+| Error / state mismatch | `{FRONTEND_URL}/?error=oauth_failed` or `{FRONTEND_URL}/login?error=oauth_state_invalid` |
+
+---
+
+### 1-3. Start Kakao OAuth Login
+
+```
+GET /api/oauth2/authorize/kakao
+```
+
+**Auth:** Public
+
+**Description:** Generates a CSRF `state`, then redirects the browser to the Kakao OAuth consent page. Requests `account_email`, `profile_nickname`, and `profile_image` scopes.
 
 **Response:**
 
 ```
-302 or 303 Redirect (with Set-Cookie header)
+302 Redirect → Kakao OAuth consent page
+Set-Cookie: oauth_state={state}; HttpOnly; SameSite=Lax; Path=/api/oauth2; Max-Age=600
 ```
 
 ---
 
-### 1-3. Logout
+### 1-4. Kakao OAuth Callback
+
+```
+GET /api/oauth2/callback/kakao?code={code}&state={state}
+```
+
+**Auth:** Public
+
+**Description:**
+Handles the redirect from Kakao. The backend:
+1. Validates the `state` parameter against the `oauth_state` cookie and Redis (one-time use)
+2. Exchanges the `code` for a Kakao access token (REST API, `application/x-www-form-urlencoded`, includes `client_secret`)
+3. Fetches Kakao user info (`id`, `kakao_account.email`, `kakao_account.profile.nickname`, `profile_image_url`)
+4. Validates email: must be present, `is_email_valid=true`, `is_email_verified=true`, `email_needs_agreement=false`
+5. Looks up user by `(provider=KAKAO, providerId=kakao_id)`. If not found, checks for email conflict with a different provider
+6. Issues a JWT as an HttpOnly cookie
+7. Redirects the browser to the appropriate frontend page
+
+**Redirect:**
+
+| Condition | Destination |
+|---|---|
+| `onboardingCompleted = false` | `{FRONTEND_URL}/onboarding` |
+| `onboardingCompleted = true` | `{FRONTEND_URL}/dashboard` |
+| User cancelled | `{FRONTEND_URL}/login?error=oauth_cancelled` |
+| State mismatch | `{FRONTEND_URL}/login?error=oauth_state_invalid` |
+| Email not provided or consent not granted | `{FRONTEND_URL}/login?error=kakao_email_required` |
+| Email not valid or not verified | `{FRONTEND_URL}/login?error=kakao_email_invalid` |
+| Same email exists under different provider | `{FRONTEND_URL}/login?error=oauth_provider_conflict&provider={existing_provider}` |
+| Other error | `{FRONTEND_URL}/login?error=oauth_failed` |
+
+---
+
+### 1-5. Logout
 
 ```
 POST /api/auth/logout

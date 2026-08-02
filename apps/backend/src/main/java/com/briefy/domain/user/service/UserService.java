@@ -1,5 +1,6 @@
 package com.briefy.domain.user.service;
 
+import com.briefy.domain.auth.exception.OAuthProviderConflictException;
 import com.briefy.domain.briefing.entity.BriefingReport;
 import com.briefy.domain.briefing.repository.BriefingJobRepository;
 import com.briefy.domain.briefing.repository.BriefingReportRepository;
@@ -98,5 +99,24 @@ public class UserService {
             () ->
                 userRepository.save(
                     User.create(email, nickname, profileImageUrl, provider, providerId)));
+  }
+
+  @Transactional
+  public User findOrCreateKakao(
+      String email, String kakaoId, String nickname, String profileImageUrl) {
+    return userRepository
+        .findByProviderAndProviderId(AuthProvider.KAKAO, kakaoId)
+        .orElseGet(
+            () -> {
+              userRepository
+                  .findByEmail(email)
+                  .ifPresent(
+                      existing -> {
+                        throw new OAuthProviderConflictException(
+                            existing.getProvider().name().toLowerCase());
+                      });
+              return userRepository.save(
+                  User.create(email, nickname, profileImageUrl, AuthProvider.KAKAO, kakaoId));
+            });
   }
 }

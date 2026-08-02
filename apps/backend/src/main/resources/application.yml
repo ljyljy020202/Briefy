@@ -39,6 +39,11 @@ google:
   client-secret: ${GOOGLE_CLIENT_SECRET:not-configured}
   redirect-uri: ${GOOGLE_REDIRECT_URI:http://localhost:8080/api/oauth2/callback/google}
 
+kakao:
+  client-id: ${KAKAO_CLIENT_ID:not-configured}
+  client-secret: ${KAKAO_CLIENT_SECRET:not-configured}
+  redirect-uri: ${KAKAO_REDIRECT_URI:http://localhost:8080/api/oauth2/callback/kakao}
+
 jwt:
   secret: ${JWT_SECRET:development-secret-must-be-changed-in-production}
   expiration-seconds: ${JWT_EXPIRATION_SECONDS:86400}
