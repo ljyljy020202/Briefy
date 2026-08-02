@@ -81,19 +81,6 @@ public class DailyCollectionService {
   }
 
   public DailyCollectionResult triggerScheduledDailyCollection(LocalDate collectDate) {
-    if (collectionJobService.isAlreadyActiveForDate(collectDate)) {
-      log.info(
-          "Skipping scheduled collection for {} — already PROCESSING or COMPLETED", collectDate);
-      return new DailyCollectionResult(
-          null,
-          "SKIPPED",
-          collectDate,
-          null,
-          0,
-          0,
-          List.of(),
-          "Already PROCESSING or COMPLETED for " + collectDate);
-    }
     return executeCollection(collectDate, null, CollectionTriggerType.SCHEDULED);
   }
 

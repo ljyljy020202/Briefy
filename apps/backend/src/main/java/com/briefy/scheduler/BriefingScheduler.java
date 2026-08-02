@@ -2,7 +2,6 @@ package com.briefy.scheduler;
 
 import com.briefy.config.EmailProperties;
 import com.briefy.domain.briefing.dto.GenerateResult;
-import com.briefy.domain.briefing.repository.BriefingReportRepository;
 import com.briefy.domain.briefing.service.BriefingService;
 import com.briefy.domain.briefingpreference.entity.BriefingCategoryCode;
 import com.briefy.domain.briefingpreference.entity.UserBriefingPreference;
@@ -28,7 +27,6 @@ public class BriefingScheduler {
 
   private final BriefingService briefingService;
   private final UserBriefingPreferenceRepository userBriefingPreferenceRepository;
-  private final BriefingReportRepository briefingReportRepository;
   private final EmailDeliveryService emailDeliveryService;
   private final EmailProperties emailProperties;
   private final UserRepository userRepository;
@@ -36,13 +34,11 @@ public class BriefingScheduler {
   public BriefingScheduler(
       BriefingService briefingService,
       UserBriefingPreferenceRepository userBriefingPreferenceRepository,
-      BriefingReportRepository briefingReportRepository,
       EmailDeliveryService emailDeliveryService,
       EmailProperties emailProperties,
       UserRepository userRepository) {
     this.briefingService = briefingService;
     this.userBriefingPreferenceRepository = userBriefingPreferenceRepository;
-    this.briefingReportRepository = briefingReportRepository;
     this.emailDeliveryService = emailDeliveryService;
     this.emailProperties = emailProperties;
     this.userRepository = userRepository;
@@ -76,10 +72,6 @@ public class BriefingScheduler {
     List<Long> userIds = preferenceUserIds.stream().filter(subscribedUserIds::contains).toList();
 
     for (Long userId : userIds) {
-      if (briefingReportRepository.existsByUserIdAndReportDate(userId, today)) {
-        log.info("Skipping user {} — briefing already exists for {}", userId, today);
-        continue;
-      }
       try {
         GenerateResult result = briefingService.generateScheduledBriefing(userId);
         log.info("Briefing generated for user {}: reportId={}", userId, result.briefingReportId());
