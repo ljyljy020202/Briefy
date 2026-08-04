@@ -273,7 +273,7 @@ export default function OnboardingPage() {
                 </p>
                 <div className="mt-6 flex max-w-sm flex-col gap-3">
                   <GoogleLoginButton />
-                  <KakaoLoginButton />
+                  <KakaoLoginButton label="카카오로 시작하기" />
                 </div>
               </div>
             )}

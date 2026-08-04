@@ -15,6 +15,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { BriefyLogo } from '@/components/briefy/BriefyLogo'
 import { MarketingNav } from '@/components/briefy/MarketingNav'
 import { GoogleLoginButton } from '@/components/auth/GoogleLoginButton'
+import { KakaoLoginButton } from '@/components/auth/KakaoLoginButton'
 import { MOCK_REPORTS } from '@/lib/mock-data'
 
 const FEATURES = [
@@ -244,25 +245,12 @@ export default function LandingPage() {
                 지금 무료로 시작
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
-                Google 계정으로 1초 만에 시작하세요.
+                간편 로그인으로 1초 만에 시작하세요.
               </p>
-              <div className="mt-4">
+              <div className="mt-4 space-y-3">
                 <GoogleLoginButton />
+                <KakaoLoginButton label="카카오로 시작하기" />
               </div>
-              <div className="my-4 flex items-center gap-3">
-                <span className="h-px flex-1 bg-border" />
-                <span className="text-xs text-muted-foreground">또는</span>
-                <span className="h-px flex-1 bg-border" />
-              </div>
-              <Link
-                href="/onboarding"
-                className={cn(
-                  buttonVariants({ variant: 'outline' }),
-                  'h-11 w-full',
-                )}
-              >
-                이메일로 설정하기
-              </Link>
             </div>
           </CardContent>
         </Card>
