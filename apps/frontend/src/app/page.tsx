@@ -51,23 +51,24 @@ export default function LandingPage() {
       <section className="relative">
         <div className="mx-auto max-w-4xl px-4 pb-20 pt-16 sm:px-6 lg:px-8 lg:pt-24">
           <div className="text-center">
-            <Badge variant="outline" className="mb-6 bg-card">
+            <Badge variant="outline" className="mb-6 bg-card gap-1">
               <Sparkles className="size-3.5 text-primary" />
-              매일 아침, AI 맞춤 브리핑
+              AI 맞춤 채용 브리핑
             </Badge>
-            <h1 className="text-balance text-3xl font-bold leading-[1.15] tracking-tight text-foreground sm:text-4xl lg:text-5xl">
-              관심 주제만 골라,
+            <h1 className="text-balance text-2xl font-bold leading-[1.15] tracking-tight text-foreground sm:text-4xl lg:text-5xl">
+              흩어진 개발자 채용 공고,
               <br />
               <span className="text-primary">매일 아침 AI 브리핑</span>으로
               받아보세요.
             </h1>
             <p className="mx-auto mt-6 max-w-xl text-pretty text-lg leading-relaxed text-muted-foreground sm:text-xl">
-              Briefy는 관심 직무와 기업을 등록하면, 매일 확인해야 할 채용 공고와
-              기업 이슈를 AI가 요약해주는 개인 맞춤 데일리 브리핑 서비스입니다.
+              여러 채용 사이트와 기업 공식 채용 페이지의 공고를 모아,
+              <br />
+              관심 직무와 기업 등 내 조건에 맞는 공고만 선별해 이메일로 보내드려요.
             </p>
             <p className="mx-auto mt-3 max-w-sm text-sm text-muted-foreground/80">
               지금은{' '}
-              <span className="font-medium text-foreground">개발자 채용 브리핑</span>을
+              <span className="font-medium text-foreground">개발자·IT 직군 채용 브리핑</span>을
               제공합니다 — 신규 공고·마감 임박·매칭 이유를 매일 아침 한눈에.
             </p>
             <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
@@ -78,7 +79,7 @@ export default function LandingPage() {
                   'h-11 px-6 text-sm inline-flex items-center gap-2',
                 )}
               >
-                무료로 시작하기
+                무료로 브리핑 받기
                 <ArrowRight className="size-4" />
               </Link>
               <a
@@ -88,11 +89,11 @@ export default function LandingPage() {
                   'h-11 px-6 text-sm',
                 )}
               >
-                브리핑 예시 보기
+                실제 브리핑 미리보기
               </a>
             </div>
             <p className="mt-4 text-xs text-muted-foreground">
-              신용카드 불필요 · 1분이면 설정 완료 · 언제든 해지
+              간편 로그인 · 1분이면 설정 완료 · 이메일 수신 언제든 변경
             </p>
           </div>
         </div>
@@ -133,10 +134,10 @@ export default function LandingPage() {
         id="sample"
         className="mx-auto max-w-6xl px-4 py-20 sm:px-6 lg:px-8"
       >
-        <div className="grid items-center gap-12 lg:grid-cols-2">
+        <div className="grid items-center gap-8 lg:grid-cols-[1fr_1.4fr]">
           <div>
             <Badge variant="outline" className="mb-4 bg-card">
-              브리핑 예시
+              브리핑 미리보기
             </Badge>
             <h2 className="text-balance text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
               읽기 좋게 정리된
@@ -144,8 +145,9 @@ export default function LandingPage() {
               하루치 채용 브리핑
             </h2>
             <p className="mt-4 text-pretty leading-relaxed text-muted-foreground">
-              신규 공고·마감 임박·매칭 이유·추천 액션까지. 오늘 지원할 공고를
-              결정하는 데 필요한 정보만 골라 드립니다.
+              신규 공고·마감 임박·매칭 이유·추천 액션까지. 
+              <br />
+              오늘 지원할 공고를 결정하는 데 필요한 정보만 골라 드립니다.
             </p>
             {/* testimonial hidden — not real user data yet */}
           </div>
@@ -159,20 +161,47 @@ export default function LandingPage() {
                 {sample.date} · {sample.readTime}
               </p>
             </div>
-            <CardContent className="space-y-6 p-6">
-              {sample.sections.map((sec) => (
-                <div key={sec.heading}>
-                  <h4 className="text-sm font-semibold text-foreground">
-                    {sec.heading}
-                  </h4>
-                  <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
-                    {sec.summary}
-                  </p>
+            <CardContent className="space-y-5 p-6">
+              {/* 추천 공고 */}
+              <div>
+                <p className="text-xs font-semibold text-foreground">🏆 추천 공고</p>
+                <div className="mt-2 space-y-3">
+                  {(sample.articles ?? []).map((article) => (
+                    <div key={article.title} className="rounded-lg border border-border p-3">
+                      <p className="text-xs font-medium text-foreground leading-snug">
+                        {article.title}
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-muted-foreground">{article.source}</p>
+                      <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                        {article.summary}
+                      </p>
+                      <div className="mt-2 rounded-md bg-primary/5 px-2.5 py-1.5">
+                        <p className="text-[11px] font-medium text-primary">매칭 이유</p>
+                        <p className="mt-0.5 text-[11px] text-foreground">{article.whyItMatters}</p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              </div>
+
+              {/* 추천 액션 */}
+              {(sample.actions ?? []).length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-foreground">💡 오늘의 추천 액션</p>
+                  <ul className="mt-2 space-y-1.5">
+                    {(sample.actions ?? []).map((action) => (
+                      <li key={action} className="flex items-start gap-2 text-xs text-muted-foreground">
+                        <span className="mt-1.5 size-1 shrink-0 rounded-full bg-primary" />
+                        {action}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               <Link
                 href="/reports"
-                className={cn(buttonVariants({ variant: 'outline' }), 'w-full')}
+                className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'w-full')}
               >
                 전체 브리핑 보기
               </Link>
