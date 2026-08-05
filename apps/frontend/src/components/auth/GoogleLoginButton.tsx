@@ -40,12 +40,15 @@ export function GoogleLoginButton({
   variant = 'light',
 }: Props) {
   const [showModal, setShowModal] = useState(false)
+  const [loading, setLoading] = useState(false)
 
   const handleClick = () => {
     if (isInAppBrowser()) {
       setShowModal(true)
       return
     }
+    if (loading) return
+    setLoading(true)
     const base = process.env.NEXT_PUBLIC_API_BASE_URL ?? ''
     window.location.href = `${base}/api/oauth2/authorize/google`
   }
@@ -56,11 +59,14 @@ export function GoogleLoginButton({
       <button
         type="button"
         onClick={handleClick}
+        disabled={loading}
+        aria-disabled={loading}
       className={cn(
         'inline-flex h-11 w-full items-center justify-center gap-3 rounded-xl border text-sm font-medium shadow-sm transition-colors',
         variant === 'light'
           ? 'border-border bg-card text-foreground hover:bg-muted'
           : 'border-border/60 bg-foreground text-background hover:bg-foreground/90',
+        loading && 'cursor-not-allowed opacity-60',
         className,
       )}
     >
