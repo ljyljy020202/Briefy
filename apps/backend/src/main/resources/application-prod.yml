@@ -6,6 +6,11 @@ spring:
 
 jwt:
   cookie-secure: true
+  # SameSite=None is required because the frontend (briefy.store) and the API
+  # (api.briefy.store) are served over credentialed cross-site requests.
+  # This value is shared by both the JWT cookie and the OAuth state correlation
+  # cookie (OAuthStateService), ensuring the state cookie survives Safari ITP's
+  # bounce-tracking mitigation during the OAuth redirect chain.
   cookie-same-site: None
 
 briefy:

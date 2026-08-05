@@ -4,11 +4,13 @@ import com.briefy.domain.auth.dto.AuthCallbackResult;
 import com.briefy.domain.auth.exception.OAuthProviderConflictException;
 import com.briefy.domain.auth.service.AuthService;
 import com.briefy.domain.auth.service.OAuthStateService;
+import com.briefy.domain.auth.service.OAuthStateService.StateValidationResult;
 import com.briefy.global.exception.BusinessException;
 import com.briefy.global.exception.ErrorCode;
 import com.briefy.global.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
@@ -42,7 +44,8 @@ public class AuthController {
     String state = oAuthStateService.generateAndStore();
     String authUrl = authService.buildGoogleAuthorizationUrl(state);
     return ResponseEntity.status(HttpStatus.FOUND)
-        .header(HttpHeaders.SET_COOKIE, oAuthStateService.buildStateCookie(state).toString())
+        .header(
+            HttpHeaders.SET_COOKIE, oAuthStateService.buildStateCookie(state, "google").toString())
         .header(HttpHeaders.LOCATION, authUrl)
         .build();
   }
@@ -53,17 +56,20 @@ public class AuthController {
       @RequestParam(required = false) String code,
       @RequestParam(required = false) String error,
       @RequestParam(required = false) String state,
-      @CookieValue(name = OAuthStateService.COOKIE_NAME, required = false) String cookieState) {
+      @CookieValue(name = "oauth_state_google", required = false) String cookieState,
+      HttpServletRequest request) {
 
-    String clearStateCookie = oAuthStateService.buildClearedStateCookie().toString();
+    String clearStateCookie = oAuthStateService.buildClearedStateCookie("google").toString();
 
     if (error != null || code == null) {
       log.warn("Google OAuth callback error or missing code: error={}", error);
       return redirectWithClearedState(clearStateCookie, authService.getGoogleErrorRedirectUrl());
     }
 
-    if (!oAuthStateService.validateAndConsume(state, cookieState)) {
-      log.warn("Google OAuth state validation failed");
+    StateValidationResult validationResult =
+        oAuthStateService.validateAndConsume(state, cookieState);
+    if (validationResult != StateValidationResult.SUCCESS) {
+      logStateValidationFailure("google", validationResult, state, cookieState, request);
       return redirectWithClearedState(
           clearStateCookie, authService.getLoginErrorRedirectUrl("oauth_state_invalid"));
     }
@@ -85,7 +91,8 @@ public class AuthController {
     String state = oAuthStateService.generateAndStore();
     String authUrl = authService.buildKakaoAuthorizationUrl(state);
     return ResponseEntity.status(HttpStatus.FOUND)
-        .header(HttpHeaders.SET_COOKIE, oAuthStateService.buildStateCookie(state).toString())
+        .header(
+            HttpHeaders.SET_COOKIE, oAuthStateService.buildStateCookie(state, "kakao").toString())
         .header(HttpHeaders.LOCATION, authUrl)
         .build();
   }
@@ -96,9 +103,10 @@ public class AuthController {
       @RequestParam(required = false) String code,
       @RequestParam(required = false) String error,
       @RequestParam(required = false) String state,
-      @CookieValue(name = OAuthStateService.COOKIE_NAME, required = false) String cookieState) {
+      @CookieValue(name = "oauth_state_kakao", required = false) String cookieState,
+      HttpServletRequest request) {
 
-    String clearStateCookie = oAuthStateService.buildClearedStateCookie().toString();
+    String clearStateCookie = oAuthStateService.buildClearedStateCookie("kakao").toString();
 
     if (error != null) {
       log.warn("Kakao OAuth cancelled or error: error={}", error);
@@ -112,8 +120,10 @@ public class AuthController {
           clearStateCookie, authService.getLoginErrorRedirectUrl("oauth_failed"));
     }
 
-    if (!oAuthStateService.validateAndConsume(state, cookieState)) {
-      log.warn("Kakao OAuth state validation failed");
+    StateValidationResult validationResult =
+        oAuthStateService.validateAndConsume(state, cookieState);
+    if (validationResult != StateValidationResult.SUCCESS) {
+      logStateValidationFailure("kakao", validationResult, state, cookieState, request);
       return redirectWithClearedState(
           clearStateCookie, authService.getLoginErrorRedirectUrl("oauth_state_invalid"));
     }
@@ -174,5 +184,49 @@ public class AuthController {
       return "kakao_email_invalid";
     }
     return "oauth_failed";
+  }
+
+  private void logStateValidationFailure(
+      String provider,
+      StateValidationResult reason,
+      String callbackState,
+      String cookieState,
+      HttpServletRequest request) {
+    String statePrefix =
+        callbackState != null && callbackState.length() >= 8
+            ? callbackState.substring(0, 8) + "…"
+            : (callbackState != null ? callbackState : "none");
+    log.warn(
+        "OAuth state validation failed: provider={} reason={} callbackState={} cookiePresent={}"
+            + " host={} forwardedHost={} forwardedProto={} secFetchSite={} ua={}",
+        provider,
+        reason,
+        statePrefix,
+        cookieState != null,
+        request.getHeader("Host"),
+        request.getHeader("X-Forwarded-Host"),
+        request.getHeader("X-Forwarded-Proto"),
+        request.getHeader("Sec-Fetch-Site"),
+        summarizeUserAgent(request.getHeader("User-Agent")));
+  }
+
+  private static String summarizeUserAgent(String ua) {
+    if (ua == null || ua.isBlank()) return "unknown";
+    String os;
+    if (ua.contains("iPhone") || ua.contains("iPad")) os = "iOS";
+    else if (ua.contains("Android")) os = "Android";
+    else if (ua.contains("Macintosh")) os = "macOS";
+    else if (ua.contains("Windows")) os = "Windows";
+    else os = "other";
+    String browser;
+    if (ua.contains("CriOS")) browser = "Chrome";
+    else if (ua.contains("FxiOS")) browser = "Firefox";
+    else if (ua.contains("EdgiOS")) browser = "Edge";
+    else if (ua.contains("Safari") && !ua.contains("Chrome") && !ua.contains("Chromium"))
+      browser = "Safari";
+    else if (ua.contains("Chrome")) browser = "Chrome";
+    else if (ua.contains("Firefox")) browser = "Firefox";
+    else browser = "other";
+    return os + "/" + browser;
   }
 }
