@@ -1,6 +1,9 @@
 'use client'
 
+import { useState } from 'react'
 import { cn } from '@/lib/utils'
+import { isInAppBrowser } from '@/lib/detect-inapp'
+import { InAppBrowserModal } from '@/components/briefy/InAppBrowserModal'
 
 function KakaoSymbol({ className }: { className?: string }) {
   return (
@@ -20,24 +23,33 @@ type Props = {
 }
 
 export function KakaoLoginButton({ label = '카카오 로그인', className }: Props) {
+  const [showModal, setShowModal] = useState(false)
+
   const handleClick = () => {
+    if (isInAppBrowser()) {
+      setShowModal(true)
+      return
+    }
     const base = process.env.NEXT_PUBLIC_API_BASE_URL ?? ''
     window.location.href = `${base}/api/oauth2/authorize/kakao`
   }
 
   return (
-    <button
-      type="button"
-      onClick={handleClick}
-      aria-label="카카오 계정으로 로그인"
-      className={cn(
-        'inline-flex h-11 w-full items-center justify-center gap-3 rounded-xl text-sm font-medium shadow-sm transition-colors',
-        'bg-[#FEE500] text-black hover:bg-[#F5DC00]',
-        className,
-      )}
-    >
-      <KakaoSymbol className="size-5" />
-      {label}
-    </button>
+    <>
+      {showModal && <InAppBrowserModal onClose={() => setShowModal(false)} />}
+      <button
+        type="button"
+        onClick={handleClick}
+        aria-label="카카오 계정으로 로그인"
+        className={cn(
+          'inline-flex h-11 w-full items-center justify-center gap-3 rounded-xl text-sm font-medium shadow-sm transition-colors',
+          'bg-[#FEE500] text-black hover:bg-[#F5DC00]',
+          className,
+        )}
+      >
+        <KakaoSymbol className="size-5" />
+        {label}
+      </button>
+    </>
   )
 }

@@ -10,7 +10,7 @@ const pretendard = localFont({
 })
 
 export const metadata: Metadata = {
-  title: 'Briefy — 매일 아침, 나만의 AI 브리핑',
+  title: 'Briefy — 흩어진 채용 공고를 매일 아침 한 번에',
   description:
     'Briefy는 당신이 선택한 주제와 키워드를 기반으로 매일 아침 AI가 정리한 맞춤형 브리핑을 이메일로 보내드립니다.',
 }
