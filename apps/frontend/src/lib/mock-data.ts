@@ -10,6 +10,14 @@ export type MockReportSection = {
   source?: string
 }
 
+export type MockReportArticle = {
+  title: string
+  source: string
+  url: string
+  summary: string
+  whyItMatters: string
+}
+
 export type MockReport = {
   id: string
   title: string
@@ -20,6 +28,8 @@ export type MockReport = {
   preview: string
   highlights: string[]
   sections: MockReportSection[]
+  articles?: MockReportArticle[]
+  actions?: string[]
 }
 
 // Suggested values for each JOB_POSTING preference field in onboarding.
@@ -70,18 +80,49 @@ export const DELIVERY_TIMES = [
 
 export const MOCK_REPORTS: MockReport[] = [
   {
-    id: 'r-2026-06-26',
-    title: '6월 26일 채용 브리핑 — 백엔드 개발자',
-    date: '2026년 6월 26일 (금)',
-    readTime: '3분 분량',
+    id: 'r-2026-08-04',
+    title: '8월 4일 채용 브리핑 — 백엔드 개발자',
+    date: '2026년 8월 4일 (월)',
+    readTime: '추천 공고 3건',
     status: 'delivered',
     topics: ['목표 직무', '관심 기업', '기술/역량'],
     preview:
-      '네이버·카카오·라인에서 신규 공고 3건, 마감 임박 공고 2건이 확인됐습니다. Spring Boot 스킬과 직접 매칭되는 포지션이 포함돼 있습니다.',
+      '현대오토에버·당근마켓·LG CNS에서 신규 공고 3건이 확인됐습니다. Spring Boot·Java 스킬과 매칭되는 포지션이 포함돼 있습니다.',
     highlights: [
-      '네이버 — 백엔드 개발자 신규 공고 (Spring Boot 스킬 매칭)',
-      '카카오 — 풀스택 개발자, 마감 D-2',
-      '관심 기업 3곳 신규 공고 3건 · 마감 임박 2건',
+      '현대오토에버 — 채용연계형 인턴, 마감 D-2',
+      '당근마켓 — 백엔드 개발자 신입 공채 (Kotlin·Spring 매칭)',
+      '관심 기업 3곳 신규 공고 3건 · 마감 임박 1건',
+    ],
+    articles: [
+      {
+        title: '[현대오토에버] 소프트웨어 개발 채용연계형 인턴 (마감 D-2)',
+        source: '현대오토에버 채용',
+        url: '#',
+        summary:
+          '현대오토에버 커넥티드카·모빌리티 플랫폼 개발 인턴. Java, Spring 기반 백엔드 개발 업무 수행. 판교 근무. 지원 마감 8월 6일.',
+        whyItMatters: '관심 기업 현대오토에버, Java·Spring 매칭. 마감 임박.',
+      },
+      {
+        title: '[당근마켓] 백엔드 개발자 신입 공채',
+        source: '당근마켓 채용',
+        url: '#',
+        summary:
+          '당근마켓 로컬 커머스 플랫폼 신입 백엔드 개발자 공채. Kotlin, Spring Boot 기반 서버 개발. 신입 지원 가능. 서울 근무.',
+        whyItMatters: '관심 기업 당근마켓, Kotlin·Spring Boot 스킬 매칭. 신입 지원 가능.',
+      },
+      {
+        title: '[LG CNS] IT 서비스 개발 신입 공채',
+        source: '잡코리아',
+        url: '#',
+        summary:
+          'LG CNS IT 서비스 개발 부문 신입 공채. Spring Boot 기반 사내 플랫폼 및 고객사 시스템 개발. 신입 지원 가능. 서울 근무.',
+        whyItMatters: '선호 스킬 Spring Boot·Java 매칭. 신입 공채.',
+      },
+    ],
+    actions: [
+      '현대오토에버 공고는 D-2 마감 — 서류를 준비해 두었다면 오늘 중으로 제출하세요.',
+      '당근마켓 신입 공채는 Kotlin 경험을 자소서에 구체적으로 어필하면 유리합니다.',
+      'LG CNS 신입 공채는 마감 여유가 있으니 GitHub 프로젝트 정리와 포트폴리오를 보강한 뒤 지원하세요.',
     ],
     sections: [
       {
@@ -89,30 +130,25 @@ export const MOCK_REPORTS: MockReport[] = [
         summary:
           '오늘 관심 기업에서 새로 올라온 채용 공고입니다. 설정하신 직무·스킬 기준으로 매칭 이유를 함께 정리했습니다.',
         bullets: [
-          '네이버 — 백엔드 개발자 | Spring Boot, Java | 신입·경력 무관 | 원티드',
-          '카카오 — 풀스택 개발자 | Python, React | 경력 3년 이상 | 잡코리아',
-          '라인 — 서버 엔지니어 | Kotlin, gRPC | 경력 5년 이상 | LinkedIn',
+          '현대오토에버 — 소프트웨어 개발 채용연계형 인턴 | Java, Spring | 판교 | 현대오토에버 채용',
+          '당근마켓 — 백엔드 개발자 신입 공채 | Kotlin, Spring Boot | 서울 | 당근마켓 채용',
+          'LG CNS — IT 서비스 개발 신입 공채 | Spring Boot, Java | 서울 | 잡코리아',
         ],
-        source: '원티드 · 잡코리아 · LinkedIn',
+        source: '현대오토에버 채용 · 당근마켓 채용 · 잡코리아',
       },
       {
         heading: '⏰ 마감 임박 공고 (3일 이내)',
-        summary:
-          '지원 마감이 3일 이내로 다가온 공고입니다. 서류를 미리 준비해 두었다면 지금 바로 지원하세요.',
-        bullets: [
-          '쿠팡 — 백엔드 개발자 | D-1 | Java, Spring | 사람인',
-          '토스 — 서버 개발자 | D-2 | Kotlin, AWS | 원티드',
-        ],
-        source: '사람인 · 원티드',
+        summary: '지원 마감이 3일 이내로 다가온 공고입니다.',
+        bullets: ['현대오토에버 — 소프트웨어 개발 채용연계형 인턴 | D-2 | Java, Spring | 현대오토에버 채용'],
+        source: '현대오토에버 채용',
       },
       {
         heading: '💡 오늘의 추천 액션',
         summary: 'Briefy가 오늘의 브리핑을 바탕으로 제안하는 행동 목록입니다.',
         bullets: [
-          '네이버·카카오의 신규 공고를 원문 링크로 확인하고 지원 여부를 결정하세요.',
-          '포트폴리오에 Spring Boot 프로젝트 비중을 높이면 서류 통과율이 높아집니다.',
-          '쿠팡 공고는 D-1 마감 — 오늘 중 지원하지 않으면 기회를 놓칩니다.',
-          'GitHub 최근 커밋 이력을 지원 전 한 번 더 확인하세요.',
+          '현대오토에버 공고는 D-2 마감 — 서류를 준비해 두었다면 오늘 중으로 제출하세요.',
+          '당근마켓 신입 공채는 Kotlin 경험을 자소서에 구체적으로 어필하면 유리합니다.',
+          'LG CNS 신입 공채는 마감 여유가 있으니 GitHub 정리와 포트폴리오를 보강한 뒤 지원하세요.',
         ],
       },
     ],

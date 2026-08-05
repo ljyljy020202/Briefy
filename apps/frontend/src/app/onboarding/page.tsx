@@ -26,6 +26,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { BriefyLogo } from '@/components/briefy/BriefyLogo'
 import { GoogleLoginButton } from '@/components/auth/GoogleLoginButton'
+import { KakaoLoginButton } from '@/components/auth/KakaoLoginButton'
 import { JOB_KEYWORD_SUGGESTIONS } from '@/lib/mock-data'
 
 type PreferenceKey = keyof Required<JobPostingPreference>
@@ -268,10 +269,11 @@ export default function OnboardingPage() {
                   Briefy 시작하기
                 </h1>
                 <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                  Google 계정으로 가입하면 설정이 자동으로 저장됩니다.
+                  소셜 계정으로 가입하면 설정이 자동으로 저장됩니다.
                 </p>
-                <div className="mt-6 max-w-sm">
+                <div className="mt-6 flex max-w-sm flex-col gap-3">
                   <GoogleLoginButton />
+                  <KakaoLoginButton label="카카오로 시작하기" />
                 </div>
               </div>
             )}

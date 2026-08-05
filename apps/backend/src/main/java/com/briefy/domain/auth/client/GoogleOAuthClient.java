@@ -32,13 +32,14 @@ public class GoogleOAuthClient {
     this.webClient = webClientBuilder.build();
   }
 
-  public String buildAuthorizationUrl() {
+  public String buildAuthorizationUrl(String state) {
     return UriComponentsBuilder.fromUriString(AUTH_URL)
         .queryParam("client_id", properties.clientId())
         .queryParam("redirect_uri", properties.redirectUri())
         .queryParam("response_type", "code")
         .queryParam("scope", "openid email profile")
         .queryParam("access_type", "online")
+        .queryParam("state", state)
         .build()
         .toUriString();
   }
