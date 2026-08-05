@@ -1,6 +1,9 @@
 'use client'
 
+import { useState } from 'react'
 import { cn } from '@/lib/utils'
+import { isInAppBrowser } from '@/lib/detect-inapp'
+import { InAppBrowserModal } from '@/components/briefy/InAppBrowserModal'
 
 function GoogleIcon({ className }: { className?: string }) {
   return (
@@ -36,15 +39,23 @@ export function GoogleLoginButton({
   className,
   variant = 'light',
 }: Props) {
+  const [showModal, setShowModal] = useState(false)
+
   const handleClick = () => {
+    if (isInAppBrowser()) {
+      setShowModal(true)
+      return
+    }
     const base = process.env.NEXT_PUBLIC_API_BASE_URL ?? ''
     window.location.href = `${base}/api/oauth2/authorize/google`
   }
 
   return (
-    <button
-      type="button"
-      onClick={handleClick}
+    <>
+      {showModal && <InAppBrowserModal onClose={() => setShowModal(false)} />}
+      <button
+        type="button"
+        onClick={handleClick}
       className={cn(
         'inline-flex h-11 w-full items-center justify-center gap-3 rounded-xl border text-sm font-medium shadow-sm transition-colors',
         variant === 'light'
@@ -54,7 +65,8 @@ export function GoogleLoginButton({
       )}
     >
       <GoogleIcon className="size-5" />
-      {label}
-    </button>
+        {label}
+      </button>
+    </>
   )
 }

@@ -13,8 +13,8 @@ const LINKS = [
 export function MarketingNav() {
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background">
-      <div className="mx-auto grid h-16 max-w-6xl grid-cols-3 items-center px-4 sm:px-6 lg:px-8">
-        <Link href="/" aria-label="Briefy 홈">
+      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
+        <Link href="/" aria-label="Briefy 홈" className="shrink-0">
           <BriefyLogo />
         </Link>
 
@@ -30,16 +30,16 @@ export function MarketingNav() {
           ))}
         </nav>
 
-        <div className="flex items-center justify-end gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <Link
             href="/login"
-            className={cn(buttonVariants({ variant: 'ghost', size: 'default' }))}
+            className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }))}
           >
             로그인
           </Link>
           <Link
             href="/onboarding"
-            className={cn(buttonVariants({ size: 'default' }))}
+            className={cn(buttonVariants({ size: 'sm' }))}
           >
             무료로 시작
           </Link>

@@ -62,9 +62,8 @@ export default function LandingPage() {
               <span className="text-primary">매일 아침 AI 브리핑</span>으로
               받아보세요.
             </h1>
-            <p className="mx-auto mt-6 max-w-xl text-pretty text-lg leading-relaxed text-muted-foreground sm:text-xl">
+            <p className="mx-auto mt-6 max-w-2xl text-pretty text-lg leading-relaxed text-muted-foreground sm:text-xl">
               여러 채용 사이트와 기업 공식 채용 페이지의 공고를 모아,
-              <br />
               관심 직무와 기업 등 내 조건에 맞는 공고만 선별해 이메일로 보내드려요.
             </p>
             <p className="mx-auto mt-3 max-w-sm text-sm text-muted-foreground/80">
