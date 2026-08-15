@@ -20,6 +20,7 @@ import logging
 import app.adapters.greenhouse  # noqa: F401 — triggers GREENHOUSE + DAANGN_CAREERS registration
 import app.adapters.greeting  # noqa: F401 — triggers GREETING registration
 import app.adapters.naver_careers  # noqa: F401 — triggers NAVER_CAREERS registration
+import app.adapters.toss_careers  # noqa: F401 — triggers TOSS_CAREERS registration
 from app.adapters.base import JobBoardAdapter, RawJobPosting
 from app.adapters.fixture import FixtureAdapter
 from app.adapters.jasoseol import JasoseolAdapter
