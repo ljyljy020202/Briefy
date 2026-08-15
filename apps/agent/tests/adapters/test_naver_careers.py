@@ -204,16 +204,6 @@ def test_parse_config_invalid_json():
     assert cfg.max_discover == 50
 
 
-def test_parse_config_default_company_filter():
-    cfg = _parse_config(None)
-    assert cfg.company_filter == ["NAVER"]
-
-
-def test_parse_config_custom_company_filter():
-    cfg = _parse_config('{"company_filter":["NAVER","NAVER Cloud"]}')
-    assert cfg.company_filter == ["NAVER", "NAVER Cloud"]
-
-
 # ── _parse_roles ──────────────────────────────────────────────────────────────
 
 
@@ -525,10 +515,9 @@ async def test_pagination_two_pages(monkeypatch):
         _source(), _profile(), _options(), _COLLECT_DATE
     )
 
-    # Fixture totalSize=13 but 2 items (NAVER Cloud, NAVER WEBTOON) are filtered
     assert result.source_stats is not None
-    assert result.source_stats.discovered == 11
-    assert len(result.postings) == 11
+    assert result.source_stats.discovered == 13
+    assert len(result.postings) == 13
     assert list_call_count["n"] == 2
 
 
@@ -769,16 +758,15 @@ async def test_moogwan_experience_level(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_naver_cloud_subsidiary_filtered_by_default(monkeypatch):
-    """NAVER Cloud postings filtered out by default company_filter=["NAVER"]."""
-    cloud_item = {
+async def test_naver_cloud_subsidiary_preserved(monkeypatch):
+    """NAVER Cloud company_name preserved as-is — not collapsed to NAVER."""
+    item = {
         **_VALID_ITEM,
         "annoId": 10000005,
         "sysCompanyCdNm": "NAVER Cloud",
         "jobDetailLink": "https://recruit.navercorp.com/rcrt/view.do?annoId=10000005",
     }
-    # Mix: one NAVER Cloud item + one NAVER item
-    page = {"result": "Y", "totalSize": 2, "list": [cloud_item, _VALID_ITEM]}
+    page = {"result": "Y", "totalSize": 1, "list": [item]}
 
     async def handler(url, kw):
         if "loadJobList" in url:
@@ -792,41 +780,8 @@ async def test_naver_cloud_subsidiary_filtered_by_default(monkeypatch):
         _source(), _profile(), _options(), _COLLECT_DATE
     )
 
-    # Only the NAVER posting passes the filter
     assert len(result.postings) == 1
-    assert result.postings[0].company_name == "NAVER"
-
-
-@pytest.mark.asyncio
-async def test_company_filter_override_includes_subsidiary(monkeypatch):
-    """company_filter=["NAVER","NAVER Cloud"] includes both."""
-    cloud_item = {
-        **_VALID_ITEM,
-        "annoId": 10000005,
-        "sysCompanyCdNm": "NAVER Cloud",
-        "jobDetailLink": "https://recruit.navercorp.com/rcrt/view.do?annoId=10000005",
-    }
-    page = {"result": "Y", "totalSize": 2, "list": [cloud_item, _VALID_ITEM]}
-
-    async def handler(url, kw):
-        if "loadJobList" in url:
-            return _json_resp(url, page)
-        return _html_resp(url, _DETAIL_GENERIC)
-
-    mock = _MockClient(handler)
-    monkeypatch.setattr("app.adapters.naver_careers.AsyncClient", lambda **kw: mock)
-
-    cfg = json.dumps({
-        "parser_key": "NAVER_CAREERS",
-        "company_filter": ["NAVER", "NAVER Cloud"],
-    })
-    result = await NaverCareersParser().fetch(
-        _source(cfg), _profile(), _options(), _COLLECT_DATE
-    )
-
-    assert len(result.postings) == 2
-    companies = {p.company_name for p in result.postings}
-    assert companies == {"NAVER", "NAVER Cloud"}
+    assert result.postings[0].company_name == "NAVER Cloud"
 
 
 @pytest.mark.asyncio

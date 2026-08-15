@@ -21,9 +21,9 @@ config_json contract:
 
 Company scope note:
   recruit.navercorp.com hosts jobs for NAVER and its subsidiaries (NAVER Cloud,
-  NAVER WEBTOON, SNOW, etc.). By default (company_filter=["NAVER"]) only NAVER
-  postings are collected. Override company_filter in config_json to include
-  additional subsidiaries (e.g. ["NAVER", "NAVER Cloud"]).
+  NAVER WEBTOON, SNOW, etc.). All are collected under this source; company_name
+  is preserved as-is from sysCompanyCdNm so the backend can map each posting
+  to the correct company_id via the company alias table.
 
 workAreaCd location mapping:
   Codes are rendered client-side and not returned as names in the API.
@@ -34,7 +34,7 @@ workAreaCd location mapping:
 import json
 import logging
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date, datetime
 from urllib.parse import urljoin
 
@@ -145,14 +145,10 @@ def _parse_date_from_string(value: str | None) -> date | None:
 # ── Config ────────────────────────────────────────────────────────────────────
 
 
-_DEFAULT_COMPANY_FILTER = ["NAVER"]
-
-
 @dataclass
 class _NaverConfig:
     max_discover: int = _DEFAULT_MAX_DISCOVER
     max_fetch: int = _DEFAULT_MAX_FETCH
-    company_filter: list[str] = field(default_factory=lambda: list(_DEFAULT_COMPANY_FILTER))
 
 
 def _parse_config(config_json: str | None) -> _NaverConfig:
@@ -160,15 +156,9 @@ def _parse_config(config_json: str | None) -> _NaverConfig:
         return _NaverConfig()
     try:
         data = json.loads(config_json)
-        raw_filter = data.get("company_filter")
-        company_filter = (
-            list(raw_filter) if isinstance(raw_filter, list)
-            else list(_DEFAULT_COMPANY_FILTER)
-        )
         return _NaverConfig(
             max_discover=int(data.get("max_discover", _DEFAULT_MAX_DISCOVER)),
             max_fetch=int(data.get("max_fetch", _DEFAULT_MAX_FETCH)),
-            company_filter=company_filter,
         )
     except Exception:
         return _NaverConfig()
@@ -504,21 +494,13 @@ class NaverCareersParser(CustomParser):
                         if len(items) >= config.max_discover:
                             break
                         parsed = _parse_list_item(raw_item)
-                        if parsed is None:
+                        if parsed is not None:
+                            items.append(parsed)
+                        else:
                             warnings.append(
                                 f"naver_careers: skipped malformed item"
                                 f" annoId={raw_item.get('annoId', '?')}"
                             )
-                            continue
-                        if parsed.company_name not in config.company_filter:
-                            log.debug(
-                                "naver_careers: skipped subsidiary posting"
-                                " company=%s annoId=%s",
-                                parsed.company_name,
-                                parsed.anno_id,
-                            )
-                            continue
-                        items.append(parsed)
 
                     # Stop when we've seen all available postings
                     if total_size is not None and len(items) >= total_size:
