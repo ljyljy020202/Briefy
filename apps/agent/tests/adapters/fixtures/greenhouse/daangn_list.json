@@ -1,0 +1,207 @@
+{
+  "jobs": [
+    {
+      "id": 5046757003,
+      "title": "Software Engineer, Backend - 피드 (피드 인프라)",
+      "absolute_url": "https://about.daangn.com?gh_jid=5046757003",
+      "location": {"name": "SEOUL"},
+      "application_deadline": null,
+      "first_published": "2022-03-27T21:59:49-04:00",
+      "updated_at": "2026-08-12T05:37:09-04:00",
+      "company_name": "당근마켓",
+      "departments": [
+        {"id": 4057801003, "name": "Software Engineer, Backend", "child_ids": [], "parent_id": 4057799003}
+      ],
+      "offices": [{"id": 4031936003, "name": "당근", "location": null, "child_ids": [], "parent_id": null}],
+      "metadata": [
+        {"id": 6128545003, "name": "Corporate", "value": "당근", "value_type": "single_select"},
+        {"id": 5033980003, "name": "Employment Type", "value": "정규직", "value_type": "single_select"},
+        {"id": 5784623003, "name": "Prior Experience", "value": "경력", "value_type": "single_select"},
+        {"id": 6972127003, "name": "Valid Through", "value": "", "value_type": "date"},
+        {"id": 39968313003, "name": "Division", "value": "Tech", "value_type": "single_select"},
+        {"id": 6128573003, "name": "Engineer", "value": true, "value_type": "yes_no"}
+      ],
+      "content": "&lt;h3&gt;이런 분과 함께하고 싶어요&lt;/h3&gt;\n&lt;ul&gt;\n&lt;li&gt;백엔드 개발 경력 3년 이상 보유하신 분&lt;/li&gt;\n&lt;li&gt;Go, Java, Kotlin 등 서버 언어에 능숙하신 분&lt;/li&gt;\n&lt;/ul&gt;\n&lt;h3&gt;이런 분이면 더 좋아요!&lt;/h3&gt;\n&lt;ul&gt;\n&lt;li&gt;분산 시스템 경력 10년 이상 보유하신 분 (우대)&lt;/li&gt;\n&lt;/ul&gt;"
+    },
+    {
+      "id": 5248527003,
+      "title": "Software Engineer, Machine Learning",
+      "absolute_url": "https://about.daangn.com?gh_jid=5248527003",
+      "location": {"name": "SEOUL"},
+      "application_deadline": null,
+      "first_published": "2022-06-01T10:00:00-04:00",
+      "updated_at": "2026-07-01T00:00:00-04:00",
+      "company_name": "당근마켓",
+      "departments": [
+        {"id": 4057803003, "name": "Software Engineer, Machine Learning", "child_ids": [], "parent_id": 4057799003}
+      ],
+      "offices": [{"id": 4031936003, "name": "당근", "location": null, "child_ids": [], "parent_id": null}],
+      "metadata": [
+        {"id": 6128545003, "name": "Corporate", "value": "당근", "value_type": "single_select"},
+        {"id": 5033980003, "name": "Employment Type", "value": "정규직", "value_type": "single_select"},
+        {"id": 5784623003, "name": "Prior Experience", "value": "신입/경력", "value_type": "single_select"},
+        {"id": 6972127003, "name": "Valid Through", "value": null, "value_type": "date"},
+        {"id": 39968313003, "name": "Division", "value": "Tech", "value_type": "single_select"},
+        {"id": 6128573003, "name": "Engineer", "value": true, "value_type": "yes_no"}
+      ],
+      "content": "&lt;h3&gt;이런 분을 찾고 있어요&lt;/h3&gt;\n&lt;ul&gt;\n&lt;li&gt;ML/AI 관련 경험 3&amp;sim;7년 보유하신 분&lt;/li&gt;\n&lt;li&gt;Python, PyTorch에 능숙하신 분&lt;/li&gt;\n&lt;/ul&gt;\n&lt;h3&gt;이런 분이면 더 좋아요!&lt;/h3&gt;\n&lt;ul&gt;\n&lt;li&gt;추천 시스템 경험 10년 이상 보유하신 분 (우대)&lt;/li&gt;\n&lt;/ul&gt;"
+    },
+    {
+      "id": 6615071003,
+      "title": "Software Engineer, Android (인턴)",
+      "absolute_url": "https://about.daangn.com?gh_jid=6615071003",
+      "location": {"name": "SEOUL"},
+      "application_deadline": "2026-08-31",
+      "first_published": "2026-07-01T10:00:00-04:00",
+      "updated_at": "2026-07-01T10:00:00-04:00",
+      "company_name": "당근마켓",
+      "departments": [
+        {"id": 4057802003, "name": "Software Engineer, Android", "child_ids": [], "parent_id": 4057799003}
+      ],
+      "offices": [{"id": 4031936003, "name": "당근", "location": null, "child_ids": [], "parent_id": null}],
+      "metadata": [
+        {"id": 6128545003, "name": "Corporate", "value": "당근", "value_type": "single_select"},
+        {"id": 5033980003, "name": "Employment Type", "value": "인턴", "value_type": "single_select"},
+        {"id": 5784623003, "name": "Prior Experience", "value": "신입", "value_type": "single_select"},
+        {"id": 6972127003, "name": "Valid Through", "value": "2026-08-31", "value_type": "date"},
+        {"id": 39968313003, "name": "Division", "value": "Tech", "value_type": "single_select"},
+        {"id": 6128573003, "name": "Engineer", "value": true, "value_type": "yes_no"}
+      ],
+      "content": "&lt;h3&gt;이런 분을 찾고 있어요&lt;/h3&gt;\n&lt;ul&gt;\n&lt;li&gt;Android 개발에 관심 있는 신입 개발자&lt;/li&gt;\n&lt;/ul&gt;"
+    },
+    {
+      "id": 5458903003,
+      "title": "AD Sales Manager - 광고 (세일즈, Agency)",
+      "absolute_url": "https://about.daangn.com?gh_jid=5458903003",
+      "location": {"name": "SEOUL"},
+      "application_deadline": null,
+      "first_published": "2022-12-27T04:10:06-05:00",
+      "updated_at": "2026-08-03T01:54:29-04:00",
+      "company_name": "당근마켓",
+      "departments": [
+        {"id": 4045613003, "name": "Sales", "child_ids": [], "parent_id": 4045612003}
+      ],
+      "offices": [{"id": 4031936003, "name": "당근", "location": null, "child_ids": [], "parent_id": null}],
+      "metadata": [
+        {"id": 6128545003, "name": "Corporate", "value": "당근", "value_type": "single_select"},
+        {"id": 5033980003, "name": "Employment Type", "value": "정규직", "value_type": "single_select"},
+        {"id": 5784623003, "name": "Prior Experience", "value": "경력", "value_type": "single_select"},
+        {"id": 6972127003, "name": "Valid Through", "value": "", "value_type": "date"},
+        {"id": 39968313003, "name": "Division", "value": "Business", "value_type": "single_select"},
+        {"id": 6128573003, "name": "Engineer", "value": false, "value_type": "yes_no"}
+      ],
+      "content": "&lt;h3&gt;이런 분을 찾고 있어요&lt;/h3&gt;\n&lt;ul&gt;\n&lt;li&gt;대행사 세일즈 및 디지털 마케팅 경험&lt;/li&gt;\n&lt;/ul&gt;"
+    },
+    {
+      "id": 7791182003,
+      "title": "Product Manager - 광고 (광고 상품)",
+      "absolute_url": "https://about.daangn.com?gh_jid=7791182003",
+      "location": {"name": "SEOUL"},
+      "application_deadline": null,
+      "first_published": "2026-05-01T10:00:00-04:00",
+      "updated_at": "2026-08-01T00:00:00-04:00",
+      "company_name": "당근마켓",
+      "departments": [
+        {"id": 4045616003, "name": "Product Manager", "child_ids": [], "parent_id": 4045615003}
+      ],
+      "offices": [{"id": 4031936003, "name": "당근", "location": null, "child_ids": [], "parent_id": null}],
+      "metadata": [
+        {"id": 6128545003, "name": "Corporate", "value": "당근", "value_type": "single_select"},
+        {"id": 5033980003, "name": "Employment Type", "value": "정규직", "value_type": "single_select"},
+        {"id": 5784623003, "name": "Prior Experience", "value": "경력", "value_type": "single_select"},
+        {"id": 6972127003, "name": "Valid Through", "value": "", "value_type": "date"},
+        {"id": 39968313003, "name": "Division", "value": "Product Management", "value_type": "single_select"},
+        {"id": 6128573003, "name": "Engineer", "value": false, "value_type": "yes_no"}
+      ],
+      "content": "&lt;h3&gt;이런 분을 찾고 있어요&lt;/h3&gt;\n&lt;ul&gt;\n&lt;li&gt;프로덕트 매니저 경력 5년 이상 보유하신 분&lt;/li&gt;\n&lt;/ul&gt;"
+    },
+    {
+      "id": 9001001003,
+      "title": "Brand Designer (계약직) - 브랜딩",
+      "absolute_url": "https://about.daangn.com?gh_jid=9001001003",
+      "location": {"name": "SEOUL"},
+      "application_deadline": "2026-09-30",
+      "first_published": "2026-08-01T10:00:00-04:00",
+      "updated_at": "2026-08-01T10:00:00-04:00",
+      "company_name": "당근마켓",
+      "departments": [
+        {"id": 4045614003, "name": "Design", "child_ids": [], "parent_id": 4045614002}
+      ],
+      "offices": [{"id": 4031936003, "name": "당근", "location": null, "child_ids": [], "parent_id": null}],
+      "metadata": [
+        {"id": 6128545003, "name": "Corporate", "value": "당근", "value_type": "single_select"},
+        {"id": 5033980003, "name": "Employment Type", "value": "계약직", "value_type": "single_select"},
+        {"id": 5784623003, "name": "Prior Experience", "value": "경력", "value_type": "single_select"},
+        {"id": 6972127003, "name": "Valid Through", "value": "2026-09-30", "value_type": "date"},
+        {"id": 39968313003, "name": "Division", "value": "Design", "value_type": "single_select"},
+        {"id": 6128573003, "name": "Engineer", "value": false, "value_type": "yes_no"}
+      ],
+      "content": "&lt;h3&gt;이런 분을 찾고 있어요&lt;/h3&gt;\n&lt;ul&gt;\n&lt;li&gt;브랜드 디자인 경력 3년 이상 7년 이하인 분&lt;/li&gt;\n&lt;/ul&gt;"
+    },
+    {
+      "id": 9002001003,
+      "title": "ER Manager - 경영지원 (피플)",
+      "absolute_url": "https://about.daangn.com?gh_jid=9002001003",
+      "location": {"name": "SEOUL"},
+      "application_deadline": null,
+      "first_published": "2026-07-01T10:00:00-04:00",
+      "updated_at": "2026-07-15T00:00:00-04:00",
+      "company_name": "당근마켓",
+      "departments": [
+        {"id": 4045617003, "name": "HR", "child_ids": [], "parent_id": 4045616002}
+      ],
+      "offices": [{"id": 4031936003, "name": "당근", "location": null, "child_ids": [], "parent_id": null}],
+      "metadata": [
+        {"id": 6128545003, "name": "Corporate", "value": "당근마켓", "value_type": "single_select"},
+        {"id": 5033980003, "name": "Employment Type", "value": "정규직", "value_type": "single_select"},
+        {"id": 5784623003, "name": "Prior Experience", "value": "경력", "value_type": "single_select"},
+        {"id": 6972127003, "name": "Valid Through", "value": null, "value_type": "date"},
+        {"id": 39968313003, "name": "Division", "value": "Corporate", "value_type": "single_select"},
+        {"id": 6128573003, "name": "Engineer", "value": false, "value_type": "yes_no"}
+      ],
+      "content": "&lt;h3&gt;이런 분을 찾고 있어요&lt;/h3&gt;\n&lt;ul&gt;\n&lt;li&gt;HR/ER 실무 경력이 있는 분&lt;/li&gt;\n&lt;/ul&gt;"
+    },
+    {
+      "id": 9003001003,
+      "title": "Software Engineer, Backend - 당근페이 (결제 서비스)",
+      "absolute_url": "https://about.daangn.com?gh_jid=9003001003",
+      "location": {"name": "SEOUL"},
+      "application_deadline": null,
+      "first_published": "2026-06-01T10:00:00-04:00",
+      "updated_at": "2026-08-10T00:00:00-04:00",
+      "company_name": "당근마켓",
+      "departments": [
+        {"id": 4057801003, "name": "Software Engineer, Backend", "child_ids": [], "parent_id": 4057799003}
+      ],
+      "offices": [{"id": 4031936003, "name": "당근", "location": null, "child_ids": [], "parent_id": null}],
+      "metadata": [
+        {"id": 6128545003, "name": "Corporate", "value": "당근페이", "value_type": "single_select"},
+        {"id": 5033980003, "name": "Employment Type", "value": "정규직", "value_type": "single_select"},
+        {"id": 5784623003, "name": "Prior Experience", "value": "경력", "value_type": "single_select"},
+        {"id": 6972127003, "name": "Valid Through", "value": "", "value_type": "date"},
+        {"id": 39968313003, "name": "Division", "value": "Tech", "value_type": "single_select"},
+        {"id": 6128573003, "name": "Engineer", "value": true, "value_type": "yes_no"}
+      ],
+      "content": "&lt;h3&gt;이런 분과 함께하고 싶어요&lt;/h3&gt;\n&lt;ul&gt;\n&lt;li&gt;결제/금융 서비스 백엔드 개발 경력 5년 이상인 분&lt;/li&gt;\n&lt;/ul&gt;"
+    },
+    {
+      "id": 9004001003,
+      "title": "No-metadata Job (malformed)",
+      "absolute_url": "https://about.daangn.com?gh_jid=9004001003",
+      "location": {"name": "SEOUL"},
+      "application_deadline": null,
+      "first_published": "2026-08-01T10:00:00-04:00",
+      "updated_at": "2026-08-01T10:00:00-04:00",
+      "company_name": "당근마켓",
+      "departments": [
+        {"id": 4057801003, "name": "Software Engineer, Backend", "child_ids": [], "parent_id": 4057799003}
+      ],
+      "offices": [{"id": 4031936003, "name": "당근", "location": null, "child_ids": [], "parent_id": null}],
+      "metadata": [
+        {"id": 9999999003, "name": "Division", "value": "Tech", "value_type": "single_select"}
+      ],
+      "content": "&lt;p&gt;메타데이터 일부 누락 공고&lt;/p&gt;"
+    }
+  ],
+  "meta": {"total": 9}
+}
