@@ -37,7 +37,6 @@ Coverage:
     - DAANGN_CAREERS and NAVER_CAREERS unaffected (regression)
 """
 
-import asyncio
 import json
 from datetime import date
 from pathlib import Path
@@ -46,7 +45,7 @@ import httpx
 import pytest
 
 import app.adapters.toss_careers  # noqa: F401
-
+from app.adapters.official_company import _CUSTOM_REGISTRY_BY_KEY
 from app.adapters.toss_careers import (
     TossCareersParser,
     _build_roles,
@@ -57,8 +56,11 @@ from app.adapters.toss_careers import (
     _parse_job_detail_html,
     _parse_sitemap,
 )
-from app.adapters.official_company import _CUSTOM_REGISTRY_BY_KEY
-from app.schemas.collection import CollectionOptions, CompanyProfile, OfficialCompanySource
+from app.schemas.collection import (
+    CollectionOptions,
+    CompanyProfile,
+    OfficialCompanySource,
+)
 from app.utils.identifiers import compute_source_record_key
 
 _FIXTURES = Path(__file__).parent / "fixtures" / "toss"
@@ -76,7 +78,8 @@ def _source(config_json: str | None = None) -> OfficialCompanySource:
         source_type="OFFICIAL_CAREER",
         source_url="https://toss.im/career/jobs",
         adapter_type="CUSTOM",
-        config_json=config_json or json.dumps({"parser_key": "TOSS_CAREERS", "max_items": 50}),
+        config_json=config_json
+        or json.dumps({"parser_key": "TOSS_CAREERS", "max_items": 50}),
     )
 
 
@@ -187,7 +190,9 @@ def test_parse_config_defaults():
 
 
 def test_parse_config_explicit():
-    cfg = _parse_config('{"parser_key":"TOSS_CAREERS","max_discover":300,"max_items":30}')
+    cfg = _parse_config(
+        '{"parser_key":"TOSS_CAREERS","max_discover":300,"max_items":30}'
+    )
     assert cfg.max_discover == 300
     assert cfg.max_items == 30
 
@@ -284,7 +289,10 @@ def test_parse_job_detail_html_missing_job_detail_query():
                     "dehydratedState": {
                         "mutations": [],
                         "queries": [
-                            {"queryKey": ["@tossteam/iso-resource", "other"], "state": {"data": "{}"}}
+                            {
+                                "queryKey": ["@tossteam/iso-resource", "other"],
+                                "state": {"data": "{}"},
+                            }
                         ]
                     }
                 }
@@ -301,7 +309,11 @@ def test_parse_job_detail_html_missing_job_detail_query():
         "appGip": True,
         "scriptLoader": [],
     }
-    html = f'<html><body><script id="__NEXT_DATA__" type="application/json">{json.dumps(next_data)}</script></body></html>'
+    payload = json.dumps(next_data)
+    html = (
+        f'<html><body><script id="__NEXT_DATA__" type="application/json">'
+        f"{payload}</script></body></html>"
+    )
     assert _parse_job_detail_html(html) is None
 
 
@@ -309,7 +321,10 @@ def test_parse_job_detail_html_missing_job_detail_query():
 
 
 def test_extract_experience_3yr_min():
-    desc = "# 이런 분과 함께하고 싶어요\n- 서버 개발 경력 3년 이상에 준하는 실력을 보유한 분이 필요해요."
+    desc = (
+        "# 이런 분과 함께하고 싶어요\n"
+        "- 서버 개발 경력 3년 이상에 준하는 실력을 보유한 분이 필요해요."
+    )
     assert _extract_experience(desc, "정규직", "Server Developer") == "경력 3년 이상"
 
 
@@ -318,7 +333,9 @@ def test_extract_experience_intern_from_employment_type():
 
 
 def test_extract_experience_intern_from_title():
-    assert _extract_experience("# 이런 분과\n- 신입 환영", "정규직", "Server Developer 채용 연계형 인턴십") == "인턴"
+    title = "Server Developer 채용 연계형 인턴십"
+    result = _extract_experience("# 이런 분과\n- 신입 환영", "정규직", title)
+    assert result == "인턴"
 
 
 def test_extract_experience_shinip_or_3yr():
@@ -332,19 +349,27 @@ def test_extract_experience_gyeongryeok_mungwan():
 
 
 def test_extract_experience_range_tilde():
-    desc = "# 이런 분과 함께하고 싶어요\n- 모바일 UX 디자인 경력 2~3년 정도의 업무 경험이 있으시면 좋아요."
+    desc = (
+        "# 이런 분과 함께하고 싶어요\n"
+        "- 모바일 UX 디자인 경력 2~3년 정도의 업무 경험이 있으시면 좋아요."
+    )
     assert _extract_experience(desc, "계약직", "Design Partner") == "경력 2~3년"
 
 
 def test_extract_experience_range_korean_syntax():
-    desc = "# 이런 분과 함께하고 싶어요\n- 1년 이상 5년 이하의 보험업계 수수료 관련 업무 경험이 있는 분을 찾고 있어요."
+    desc = (
+        "# 이런 분과 함께하고 싶어요\n"
+        "- 1년 이상 5년 이하의 보험업계 수수료 관련 업무 경험이 있는 분을 찾고 있어요."
+    )
     assert _extract_experience(desc, "정규직", "Commission Manager") == "경력 1~5년"
 
 
 def test_extract_experience_preferred_not_extracted():
     desc = (
-        "# 이런 분과 함께하고 싶어요\n- Android 개발 경력 3년 이상에 준하는 실력을 보유한 분이면 좋아요.\n"
-        "# 이런 경험이 있다면 더 좋아요\n- 성능 최적화 경험 10년 이상이면 더 좋아요 (우대)."
+        "# 이런 분과 함께하고 싶어요\n"
+        "- Android 개발 경력 3년 이상에 준하는 실력을 보유한 분이면 좋아요.\n"
+        "# 이런 경험이 있다면 더 좋아요\n"
+        "- 성능 최적화 경험 10년 이상이면 더 좋아요 (우대)."
     )
     # Should match 3년 이상 from required, NOT 10년 이상 from preferred
     assert _extract_experience(desc, "정규직", "Android Developer") == "경력 3년 이상"
@@ -411,7 +436,9 @@ def test_parse_deadline_invalid_string():
 def test_job_to_posting_server_dev():
     job = _parse_job_detail_html(_JOB_HTMLS["1001001003"])
     warnings: list[str] = []
-    posting = _job_to_posting(job, sid="company_9_custom_toss_careers", profile=_profile(), warnings=warnings)
+    posting = _job_to_posting(
+        job, sid="company_9_custom_toss_careers", profile=_profile(), warnings=warnings
+    )
     assert posting is not None
     assert posting.title == "Server Developer (여신)"
     assert posting.company_name == "토스뱅크"
@@ -429,7 +456,9 @@ def test_job_to_posting_server_dev():
 def test_job_to_posting_intern():
     job = _parse_job_detail_html(_JOB_HTMLS["1002001003"])
     warnings: list[str] = []
-    posting = _job_to_posting(job, sid="company_9_custom_toss_careers", profile=_profile(), warnings=warnings)
+    posting = _job_to_posting(
+        job, sid="company_9_custom_toss_careers", profile=_profile(), warnings=warnings
+    )
     assert posting is not None
     assert posting.employment_type == "인턴"
     assert posting.experience_level == "인턴"
@@ -439,7 +468,9 @@ def test_job_to_posting_intern():
 def test_job_to_posting_contract_range():
     job = _parse_job_detail_html(_JOB_HTMLS["1003001003"])
     warnings: list[str] = []
-    posting = _job_to_posting(job, sid="company_9_custom_toss_careers", profile=_profile(), warnings=warnings)
+    posting = _job_to_posting(
+        job, sid="company_9_custom_toss_careers", profile=_profile(), warnings=warnings
+    )
     assert posting is not None
     assert posting.employment_type == "계약직"
     assert posting.experience_level == "경력 2~3년"
@@ -450,7 +481,9 @@ def test_job_to_posting_contract_range():
 def test_job_to_posting_gyeongryeok_mungwan():
     job = _parse_job_detail_html(_JOB_HTMLS["1004001003"])
     warnings: list[str] = []
-    posting = _job_to_posting(job, sid="company_9_custom_toss_careers", profile=_profile(), warnings=warnings)
+    posting = _job_to_posting(
+        job, sid="company_9_custom_toss_careers", profile=_profile(), warnings=warnings
+    )
     assert posting is not None
     assert posting.company_name == "토스페이먼츠"
     assert posting.experience_level == "경력 무관"
@@ -460,7 +493,9 @@ def test_job_to_posting_gyeongryeok_mungwan():
 def test_job_to_posting_toss_insurance_range():
     job = _parse_job_detail_html(_JOB_HTMLS["1005001003"])
     warnings: list[str] = []
-    posting = _job_to_posting(job, sid="company_9_custom_toss_careers", profile=_profile(), warnings=warnings)
+    posting = _job_to_posting(
+        job, sid="company_9_custom_toss_careers", profile=_profile(), warnings=warnings
+    )
     assert posting is not None
     assert posting.company_name == "토스인슈어런스"
     assert posting.experience_level == "경력 1~5년"
@@ -469,7 +504,9 @@ def test_job_to_posting_toss_insurance_range():
 def test_job_to_posting_no_main_category():
     job = _parse_job_detail_html(_JOB_HTMLS["1006001003"])
     warnings: list[str] = []
-    posting = _job_to_posting(job, sid="company_9_custom_toss_careers", profile=_profile(), warnings=warnings)
+    posting = _job_to_posting(
+        job, sid="company_9_custom_toss_careers", profile=_profile(), warnings=warnings
+    )
     assert posting is not None
     assert posting.roles == ["Customer Support"]  # no mainCategory → only subCategory
 
@@ -477,21 +514,27 @@ def test_job_to_posting_no_main_category():
 def test_job_to_posting_short_term_contract_maps_to_gyeyakjik():
     job = _parse_job_detail_html(_JOB_HTMLS["1008001003"])
     warnings: list[str] = []
-    posting = _job_to_posting(job, sid="company_9_custom_toss_careers", profile=_profile(), warnings=warnings)
+    posting = _job_to_posting(
+        job, sid="company_9_custom_toss_careers", profile=_profile(), warnings=warnings
+    )
     assert posting is not None
     assert posting.employment_type == "계약직"  # 단기계약직 → 계약직
 
 
 def test_job_to_posting_missing_id_returns_none():
     warnings: list[str] = []
-    result = _job_to_posting({"title": "Some Job"}, sid="sid", profile=None, warnings=warnings)
+    result = _job_to_posting(
+        {"title": "Some Job"}, sid="sid", profile=None, warnings=warnings
+    )
     assert result is None
     assert any("missing id" in w for w in warnings)
 
 
 def test_job_to_posting_missing_title_returns_none():
     warnings: list[str] = []
-    result = _job_to_posting({"id": 9999, "title": ""}, sid="sid", profile=None, warnings=warnings)
+    result = _job_to_posting(
+        {"id": 9999, "title": ""}, sid="sid", profile=None, warnings=warnings
+    )
     assert result is None
     assert any("empty title" in w for w in warnings)
 
@@ -551,7 +594,9 @@ async def test_server_dev_fields(monkeypatch):
     mock = _MockClient(handler)
     monkeypatch.setattr("app.adapters.toss_careers.AsyncClient", lambda **kw: mock)
 
-    result = await TossCareersParser().fetch(_source(), _profile(), _options(), _COLLECT_DATE)
+    result = await TossCareersParser().fetch(
+        _source(), _profile(), _options(), _COLLECT_DATE
+    )
 
     assert len(result.postings) == 1
     p = result.postings[0]
@@ -581,7 +626,9 @@ async def test_intern_fields(monkeypatch):
     mock = _MockClient(handler)
     monkeypatch.setattr("app.adapters.toss_careers.AsyncClient", lambda **kw: mock)
 
-    result = await TossCareersParser().fetch(_source(), _profile(), _options(), _COLLECT_DATE)
+    result = await TossCareersParser().fetch(
+        _source(), _profile(), _options(), _COLLECT_DATE
+    )
 
     p = result.postings[0]
     assert p.employment_type == "인턴"
@@ -615,7 +662,9 @@ async def test_sitemap_http_error(monkeypatch):
     mock = _MockClient(handler)
     monkeypatch.setattr("app.adapters.toss_careers.AsyncClient", lambda **kw: mock)
 
-    result = await TossCareersParser().fetch(_source(), _profile(), _options(), _COLLECT_DATE)
+    result = await TossCareersParser().fetch(
+        _source(), _profile(), _options(), _COLLECT_DATE
+    )
 
     assert result.postings == []
     assert any("HTTP 503" in w for w in result.warnings)
@@ -629,7 +678,9 @@ async def test_sitemap_timeout(monkeypatch):
     mock = _MockClient(handler)
     monkeypatch.setattr("app.adapters.toss_careers.AsyncClient", lambda **kw: mock)
 
-    result = await TossCareersParser().fetch(_source(), _profile(), _options(), _COLLECT_DATE)
+    result = await TossCareersParser().fetch(
+        _source(), _profile(), _options(), _COLLECT_DATE
+    )
 
     assert result.postings == []
     assert any("timeout" in w.lower() for w in result.warnings)
@@ -643,7 +694,9 @@ async def test_sitemap_malformed_xml(monkeypatch):
     mock = _MockClient(handler)
     monkeypatch.setattr("app.adapters.toss_careers.AsyncClient", lambda **kw: mock)
 
-    result = await TossCareersParser().fetch(_source(), _profile(), _options(), _COLLECT_DATE)
+    result = await TossCareersParser().fetch(
+        _source(), _profile(), _options(), _COLLECT_DATE
+    )
 
     assert result.postings == []
     assert any("malformed" in w.lower() for w in result.warnings)
@@ -664,7 +717,9 @@ async def test_sitemap_genuine_empty(monkeypatch):
     mock = _MockClient(handler)
     monkeypatch.setattr("app.adapters.toss_careers.AsyncClient", lambda **kw: mock)
 
-    result = await TossCareersParser().fetch(_source(), _profile(), _options(), _COLLECT_DATE)
+    result = await TossCareersParser().fetch(
+        _source(), _profile(), _options(), _COLLECT_DATE
+    )
 
     assert result.postings == []
     assert result.warnings == []
@@ -687,7 +742,9 @@ async def test_detail_http_error_skips_job(monkeypatch):
     mock = _MockClient(handler)
     monkeypatch.setattr("app.adapters.toss_careers.AsyncClient", lambda **kw: mock)
 
-    result = await TossCareersParser().fetch(_source(), _profile(), _options(), _COLLECT_DATE)
+    result = await TossCareersParser().fetch(
+        _source(), _profile(), _options(), _COLLECT_DATE
+    )
 
     # 7 postings instead of 8
     assert len(result.postings) == 7
@@ -718,7 +775,9 @@ async def test_detail_missing_next_data_skips_job(monkeypatch):
     mock = _MockClient(handler)
     monkeypatch.setattr("app.adapters.toss_careers.AsyncClient", lambda **kw: mock)
 
-    result = await TossCareersParser().fetch(_source(), _profile(), _options(), _COLLECT_DATE)
+    result = await TossCareersParser().fetch(
+        _source(), _profile(), _options(), _COLLECT_DATE
+    )
 
     assert len(result.postings) == 1
     assert any("__NEXT_DATA__" in w or "job-detail" in w for w in result.warnings)
@@ -748,7 +807,9 @@ async def test_detail_timeout_skips_job(monkeypatch):
     mock = _MockClient(handler)
     monkeypatch.setattr("app.adapters.toss_careers.AsyncClient", lambda **kw: mock)
 
-    result = await TossCareersParser().fetch(_source(), _profile(), _options(), _COLLECT_DATE)
+    result = await TossCareersParser().fetch(
+        _source(), _profile(), _options(), _COLLECT_DATE
+    )
 
     assert len(result.postings) == 1
     assert any("timeout" in w.lower() for w in result.warnings)
@@ -771,7 +832,9 @@ async def test_android_preferred_not_extracted(monkeypatch):
     mock = _MockClient(handler)
     monkeypatch.setattr("app.adapters.toss_careers.AsyncClient", lambda **kw: mock)
 
-    result = await TossCareersParser().fetch(_source(), _profile(), _options(), _COLLECT_DATE)
+    result = await TossCareersParser().fetch(
+        _source(), _profile(), _options(), _COLLECT_DATE
+    )
 
     p = result.postings[0]
     assert p.experience_level == "경력 3년 이상"

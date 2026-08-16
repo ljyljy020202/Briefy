@@ -43,22 +43,21 @@ import httpx
 import pytest
 
 import app.adapters.naver_careers  # noqa: F401 — ensure module is imported
-
 from app.adapters.naver_careers import (
-    NaverCareersParser,
-    _DetailResult,
-    _EMP_TYPE_MAP,
-    _ENTRY_TYPE_MAP,
     _WORK_AREA_MAP,
+    NaverCareersParser,
     _extract_experience_from_required_text,
     _parse_config,
     _parse_detail_page,
     _parse_list_item,
     _parse_roles,
-    _NaverConfig,
 )
 from app.adapters.official_company import _CUSTOM_REGISTRY_BY_KEY
-from app.schemas.collection import CollectionOptions, CompanyProfile, OfficialCompanySource
+from app.schemas.collection import (
+    CollectionOptions,
+    CompanyProfile,
+    OfficialCompanySource,
+)
 from app.services.normalization import normalize
 from app.utils.identifiers import compute_source_record_key
 
@@ -180,7 +179,7 @@ def test_greeting_still_registered():
 
 
 def test_greeting_and_jasoseol_importable():
-    import app.adapters.greeting   # noqa: F401
+    import app.adapters.greeting  # noqa: F401
     import app.adapters.jasoseol  # noqa: F401
 
 
@@ -194,7 +193,9 @@ def test_parse_config_defaults():
 
 
 def test_parse_config_custom():
-    cfg = _parse_config('{"parser_key":"NAVER_CAREERS","max_discover":30,"max_fetch":10}')
+    cfg = _parse_config(
+        '{"parser_key":"NAVER_CAREERS","max_discover":30,"max_fetch":10}'
+    )
     assert cfg.max_discover == 30
     assert cfg.max_fetch == 10
 
@@ -334,7 +335,8 @@ def test_parse_list_item_roles_same_deduped():
 
 
 def test_exp_extract_min_years():
-    assert _extract_experience_from_required_text("백엔드 개발 경력 3년 이상") == "3년 이상"
+    result = _extract_experience_from_required_text("백엔드 개발 경력 3년 이상")
+    assert result == "3년 이상"
 
 
 def test_exp_extract_range():
@@ -342,7 +344,8 @@ def test_exp_extract_range():
 
 
 def test_exp_extract_with_space():
-    assert _extract_experience_from_required_text("Java 개발 경력 5 년 이상") == "5년 이상"
+    result = _extract_experience_from_required_text("Java 개발 경력 5 년 이상")
+    assert result == "5년 이상"
 
 
 def test_exp_extract_no_pattern():

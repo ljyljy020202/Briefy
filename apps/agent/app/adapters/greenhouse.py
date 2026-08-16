@@ -2,7 +2,8 @@
 
 Registered as:
   "GREENHOUSE"     — generic; requires board_slug in config_json
-  "DAANGN_CAREERS" — alias; defaults board_slug="daangn", career URL to careers.daangn.com
+  "DAANGN_CAREERS" — alias; defaults board_slug="daangn",
+                   career URL to careers.daangn.com
 
 API contract (no pagination — list returns all jobs in one response):
   GET https://boards-api.greenhouse.io/v1/boards/{board_slug}/jobs?content=true
@@ -11,8 +12,8 @@ API contract (no pagination — list returns all jobs in one response):
 config_json:
   {
     "parser_key": "GREENHOUSE",
-    "board_slug": "daangn",          // required for GREENHOUSE; auto-set for known aliases
-    "max_items": 200,                 // cap on postings returned (default 200)
+    "board_slug": "daangn",      // required for GREENHOUSE; auto-set for known aliases
+    "max_items": 200,             // cap on postings returned (default 200)
     "career_url_tmpl": "https://careers.daangn.com/jobs/role/{job_id}/"
   }
 
@@ -212,7 +213,8 @@ class _GhConfig:
 def _parse_config(config_json: str | None, parser_key: str) -> _GhConfig:
     """Resolve board slug, max_items, and career URL template.
 
-    Merges: config_json → board defaults → parser_key alias defaults → hardcoded defaults.
+    Merges: config_json → board defaults → parser_key alias defaults → hardcoded
+    defaults.
     """
     data: dict = {}
     if config_json:
@@ -230,7 +232,9 @@ def _parse_config(config_json: str | None, parser_key: str) -> _GhConfig:
 
     board_defaults = _BOARD_DEFAULTS.get(board_slug, {})
 
-    max_items = int(data.get("max_items") or data.get("max_discover") or _DEFAULT_MAX_ITEMS)
+    max_items = int(
+        data.get("max_items") or data.get("max_discover") or _DEFAULT_MAX_ITEMS
+    )
 
     career_url_tmpl = str(
         data.get("career_url_tmpl")

@@ -40,7 +40,7 @@ import logging
 import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date
 from urllib.parse import parse_qs, urlparse
 
 from httpx import AsyncClient, HTTPStatusError, TimeoutException
@@ -199,7 +199,9 @@ def _parse_job_detail_html(html: str) -> dict | None:
         return None
 
     try:
-        queries = data["props"]["pageProps"]["prefetchResult"]["dehydratedState"]["queries"]
+        queries = (
+            data["props"]["pageProps"]["prefetchResult"]["dehydratedState"]["queries"]
+        )
     except (KeyError, TypeError):
         return None
 
@@ -441,7 +443,9 @@ class TossCareersParser(CustomParser):
                 "User-Agent": (
                     "Mozilla/5.0 (compatible; Briefy-Agent/1.0; +https://briefy.io)"
                 ),
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept": (
+                    "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+                ),
                 "Accept-Language": "ko-KR,ko;q=0.9",
             },
             follow_redirects=True,
@@ -453,24 +457,32 @@ class TossCareersParser(CustomParser):
             except TimeoutException:
                 msg = f"toss_careers: sitemap timeout company_id={source.company_id}"
                 warnings.append(msg)
-                return AdapterResult(warnings=warnings, source_stats=AdapterSourceStats())
+                return AdapterResult(
+                    warnings=warnings, source_stats=AdapterSourceStats()
+                )
             except HTTPStatusError as exc:
                 msg = (
                     f"toss_careers: sitemap HTTP {exc.response.status_code}"
                     f" company_id={source.company_id}"
                 )
                 warnings.append(msg)
-                return AdapterResult(warnings=warnings, source_stats=AdapterSourceStats())
+                return AdapterResult(
+                    warnings=warnings, source_stats=AdapterSourceStats()
+                )
             except Exception as exc:
                 msg = f"toss_careers: sitemap unexpected error: {exc}"
                 warnings.append(msg)
-                return AdapterResult(warnings=warnings, source_stats=AdapterSourceStats())
+                return AdapterResult(
+                    warnings=warnings, source_stats=AdapterSourceStats()
+                )
 
             try:
                 job_ids = _parse_sitemap(sitemap_resp.text)
             except ValueError as exc:
                 warnings.append(f"toss_careers: {exc}")
-                return AdapterResult(warnings=warnings, source_stats=AdapterSourceStats())
+                return AdapterResult(
+                    warnings=warnings, source_stats=AdapterSourceStats()
+                )
 
             if not job_ids:
                 return AdapterResult(
@@ -529,14 +541,18 @@ class TossCareersParser(CustomParser):
                         return None
 
                     try:
-                        return _job_to_posting(job, sid=sid, profile=profile, warnings=warnings)
+                        return _job_to_posting(
+                            job, sid=sid, profile=profile, warnings=warnings
+                        )
                     except Exception as exc:
                         warnings.append(
                             f"toss_careers: posting build error job_id={jid}: {exc}"
                         )
                         return None
 
-            results = await asyncio.gather(*[_fetch_one(jid) for jid in job_ids_to_fetch])
+            results = await asyncio.gather(
+                *[_fetch_one(jid) for jid in job_ids_to_fetch]
+            )
             postings = [p for p in results if p is not None]
 
         stats = AdapterSourceStats(

@@ -49,7 +49,6 @@ import httpx
 import pytest
 
 import app.adapters.greenhouse  # noqa: F401
-
 from app.adapters.greenhouse import (
     GreenhouseParser,
     _build_roles,
@@ -61,7 +60,11 @@ from app.adapters.greenhouse import (
     _parse_deadline,
 )
 from app.adapters.official_company import _CUSTOM_REGISTRY_BY_KEY
-from app.schemas.collection import CollectionOptions, CompanyProfile, OfficialCompanySource
+from app.schemas.collection import (
+    CollectionOptions,
+    CompanyProfile,
+    OfficialCompanySource,
+)
 from app.services.normalization import normalize
 from app.utils.identifiers import compute_source_record_key
 
@@ -141,8 +144,8 @@ def test_daangn_careers_is_greenhouse_instance():
 
 
 def test_naver_and_greeting_unaffected():
-    import app.adapters.naver_careers  # noqa: F401
     import app.adapters.greeting  # noqa: F401
+    import app.adapters.naver_careers  # noqa: F401
     assert "NAVER_CAREERS" in _CUSTOM_REGISTRY_BY_KEY
     assert "GREETING" in _CUSTOM_REGISTRY_BY_KEY
 
@@ -176,7 +179,9 @@ def test_parse_config_invalid_json_defaults():
 
 
 def test_parse_config_max_discover_alias():
-    cfg = _parse_config('{"parser_key":"DAANGN_CAREERS","max_discover":30}', "DAANGN_CAREERS")
+    cfg = _parse_config(
+        '{"parser_key":"DAANGN_CAREERS","max_discover":30}', "DAANGN_CAREERS"
+    )
     assert cfg.max_items == 30
 
 
@@ -257,7 +262,9 @@ def test_build_roles_dedup_when_same():
 
 def test_build_roles_multiple_depts():
     depts = [{"name": "Software Engineer, Backend"}, {"name": "Software Engineer, iOS"}]
-    assert _build_roles(depts, "Tech") == ["Tech", "Software Engineer, Backend", "Software Engineer, iOS"]
+    assert _build_roles(depts, "Tech") == [
+        "Tech", "Software Engineer, Backend", "Software Engineer, iOS"
+    ]
 
 
 def test_build_roles_empty():
@@ -266,7 +273,9 @@ def test_build_roles_empty():
 
 def test_build_roles_product_manager():
     depts = [{"name": "Product Manager"}]
-    assert _build_roles(depts, "Product Management") == ["Product Management", "Product Manager"]
+    assert _build_roles(depts, "Product Management") == [
+        "Product Management", "Product Manager"
+    ]
 
 
 # ── _extract_year_experience ──────────────────────────────────────────────────
@@ -290,7 +299,8 @@ def test_extract_year_no_pattern():
 
 def test_extract_year_prefers_range_over_min():
     # "경력 3년 이상 7년 이하" should match range first
-    assert _extract_year_experience("브랜드 디자인 경력 3년 이상 7년 이하인 분") == "경력 3~7년"
+    result = _extract_year_experience("브랜드 디자인 경력 3년 이상 7년 이하인 분")
+    assert result == "경력 3~7년"
 
 
 # ── _html_to_description_and_exp ─────────────────────────────────────────────
@@ -317,7 +327,10 @@ def test_html_to_desc_preferred_not_extracted():
 
 
 def test_html_to_desc_description_not_empty():
-    raw = "&lt;h3&gt;이런 일을 해요&lt;/h3&gt;&lt;p&gt;백엔드 서비스를 개발해요.&lt;/p&gt;"
+    raw = (
+        "&lt;h3&gt;이런 일을 해요&lt;/h3&gt;"
+        "&lt;p&gt;백엔드 서비스를 개발해요.&lt;/p&gt;"
+    )
     desc, _ = _html_to_description_and_exp(raw)
     assert desc is not None
     assert "백엔드 서비스" in desc
@@ -445,7 +458,9 @@ async def test_backend_experience_enriched_from_content(monkeypatch):
     mock = _MockClient(handler)
     monkeypatch.setattr("app.adapters.greenhouse.AsyncClient", lambda **kw: mock)
 
-    result = await GreenhouseParser().fetch(_source(), _profile(), _options(), _COLLECT_DATE)
+    result = await GreenhouseParser().fetch(
+        _source(), _profile(), _options(), _COLLECT_DATE
+    )
 
     p = result.postings[0]
     assert p.experience_level == "경력 3년 이상"
@@ -458,7 +473,7 @@ async def test_backend_experience_enriched_from_content(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_ml_engineer_shinip_gyeongryeok(monkeypatch):
-    """ML job: metadata '신입/경력', content has tilde range but base wins for 신입/경력."""
+    """ML job: metadata '신입/경력', content has tilde range but base wins."""
     data = {"jobs": [_LIST_DATA["jobs"][1]], "meta": {"total": 1}}
 
     async def handler(url, kw):
@@ -467,7 +482,9 @@ async def test_ml_engineer_shinip_gyeongryeok(monkeypatch):
     mock = _MockClient(handler)
     monkeypatch.setattr("app.adapters.greenhouse.AsyncClient", lambda **kw: mock)
 
-    result = await GreenhouseParser().fetch(_source(), _profile(), _options(), _COLLECT_DATE)
+    result = await GreenhouseParser().fetch(
+        _source(), _profile(), _options(), _COLLECT_DATE
+    )
 
     p = result.postings[0]
     # base_exp is "신입/경력" — not "경력" — so content year does NOT override
@@ -487,7 +504,9 @@ async def test_android_intern_deadline(monkeypatch):
     mock = _MockClient(handler)
     monkeypatch.setattr("app.adapters.greenhouse.AsyncClient", lambda **kw: mock)
 
-    result = await GreenhouseParser().fetch(_source(), _profile(), _options(), _COLLECT_DATE)
+    result = await GreenhouseParser().fetch(
+        _source(), _profile(), _options(), _COLLECT_DATE
+    )
 
     p = result.postings[0]
     assert p.employment_type == "인턴"
@@ -507,7 +526,9 @@ async def test_sales_business_division(monkeypatch):
     mock = _MockClient(handler)
     monkeypatch.setattr("app.adapters.greenhouse.AsyncClient", lambda **kw: mock)
 
-    result = await GreenhouseParser().fetch(_source(), _profile(), _options(), _COLLECT_DATE)
+    result = await GreenhouseParser().fetch(
+        _source(), _profile(), _options(), _COLLECT_DATE
+    )
 
     p = result.postings[0]
     assert "Business" in p.roles
@@ -526,7 +547,9 @@ async def test_product_manager_5yr(monkeypatch):
     mock = _MockClient(handler)
     monkeypatch.setattr("app.adapters.greenhouse.AsyncClient", lambda **kw: mock)
 
-    result = await GreenhouseParser().fetch(_source(), _profile(), _options(), _COLLECT_DATE)
+    result = await GreenhouseParser().fetch(
+        _source(), _profile(), _options(), _COLLECT_DATE
+    )
 
     p = result.postings[0]
     assert p.experience_level == "경력 5년 이상"
@@ -545,7 +568,9 @@ async def test_contract_designer_range(monkeypatch):
     mock = _MockClient(handler)
     monkeypatch.setattr("app.adapters.greenhouse.AsyncClient", lambda **kw: mock)
 
-    result = await GreenhouseParser().fetch(_source(), _profile(), _options(), _COLLECT_DATE)
+    result = await GreenhouseParser().fetch(
+        _source(), _profile(), _options(), _COLLECT_DATE
+    )
 
     p = result.postings[0]
     assert p.employment_type == "계약직"
@@ -564,7 +589,9 @@ async def test_daangn_market_legal_entity(monkeypatch):
     mock = _MockClient(handler)
     monkeypatch.setattr("app.adapters.greenhouse.AsyncClient", lambda **kw: mock)
 
-    result = await GreenhouseParser().fetch(_source(), _profile(), _options(), _COLLECT_DATE)
+    result = await GreenhouseParser().fetch(
+        _source(), _profile(), _options(), _COLLECT_DATE
+    )
 
     assert result.postings[0].company_name == "당근마켓"
 
@@ -580,7 +607,9 @@ async def test_daangn_pay_legal_entity(monkeypatch):
     mock = _MockClient(handler)
     monkeypatch.setattr("app.adapters.greenhouse.AsyncClient", lambda **kw: mock)
 
-    result = await GreenhouseParser().fetch(_source(), _profile(), _options(), _COLLECT_DATE)
+    result = await GreenhouseParser().fetch(
+        _source(), _profile(), _options(), _COLLECT_DATE
+    )
 
     assert result.postings[0].company_name == "당근페이"
     assert result.postings[0].experience_level == "경력 5년 이상"
@@ -597,7 +626,9 @@ async def test_null_deadline_is_none(monkeypatch):
     mock = _MockClient(handler)
     monkeypatch.setattr("app.adapters.greenhouse.AsyncClient", lambda **kw: mock)
 
-    result = await GreenhouseParser().fetch(_source(), _profile(), _options(), _COLLECT_DATE)
+    result = await GreenhouseParser().fetch(
+        _source(), _profile(), _options(), _COLLECT_DATE
+    )
 
     assert result.postings[0].deadline is None
 
@@ -616,7 +647,9 @@ async def test_metadata_order_invariance(monkeypatch):
     mock = _MockClient(handler)
     monkeypatch.setattr("app.adapters.greenhouse.AsyncClient", lambda **kw: mock)
 
-    result = await GreenhouseParser().fetch(_source(), _profile(), _options(), _COLLECT_DATE)
+    result = await GreenhouseParser().fetch(
+        _source(), _profile(), _options(), _COLLECT_DATE
+    )
 
     p = result.postings[0]
     assert "Tech" in p.roles
@@ -625,7 +658,7 @@ async def test_metadata_order_invariance(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_malformed_metadata_produces_posting(monkeypatch):
-    """Job with partial metadata (missing Employment Type, Prior Experience) → posting with None fields."""
+    """Job with partial metadata (missing Employment Type, Prior Experience)."""
     data = {"jobs": [_LIST_DATA["jobs"][8]], "meta": {"total": 1}}
 
     async def handler(url, kw):
@@ -634,7 +667,9 @@ async def test_malformed_metadata_produces_posting(monkeypatch):
     mock = _MockClient(handler)
     monkeypatch.setattr("app.adapters.greenhouse.AsyncClient", lambda **kw: mock)
 
-    result = await GreenhouseParser().fetch(_source(), _profile(), _options(), _COLLECT_DATE)
+    result = await GreenhouseParser().fetch(
+        _source(), _profile(), _options(), _COLLECT_DATE
+    )
 
     assert len(result.postings) == 1
     p = result.postings[0]
@@ -669,7 +704,9 @@ async def test_genuine_empty_list(monkeypatch):
     mock = _MockClient(handler)
     monkeypatch.setattr("app.adapters.greenhouse.AsyncClient", lambda **kw: mock)
 
-    result = await GreenhouseParser().fetch(_source(), _profile(), _options(), _COLLECT_DATE)
+    result = await GreenhouseParser().fetch(
+        _source(), _profile(), _options(), _COLLECT_DATE
+    )
 
     assert result.postings == []
     assert result.warnings == []
@@ -684,7 +721,9 @@ async def test_schema_failure_missing_jobs_key(monkeypatch):
     mock = _MockClient(handler)
     monkeypatch.setattr("app.adapters.greenhouse.AsyncClient", lambda **kw: mock)
 
-    result = await GreenhouseParser().fetch(_source(), _profile(), _options(), _COLLECT_DATE)
+    result = await GreenhouseParser().fetch(
+        _source(), _profile(), _options(), _COLLECT_DATE
+    )
 
     assert result.postings == []
     assert any("schema" in w.lower() for w in result.warnings)
@@ -702,7 +741,9 @@ async def test_malformed_json_warning(monkeypatch):
     mock = _MockClient(handler)
     monkeypatch.setattr("app.adapters.greenhouse.AsyncClient", lambda **kw: mock)
 
-    result = await GreenhouseParser().fetch(_source(), _profile(), _options(), _COLLECT_DATE)
+    result = await GreenhouseParser().fetch(
+        _source(), _profile(), _options(), _COLLECT_DATE
+    )
 
     assert result.postings == []
     assert any("JSON parse error" in w for w in result.warnings)
@@ -716,7 +757,9 @@ async def test_http_error_warning(monkeypatch):
     mock = _MockClient(handler)
     monkeypatch.setattr("app.adapters.greenhouse.AsyncClient", lambda **kw: mock)
 
-    result = await GreenhouseParser().fetch(_source(), _profile(), _options(), _COLLECT_DATE)
+    result = await GreenhouseParser().fetch(
+        _source(), _profile(), _options(), _COLLECT_DATE
+    )
 
     assert result.postings == []
     assert any("HTTP" in w for w in result.warnings)
@@ -730,7 +773,9 @@ async def test_timeout_warning(monkeypatch):
     mock = _MockClient(handler)
     monkeypatch.setattr("app.adapters.greenhouse.AsyncClient", lambda **kw: mock)
 
-    result = await GreenhouseParser().fetch(_source(), _profile(), _options(), _COLLECT_DATE)
+    result = await GreenhouseParser().fetch(
+        _source(), _profile(), _options(), _COLLECT_DATE
+    )
 
     assert result.postings == []
     assert any("timeout" in w.lower() for w in result.warnings)
@@ -747,7 +792,9 @@ async def test_daangn_careers_career_url_format(monkeypatch):
     mock = _MockClient(handler)
     monkeypatch.setattr("app.adapters.greenhouse.AsyncClient", lambda **kw: mock)
 
-    result = await GreenhouseParser().fetch(_source(), _profile(), _options(), _COLLECT_DATE)
+    result = await GreenhouseParser().fetch(
+        _source(), _profile(), _options(), _COLLECT_DATE
+    )
 
     p = result.postings[0]
     assert "careers.daangn.com" in p.source_url

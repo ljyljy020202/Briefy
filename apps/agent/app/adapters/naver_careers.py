@@ -36,7 +36,6 @@ import logging
 import re
 from dataclasses import dataclass
 from datetime import date, datetime
-from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
 from httpx import AsyncClient, HTTPStatusError, TimeoutException
@@ -374,7 +373,8 @@ def _parse_detail_page(html: str) -> _DetailResult:
         result.description = description[:2000] if description else None
 
         # Year extraction only from required sections
-        if required_text_parts and result.experience_level in ("경력", "경력 무관", None):
+        exp_infer_levels = ("경력", "경력 무관", None)
+        if required_text_parts and result.experience_level in exp_infer_levels:
             combined = "\n".join(required_text_parts)
             inferred = _extract_experience_from_required_text(combined)
             if inferred:
@@ -489,7 +489,6 @@ class NaverCareersParser(CustomParser):
                     if not raw_list:
                         break  # no more pages
 
-                    parsed_count_before = len(items)
                     for raw_item in raw_list:
                         if len(items) >= config.max_discover:
                             break
