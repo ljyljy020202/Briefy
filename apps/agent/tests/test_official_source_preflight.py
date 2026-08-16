@@ -344,6 +344,131 @@ async def test_custom_preflight_greeting_success(monkeypatch):
     assert result.failure_code is None
 
 
+async def test_custom_preflight_greenhouse_success(monkeypatch):
+    """GREENHOUSE parser routes to _greenhouse_preflight(); mock for isolation."""
+    monkeypatch.setattr(
+        "app.services.official_source_preflight._greenhouse_preflight",
+        lambda *a, **kw: _async_return(
+            OfficialSourcePreflightResponse(
+                reachable=True,
+                adapter_supported=True,
+                parser_registered=True,
+                discovered_count=9,
+                sample_parsed_count=1,
+                required_fields_valid=True,
+            )
+        ),
+    )
+
+    result = await run_preflight(
+        source_id=10,
+        company_id=10,
+        company_name="당근",
+        source_type="OFFICIAL_CAREER",
+        source_url="https://careers.daangn.com",
+        adapter_type="CUSTOM",
+        config_json='{"parser_key": "GREENHOUSE", "board_slug": "daangn"}',
+    )
+
+    assert result.reachable is True
+    assert result.parser_registered is True
+    assert result.failure_code is None
+
+
+async def test_custom_preflight_daangn_careers_routes_greenhouse(monkeypatch):
+    """DAANGN_CAREERS alias also dispatches to _greenhouse_preflight()."""
+    called: list[bool] = []
+
+    async def _fake_gh(*a, **kw):
+        called.append(True)
+        return OfficialSourcePreflightResponse(
+            reachable=True,
+            adapter_supported=True,
+            parser_registered=True,
+            discovered_count=3,
+            sample_parsed_count=1,
+            required_fields_valid=True,
+        )
+
+    monkeypatch.setattr(
+        "app.services.official_source_preflight._greenhouse_preflight", _fake_gh
+    )
+
+    await run_preflight(
+        source_id=10,
+        company_id=10,
+        company_name="당근",
+        source_type="OFFICIAL_CAREER",
+        source_url="https://careers.daangn.com",
+        adapter_type="CUSTOM",
+        config_json='{"parser_key": "DAANGN_CAREERS"}',
+    )
+
+    assert called, "_greenhouse_preflight was not called for DAANGN_CAREERS"
+
+
+async def test_custom_preflight_toss_success(monkeypatch):
+    """TOSS_CAREERS parser routes to _toss_preflight(); mock for isolation."""
+    monkeypatch.setattr(
+        "app.services.official_source_preflight._toss_preflight",
+        lambda *a, **kw: _async_return(
+            OfficialSourcePreflightResponse(
+                reachable=True,
+                adapter_supported=True,
+                parser_registered=True,
+                discovered_count=120,
+                sample_parsed_count=1,
+                required_fields_valid=True,
+            )
+        ),
+    )
+
+    result = await run_preflight(
+        source_id=4,
+        company_id=9,
+        company_name="토스",
+        source_type="OFFICIAL_CAREER",
+        source_url="https://toss.im/career",
+        adapter_type="CUSTOM",
+        config_json='{"parser_key": "TOSS_CAREERS"}',
+    )
+
+    assert result.reachable is True
+    assert result.parser_registered is True
+    assert result.failure_code is None
+
+
+async def test_custom_preflight_naver_success(monkeypatch):
+    """NAVER_CAREERS parser routes to _naver_preflight(); mock for isolation."""
+    monkeypatch.setattr(
+        "app.services.official_source_preflight._naver_preflight",
+        lambda *a, **kw: _async_return(
+            OfficialSourcePreflightResponse(
+                reachable=True,
+                adapter_supported=True,
+                parser_registered=True,
+                discovered_count=45,
+                sample_parsed_count=1,
+                required_fields_valid=True,
+            )
+        ),
+    )
+
+    result = await run_preflight(
+        source_id=3,
+        company_id=8,
+        company_name="네이버",
+        source_type="OFFICIAL_CAREER",
+        source_url="https://recruit.navercorp.com",
+        adapter_type="CUSTOM",
+        config_json='{"parser_key": "NAVER_CAREERS"}',
+    )
+
+    assert result.reachable is True
+    assert result.parser_registered is True
+    assert result.failure_code is None
+
+
 async def test_custom_preflight_invalid_config_json():
     result = await run_preflight(
         source_id=3,
