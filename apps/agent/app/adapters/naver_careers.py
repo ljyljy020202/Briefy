@@ -666,9 +666,15 @@ async def naver_preflight(source: OfficialCompanySource) -> dict:
                     "warnings": ["JSON parse error"],
                 }
 
-            result_obj = data.get("result") or {}
-            total_size = int(result_obj.get("totalSize") or 0)
-            raw_list = result_obj.get("list") or []
+            if data.get("result") != "Y":
+                return {
+                    "reachable": False,
+                    "discovered_count": 0,
+                    "sample_parsed": None,
+                    "warnings": [f"unexpected result value: {data.get('result')!r}"],
+                }
+            total_size = int(data.get("totalSize") or 0)
+            raw_list = data.get("list") or []
 
             discovered_count = total_size
             sample_parsed = None
