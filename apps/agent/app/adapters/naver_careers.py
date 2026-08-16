@@ -638,8 +638,8 @@ async def naver_preflight(source: OfficialCompanySource) -> dict:
                 "User-Agent": (
                     "Mozilla/5.0 (compatible; Briefy-Agent/1.0; +https://briefy.io)"
                 ),
-                "Accept": "application/json",
-                "Referer": "https://recruit.navercorp.com/",
+                "Accept": "application/json, text/javascript, */*; q=0.01",
+                "Referer": "https://recruit.navercorp.com/rcrt/list.do",
             },
             follow_redirects=True,
         ) as client:
