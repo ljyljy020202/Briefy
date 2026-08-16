@@ -305,6 +305,21 @@ async def _custom_preflight(
             source_id, company_id, company_name, source_url, config_json
         )
 
+    if parser_key in {"GREENHOUSE", "DAANGN_CAREERS"}:
+        return await _greenhouse_preflight(
+            source_id, company_id, company_name, source_url, config_json
+        )
+
+    if parser_key == "TOSS_CAREERS":
+        return await _toss_preflight(
+            source_id, company_id, company_name, source_url, config_json
+        )
+
+    if parser_key == "NAVER_CAREERS":
+        return await _naver_preflight(
+            source_id, company_id, company_name, source_url, config_json
+        )
+
     # Other parsers: not supported yet
     return OfficialSourcePreflightResponse(
         adapter_supported=True,
@@ -368,6 +383,210 @@ async def _greeting_preflight(
             discovered_count=discovered,
             failure_code="REQUIRED_FIELD_PARSE_FAILED",
             failure_message="Sample job page did not yield a title",
+            warnings=warnings,
+        )
+
+    return OfficialSourcePreflightResponse(
+        reachable=True,
+        adapter_supported=True,
+        parser_registered=True,
+        discovered_count=discovered,
+        sample_parsed_count=sample_parsed,
+        required_fields_valid=True,
+        warnings=warnings,
+    )
+
+
+async def _greenhouse_preflight(
+    source_id: int,
+    company_id: int,
+    company_name: str | None,
+    source_url: str | None,
+    config_json: str | None,
+) -> OfficialSourcePreflightResponse:
+    from app.adapters.greenhouse import greenhouse_preflight
+    from app.schemas.collection import OfficialCompanySource
+
+    source = OfficialCompanySource(
+        company_id=company_id,
+        source_type="OFFICIAL_CAREER",
+        source_url=source_url,
+        adapter_type="CUSTOM",
+        config_json=config_json,
+    )
+
+    result = await greenhouse_preflight(source)
+    reachable: bool = result["reachable"]
+    discovered: int = result["discovered_count"]
+    warnings: list[str] = result["warnings"]
+    sample = result["sample_parsed"]
+
+    if not reachable:
+        msg = warnings[0] if warnings else "Greenhouse API unreachable"
+        return OfficialSourcePreflightResponse(
+            adapter_supported=True,
+            parser_registered=True,
+            failure_code="URL_UNREACHABLE",
+            failure_message=msg,
+        )
+
+    if discovered == 0:
+        return OfficialSourcePreflightResponse(
+            adapter_supported=True,
+            parser_registered=True,
+            reachable=True,
+            failure_code="NO_ITEMS_DISCOVERED",
+            failure_message="No jobs found on Greenhouse board",
+            warnings=warnings,
+        )
+
+    sample_parsed = 1 if (sample is not None and sample.get("title")) else 0
+    required_valid = sample_parsed > 0
+
+    if not required_valid:
+        return OfficialSourcePreflightResponse(
+            adapter_supported=True,
+            parser_registered=True,
+            reachable=True,
+            discovered_count=discovered,
+            failure_code="REQUIRED_FIELD_PARSE_FAILED",
+            failure_message="Sample job did not yield a title",
+            warnings=warnings,
+        )
+
+    return OfficialSourcePreflightResponse(
+        reachable=True,
+        adapter_supported=True,
+        parser_registered=True,
+        discovered_count=discovered,
+        sample_parsed_count=sample_parsed,
+        required_fields_valid=True,
+        warnings=warnings,
+    )
+
+
+async def _toss_preflight(
+    source_id: int,
+    company_id: int,
+    company_name: str | None,
+    source_url: str | None,
+    config_json: str | None,
+) -> OfficialSourcePreflightResponse:
+    from app.adapters.toss_careers import toss_preflight
+    from app.schemas.collection import OfficialCompanySource
+
+    source = OfficialCompanySource(
+        company_id=company_id,
+        source_type="OFFICIAL_CAREER",
+        source_url=source_url,
+        adapter_type="CUSTOM",
+        config_json=config_json,
+    )
+
+    result = await toss_preflight(source)
+    reachable: bool = result["reachable"]
+    discovered: int = result["discovered_count"]
+    warnings: list[str] = result["warnings"]
+    sample = result["sample_parsed"]
+
+    if not reachable:
+        msg = warnings[0] if warnings else "Toss sitemap unreachable"
+        return OfficialSourcePreflightResponse(
+            adapter_supported=True,
+            parser_registered=True,
+            failure_code="URL_UNREACHABLE",
+            failure_message=msg,
+        )
+
+    if discovered == 0:
+        return OfficialSourcePreflightResponse(
+            adapter_supported=True,
+            parser_registered=True,
+            reachable=True,
+            failure_code="NO_ITEMS_DISCOVERED",
+            failure_message="No job URLs found in Toss sitemap",
+            warnings=warnings,
+        )
+
+    sample_parsed = 1 if (sample is not None and sample.get("title")) else 0
+    required_valid = sample_parsed > 0
+
+    if not required_valid:
+        return OfficialSourcePreflightResponse(
+            adapter_supported=True,
+            parser_registered=True,
+            reachable=True,
+            discovered_count=discovered,
+            failure_code="REQUIRED_FIELD_PARSE_FAILED",
+            failure_message="Sample job page did not yield a title",
+            warnings=warnings,
+        )
+
+    return OfficialSourcePreflightResponse(
+        reachable=True,
+        adapter_supported=True,
+        parser_registered=True,
+        discovered_count=discovered,
+        sample_parsed_count=sample_parsed,
+        required_fields_valid=True,
+        warnings=warnings,
+    )
+
+
+async def _naver_preflight(
+    source_id: int,
+    company_id: int,
+    company_name: str | None,
+    source_url: str | None,
+    config_json: str | None,
+) -> OfficialSourcePreflightResponse:
+    from app.adapters.naver_careers import naver_preflight
+    from app.schemas.collection import OfficialCompanySource
+
+    source = OfficialCompanySource(
+        company_id=company_id,
+        source_type="OFFICIAL_CAREER",
+        source_url=source_url,
+        adapter_type="CUSTOM",
+        config_json=config_json,
+    )
+
+    result = await naver_preflight(source)
+    reachable: bool = result["reachable"]
+    discovered: int = result["discovered_count"]
+    warnings: list[str] = result["warnings"]
+    sample = result["sample_parsed"]
+
+    if not reachable:
+        msg = warnings[0] if warnings else "Naver recruit API unreachable"
+        return OfficialSourcePreflightResponse(
+            adapter_supported=True,
+            parser_registered=True,
+            failure_code="URL_UNREACHABLE",
+            failure_message=msg,
+        )
+
+    if discovered == 0:
+        return OfficialSourcePreflightResponse(
+            adapter_supported=True,
+            parser_registered=True,
+            reachable=True,
+            failure_code="NO_ITEMS_DISCOVERED",
+            failure_message="No jobs found on Naver recruit",
+            warnings=warnings,
+        )
+
+    sample_parsed = 1 if (sample is not None and sample.get("title")) else 0
+    required_valid = sample_parsed > 0
+
+    if not required_valid:
+        return OfficialSourcePreflightResponse(
+            adapter_supported=True,
+            parser_registered=True,
+            reachable=True,
+            discovered_count=discovered,
+            failure_code="REQUIRED_FIELD_PARSE_FAILED",
+            failure_message="Sample job item did not yield a title",
             warnings=warnings,
         )
 

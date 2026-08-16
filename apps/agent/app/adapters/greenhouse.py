@@ -549,3 +549,108 @@ _gh_parser = GreenhouseParser()
 _CUSTOM_REGISTRY_BY_KEY["GREENHOUSE"] = _gh_parser
 # DAANGN_CAREERS: alias that uses the same parser with board_slug="daangn"
 _CUSTOM_REGISTRY_BY_KEY["DAANGN_CAREERS"] = _gh_parser
+
+
+# ── Preflight ──────────────────────────────────────────────────────────────────
+
+
+async def greenhouse_preflight(source: OfficialCompanySource) -> dict:
+    """Check Greenhouse board reachability and parse a sample job.
+
+    Returns dict: reachable, discovered_count, sample_parsed, warnings.
+    """
+    try:
+        cfg_data = json.loads(source.config_json or "{}")
+        parser_key = cfg_data.get("parser_key", "GREENHOUSE")
+    except Exception:
+        parser_key = "GREENHOUSE"
+
+    config = _parse_config(source.config_json, parser_key)
+    sid = f"company_{source.company_id}_custom_{parser_key.lower()}"
+    list_url = _GH_LIST_URL.format(board_slug=config.board_slug)
+    timeout = settings.job_collection_timeout_seconds
+    warnings: list[str] = []
+
+    try:
+        async with AsyncClient(
+            timeout=timeout,
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (compatible; Briefy-Agent/1.0; +https://briefy.io)"
+                ),
+                "Accept": "application/json",
+            },
+            follow_redirects=True,
+        ) as client:
+            try:
+                resp = await client.get(list_url, params={"content": "true"})
+                resp.raise_for_status()
+            except (TimeoutException, HTTPStatusError) as exc:
+                return {
+                    "reachable": False,
+                    "discovered_count": 0,
+                    "sample_parsed": None,
+                    "warnings": [str(exc)],
+                }
+
+            try:
+                payload = resp.json()
+            except Exception:
+                return {
+                    "reachable": False,
+                    "discovered_count": 0,
+                    "sample_parsed": None,
+                    "warnings": ["JSON parse error"],
+                }
+
+            raw_jobs = payload.get("jobs")
+            if not isinstance(raw_jobs, list):
+                return {
+                    "reachable": False,
+                    "discovered_count": 0,
+                    "sample_parsed": None,
+                    "warnings": ["unexpected schema: 'jobs' not a list"],
+                }
+
+            discovered_count = len(raw_jobs)
+            sample_parsed = None
+
+            if raw_jobs:
+                try:
+                    posting = _parse_job(
+                        raw_jobs[0],
+                        sid=sid,
+                        config=config,
+                        profile=None,
+                        warnings=warnings,
+                    )
+                    if posting is not None:
+                        sample_parsed = {
+                            "title": posting.title,
+                            "company_name": posting.company_name,
+                            "employment_type": posting.employment_type,
+                            "experience_level": posting.experience_level,
+                            "location": posting.location,
+                            "deadline": (
+                                str(posting.deadline) if posting.deadline else None
+                            ),
+                            "roles": posting.roles,
+                            "source_external_id": posting.source_external_id,
+                        }
+                except Exception as exc:
+                    warnings.append(f"sample parse error: {exc}")
+
+    except Exception as exc:
+        return {
+            "reachable": False,
+            "discovered_count": 0,
+            "sample_parsed": None,
+            "warnings": [str(exc)],
+        }
+
+    return {
+        "reachable": True,
+        "discovered_count": discovered_count,
+        "sample_parsed": sample_parsed,
+        "warnings": warnings,
+    }

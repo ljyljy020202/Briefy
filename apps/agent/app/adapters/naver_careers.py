@@ -618,3 +618,88 @@ class NaverCareersParser(CustomParser):
 
 # Self-registration on first import.
 _CUSTOM_REGISTRY_BY_KEY["NAVER_CAREERS"] = NaverCareersParser()
+
+
+# ── Preflight ──────────────────────────────────────────────────────────────────
+
+
+async def naver_preflight(source: OfficialCompanySource) -> dict:
+    """Check Naver recruit API reachability and parse a sample job.
+
+    Returns dict: reachable, discovered_count, sample_parsed, warnings.
+    """
+    timeout = settings.job_collection_timeout_seconds
+    warnings: list[str] = []
+
+    try:
+        async with AsyncClient(
+            timeout=timeout,
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (compatible; Briefy-Agent/1.0; +https://briefy.io)"
+                ),
+                "Accept": "application/json",
+                "Referer": "https://recruit.navercorp.com/",
+            },
+            follow_redirects=True,
+        ) as client:
+            try:
+                resp = await client.get(
+                    _LIST_URL, params={"page": 1, "pageSize": _PAGE_SIZE}
+                )
+                resp.raise_for_status()
+            except (TimeoutException, HTTPStatusError) as exc:
+                return {
+                    "reachable": False,
+                    "discovered_count": 0,
+                    "sample_parsed": None,
+                    "warnings": [str(exc)],
+                }
+
+            try:
+                data = resp.json()
+            except Exception:
+                return {
+                    "reachable": False,
+                    "discovered_count": 0,
+                    "sample_parsed": None,
+                    "warnings": ["JSON parse error"],
+                }
+
+            result_obj = data.get("result") or {}
+            total_size = int(result_obj.get("totalSize") or 0)
+            raw_list = result_obj.get("list") or []
+
+            discovered_count = total_size
+            sample_parsed = None
+
+            if raw_list:
+                item = _parse_list_item(raw_list[0])
+                if item is not None:
+                    sample_parsed = {
+                        "title": item.title,
+                        "company_name": item.company_name,
+                        "employment_type": item.employment_type,
+                        "experience_level": item.experience_level,
+                        "location": item.location,
+                        "deadline": str(item.deadline) if item.deadline else None,
+                        "roles": item.roles,
+                        "source_external_id": str(item.anno_id),
+                    }
+                else:
+                    warnings.append("first list item failed to parse")
+
+    except Exception as exc:
+        return {
+            "reachable": False,
+            "discovered_count": 0,
+            "sample_parsed": None,
+            "warnings": [str(exc)],
+        }
+
+    return {
+        "reachable": True,
+        "discovered_count": discovered_count,
+        "sample_parsed": sample_parsed,
+        "warnings": warnings,
+    }

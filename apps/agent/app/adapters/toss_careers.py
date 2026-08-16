@@ -551,3 +551,97 @@ class TossCareersParser(CustomParser):
 # ── Self-registration ──────────────────────────────────────────────────────────
 
 _CUSTOM_REGISTRY_BY_KEY["TOSS_CAREERS"] = TossCareersParser()
+
+
+# ── Preflight ──────────────────────────────────────────────────────────────────
+
+
+async def toss_preflight(source: OfficialCompanySource) -> dict:
+    """Check Toss sitemap reachability and parse a sample job.
+
+    Returns dict: reachable, discovered_count, sample_parsed, warnings.
+    """
+    sid = f"company_{source.company_id}_custom_toss_careers"
+    timeout = settings.job_collection_timeout_seconds
+    warnings: list[str] = []
+
+    try:
+        async with AsyncClient(
+            timeout=timeout,
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (compatible; Briefy-Agent/1.0; +https://briefy.io)"
+                ),
+                "Accept": "text/html,application/xhtml+xml,*/*",
+            },
+            follow_redirects=True,
+        ) as client:
+            try:
+                sitemap_resp = await client.get(_SITEMAP_URL)
+                sitemap_resp.raise_for_status()
+            except (TimeoutException, HTTPStatusError) as exc:
+                return {
+                    "reachable": False,
+                    "discovered_count": 0,
+                    "sample_parsed": None,
+                    "warnings": [str(exc)],
+                }
+
+            try:
+                job_ids = _parse_sitemap(sitemap_resp.text)
+            except ValueError as exc:
+                return {
+                    "reachable": False,
+                    "discovered_count": 0,
+                    "sample_parsed": None,
+                    "warnings": [str(exc)],
+                }
+
+            discovered_count = len(job_ids)
+            sample_parsed = None
+
+            if job_ids:
+                sample_id = job_ids[0]
+                url = _DETAIL_URL_TMPL.format(job_id=sample_id)
+                try:
+                    detail_resp = await client.get(url)
+                    detail_resp.raise_for_status()
+                    job = _parse_job_detail_html(detail_resp.text)
+                    if job is not None:
+                        posting = _job_to_posting(
+                            job, sid=sid, profile=None, warnings=warnings
+                        )
+                        if posting is not None:
+                            sample_parsed = {
+                                "title": posting.title,
+                                "company_name": posting.company_name,
+                                "employment_type": posting.employment_type,
+                                "experience_level": posting.experience_level,
+                                "location": posting.location,
+                                "deadline": (
+                                    str(posting.deadline) if posting.deadline else None
+                                ),
+                                "roles": posting.roles,
+                                "source_external_id": posting.source_external_id,
+                            }
+                    else:
+                        warnings.append(
+                            f"sample __NEXT_DATA__ missing for job_id={sample_id}"
+                        )
+                except Exception as exc:
+                    warnings.append(f"sample fetch error job_id={sample_id}: {exc}")
+
+    except Exception as exc:
+        return {
+            "reachable": False,
+            "discovered_count": 0,
+            "sample_parsed": None,
+            "warnings": [str(exc)],
+        }
+
+    return {
+        "reachable": True,
+        "discovered_count": discovered_count,
+        "sample_parsed": sample_parsed,
+        "warnings": warnings,
+    }
