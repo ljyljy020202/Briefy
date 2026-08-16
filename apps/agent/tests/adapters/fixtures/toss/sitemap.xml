@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <!-- Non-job pages (should be ignored by parser) -->
+  <url><loc>https://toss.im/career/jobs</loc></url>
+  <url><loc>https://toss.im/career/culture</loc></url>
+  <url><loc>https://toss.im/career/faq</loc></url>
+
+  <!-- Job detail pages (job_id= format — allowed by robots.txt) -->
+  <url><loc>https://toss.im/career/job-detail?job_id=1001001003</loc></url>
+  <url><loc>https://toss.im/career/job-detail?job_id=1002001003</loc></url>
+  <url><loc>https://toss.im/career/job-detail?job_id=1003001003</loc></url>
+  <url><loc>https://toss.im/career/job-detail?job_id=1004001003</loc></url>
+  <url><loc>https://toss.im/career/job-detail?job_id=1005001003</loc></url>
+  <url><loc>https://toss.im/career/job-detail?job_id=1006001003</loc></url>
+  <url><loc>https://toss.im/career/job-detail?job_id=1007001003</loc></url>
+  <url><loc>https://toss.im/career/job-detail?job_id=1008001003</loc></url>
+
+  <!-- Duplicate URL (same job_id — should be deduplicated) -->
+  <url><loc>https://toss.im/career/job-detail?job_id=1001001003</loc></url>
+</urlset>

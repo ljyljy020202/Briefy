@@ -39,6 +39,7 @@ select = ["E", "F", "I"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+addopts = "-m 'not external'"
 markers = [
     "unit: pure function tests — no I/O, no FastAPI stack",
     "integration: tests using the FastAPI ASGI stack (client fixture)",

@@ -15,6 +15,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
+import org.springframework.web.reactive.function.client.ExchangeStrategies;
 import org.springframework.web.reactive.function.client.WebClient;
 
 @Component
@@ -24,8 +25,16 @@ public class AgentClient {
 
   private final WebClient webClient;
 
+  // Agent responses can be large (many postings × descriptions).
+  // Default WebClient buffer is 256KB; raise to 16MB to avoid DataBufferLimitException.
+  private static final int MAX_IN_MEMORY_SIZE = 16 * 1024 * 1024;
+
   public AgentClient(WebClient.Builder builder, AgentProperties agentProperties) {
-    this.webClient = builder.baseUrl(agentProperties.url()).build();
+    ExchangeStrategies strategies =
+        ExchangeStrategies.builder()
+            .codecs(codecs -> codecs.defaultCodecs().maxInMemorySize(MAX_IN_MEMORY_SIZE))
+            .build();
+    this.webClient = builder.baseUrl(agentProperties.url()).exchangeStrategies(strategies).build();
   }
 
   public AgentBriefingResponse generate(AgentBriefingRequest request) {
