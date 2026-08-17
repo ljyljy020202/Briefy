@@ -330,6 +330,11 @@ async def _custom_preflight(
             source_id, company_id, company_name, source_url, config_json
         )
 
+    if parser_key == "SAMSUNG_CAREERS":
+        return await _samsung_preflight(
+            source_id, company_id, company_name, source_url, config_json
+        )
+
     # Other parsers: not supported yet
     return OfficialSourcePreflightResponse(
         adapter_supported=True,
@@ -758,6 +763,89 @@ async def _kakao_preflight(
             discovered_count=discovered,
             failure_code="REQUIRED_FIELD_PARSE_FAILED",
             failure_message="Sample job item did not yield a title",
+            warnings=warnings,
+        )
+
+    return OfficialSourcePreflightResponse(
+        reachable=True,
+        adapter_supported=True,
+        parser_registered=True,
+        discovered_count=discovered,
+        sample_parsed_count=sample_parsed,
+        required_fields_valid=True,
+        warnings=warnings,
+    )
+
+
+async def _samsung_preflight(
+    source_id: int,
+    company_id: int,
+    company_name: str | None,
+    source_url: str | None,
+    config_json: str | None,
+) -> OfficialSourcePreflightResponse:
+    from app.adapters.samsung_careers import samsung_preflight
+    from app.schemas.collection import OfficialCompanySource
+
+    source = OfficialCompanySource(
+        company_id=company_id,
+        source_type="OFFICIAL_CAREER",
+        source_url=source_url,
+        adapter_type="CUSTOM",
+        config_json=config_json,
+    )
+
+    result = await samsung_preflight(source)
+    reachable: bool = result["reachable"]
+    discovered: int = result.get("discovered_count", 0)
+    warnings: list[str] = result["warnings"]
+    sample = result.get("sample_parsed")
+
+    if not reachable:
+        fc = result.get("failure_code", "URL_UNREACHABLE")
+        msg = result.get("failure_message") or (warnings[0] if warnings else "")
+        return OfficialSourcePreflightResponse(
+            adapter_supported=True,
+            parser_registered=True,
+            failure_code=fc,
+            failure_message=msg,
+        )
+
+    fc = result.get("failure_code")
+    if fc:
+        return OfficialSourcePreflightResponse(
+            adapter_supported=True,
+            parser_registered=True,
+            reachable=True,
+            failure_code=fc,
+            failure_message=result.get("failure_message") or "",
+            warnings=warnings,
+        )
+
+    if discovered == 0:
+        return OfficialSourcePreflightResponse(
+            adapter_supported=True,
+            parser_registered=True,
+            reachable=True,
+            failure_code="NO_ITEMS_DISCOVERED",
+            failure_message=(
+                "No active postings found for configured com_codes — "
+                "activate source once postings appear"
+            ),
+            warnings=warnings,
+        )
+
+    sample_parsed = 1 if (sample is not None and sample.get("title")) else 0
+    required_valid = sample_parsed > 0
+
+    if not required_valid:
+        return OfficialSourcePreflightResponse(
+            adapter_supported=True,
+            parser_registered=True,
+            reachable=True,
+            discovered_count=discovered,
+            failure_code="REQUIRED_FIELD_PARSE_FAILED",
+            failure_message="Sample posting did not yield a title",
             warnings=warnings,
         )
 
