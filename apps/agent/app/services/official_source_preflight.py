@@ -320,6 +320,11 @@ async def _custom_preflight(
             source_id, company_id, company_name, source_url, config_json
         )
 
+    if parser_key == "ABLY_CAREERS":
+        return await _ably_preflight(
+            source_id, company_id, company_name, source_url, config_json
+        )
+
     # Other parsers: not supported yet
     return OfficialSourcePreflightResponse(
         adapter_supported=True,
@@ -573,6 +578,74 @@ async def _naver_preflight(
             reachable=True,
             failure_code="NO_ITEMS_DISCOVERED",
             failure_message="No jobs found on Naver recruit",
+            warnings=warnings,
+        )
+
+    sample_parsed = 1 if (sample is not None and sample.get("title")) else 0
+    required_valid = sample_parsed > 0
+
+    if not required_valid:
+        return OfficialSourcePreflightResponse(
+            adapter_supported=True,
+            parser_registered=True,
+            reachable=True,
+            discovered_count=discovered,
+            failure_code="REQUIRED_FIELD_PARSE_FAILED",
+            failure_message="Sample job item did not yield a title",
+            warnings=warnings,
+        )
+
+    return OfficialSourcePreflightResponse(
+        reachable=True,
+        adapter_supported=True,
+        parser_registered=True,
+        discovered_count=discovered,
+        sample_parsed_count=sample_parsed,
+        required_fields_valid=True,
+        warnings=warnings,
+    )
+
+
+async def _ably_preflight(
+    source_id: int,
+    company_id: int,
+    company_name: str | None,
+    source_url: str | None,
+    config_json: str | None,
+) -> OfficialSourcePreflightResponse:
+    from app.adapters.ably_careers import ably_preflight
+    from app.schemas.collection import OfficialCompanySource
+
+    source = OfficialCompanySource(
+        company_id=company_id,
+        source_type="OFFICIAL_CAREER",
+        source_url=source_url,
+        adapter_type="CUSTOM",
+        config_json=config_json,
+    )
+
+    result = await ably_preflight(source)
+    reachable: bool = result["reachable"]
+    discovered: int = result.get("discovered_count", 0)
+    warnings: list[str] = result["warnings"]
+    sample = result.get("sample_parsed")
+
+    if not reachable:
+        msg = warnings[0] if warnings else "Ably recruit page unreachable"
+        return OfficialSourcePreflightResponse(
+            adapter_supported=True,
+            parser_registered=True,
+            failure_code=result.get("failure_code", "URL_UNREACHABLE"),
+            failure_message=msg,
+        )
+
+    if discovered == 0:
+        return OfficialSourcePreflightResponse(
+            adapter_supported=True,
+            parser_registered=True,
+            reachable=True,
+            failure_code="NO_ITEMS_DISCOVERED",
+            failure_message="No active jobs found on ably.team/recruit",
             warnings=warnings,
         )
 
