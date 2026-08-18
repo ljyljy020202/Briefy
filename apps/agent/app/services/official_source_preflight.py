@@ -320,6 +320,26 @@ async def _custom_preflight(
             source_id, company_id, company_name, source_url, config_json
         )
 
+    if parser_key == "ABLY_CAREERS":
+        return await _ably_preflight(
+            source_id, company_id, company_name, source_url, config_json
+        )
+
+    if parser_key == "KAKAO_CAREERS":
+        return await _kakao_preflight(
+            source_id, company_id, company_name, source_url, config_json
+        )
+
+    if parser_key == "SAMSUNG_CAREERS":
+        return await _samsung_preflight(
+            source_id, company_id, company_name, source_url, config_json
+        )
+
+    if parser_key == "LG_CNS_CAREERS":
+        return await _lg_cns_preflight(
+            source_id, company_id, company_name, source_url, config_json
+        )
+
     # Other parsers: not supported yet
     return OfficialSourcePreflightResponse(
         adapter_supported=True,
@@ -587,6 +607,335 @@ async def _naver_preflight(
             discovered_count=discovered,
             failure_code="REQUIRED_FIELD_PARSE_FAILED",
             failure_message="Sample job item did not yield a title",
+            warnings=warnings,
+        )
+
+    return OfficialSourcePreflightResponse(
+        reachable=True,
+        adapter_supported=True,
+        parser_registered=True,
+        discovered_count=discovered,
+        sample_parsed_count=sample_parsed,
+        required_fields_valid=True,
+        warnings=warnings,
+    )
+
+
+async def _ably_preflight(
+    source_id: int,
+    company_id: int,
+    company_name: str | None,
+    source_url: str | None,
+    config_json: str | None,
+) -> OfficialSourcePreflightResponse:
+    from app.adapters.ably_careers import ably_preflight
+    from app.schemas.collection import OfficialCompanySource
+
+    source = OfficialCompanySource(
+        company_id=company_id,
+        source_type="OFFICIAL_CAREER",
+        source_url=source_url,
+        adapter_type="CUSTOM",
+        config_json=config_json,
+    )
+
+    result = await ably_preflight(source)
+    reachable: bool = result["reachable"]
+    discovered: int = result.get("discovered_count", 0)
+    warnings: list[str] = result["warnings"]
+    sample = result.get("sample_parsed")
+
+    if not reachable:
+        msg = warnings[0] if warnings else "Ably recruit page unreachable"
+        return OfficialSourcePreflightResponse(
+            adapter_supported=True,
+            parser_registered=True,
+            failure_code=result.get("failure_code", "URL_UNREACHABLE"),
+            failure_message=msg,
+        )
+
+    if discovered == 0:
+        return OfficialSourcePreflightResponse(
+            adapter_supported=True,
+            parser_registered=True,
+            reachable=True,
+            failure_code="NO_ITEMS_DISCOVERED",
+            failure_message="No active jobs found on ably.team/recruit",
+            warnings=warnings,
+        )
+
+    sample_parsed = 1 if (sample is not None and sample.get("title")) else 0
+    required_valid = sample_parsed > 0
+
+    if not required_valid:
+        return OfficialSourcePreflightResponse(
+            adapter_supported=True,
+            parser_registered=True,
+            reachable=True,
+            discovered_count=discovered,
+            failure_code="REQUIRED_FIELD_PARSE_FAILED",
+            failure_message="Sample job item did not yield a title",
+            warnings=warnings,
+        )
+
+    return OfficialSourcePreflightResponse(
+        reachable=True,
+        adapter_supported=True,
+        parser_registered=True,
+        discovered_count=discovered,
+        sample_parsed_count=sample_parsed,
+        required_fields_valid=True,
+        warnings=warnings,
+    )
+
+
+async def _kakao_preflight(
+    source_id: int,
+    company_id: int,
+    company_name: str | None,
+    source_url: str | None,
+    config_json: str | None,
+) -> OfficialSourcePreflightResponse:
+    from app.adapters.kakao_careers import kakao_preflight
+    from app.schemas.collection import OfficialCompanySource
+
+    source = OfficialCompanySource(
+        company_id=company_id,
+        source_type="OFFICIAL_CAREER",
+        source_url=source_url,
+        adapter_type="CUSTOM",
+        config_json=config_json,
+    )
+
+    result = await kakao_preflight(source)
+    reachable: bool = result["reachable"]
+    discovered: int = result.get("discovered_count", 0)
+    warnings: list[str] = result["warnings"]
+    sample = result.get("sample_parsed")
+
+    if not reachable:
+        msg = warnings[0] if warnings else "Kakao job-list API unreachable"
+        return OfficialSourcePreflightResponse(
+            adapter_supported=True,
+            parser_registered=True,
+            failure_code=result.get("failure_code", "URL_UNREACHABLE"),
+            failure_message=msg,
+        )
+
+    fc = result.get("failure_code")
+    if fc == "CLOUDFLARE_SHELL":
+        return OfficialSourcePreflightResponse(
+            adapter_supported=True,
+            parser_registered=True,
+            reachable=True,
+            failure_code="CLOUDFLARE_SHELL",
+            failure_message=(
+                result.get("failure_message") or "HTML shell returned"
+            ),
+            warnings=warnings,
+        )
+
+    if fc:
+        return OfficialSourcePreflightResponse(
+            adapter_supported=True,
+            parser_registered=True,
+            reachable=True,
+            failure_code=fc,
+            failure_message=result.get("failure_message") or "",
+            warnings=warnings,
+        )
+
+    if discovered == 0:
+        return OfficialSourcePreflightResponse(
+            adapter_supported=True,
+            parser_registered=True,
+            reachable=True,
+            failure_code="NO_ITEMS_DISCOVERED",
+            failure_message=(
+                "No active Kakao Corp jobs found (company=KAKAO)"
+            ),
+            warnings=warnings,
+        )
+
+    sample_parsed = 1 if (sample is not None and sample.get("title")) else 0
+    required_valid = sample_parsed > 0
+
+    if not required_valid:
+        return OfficialSourcePreflightResponse(
+            adapter_supported=True,
+            parser_registered=True,
+            reachable=True,
+            discovered_count=discovered,
+            failure_code="REQUIRED_FIELD_PARSE_FAILED",
+            failure_message="Sample job item did not yield a title",
+            warnings=warnings,
+        )
+
+    return OfficialSourcePreflightResponse(
+        reachable=True,
+        adapter_supported=True,
+        parser_registered=True,
+        discovered_count=discovered,
+        sample_parsed_count=sample_parsed,
+        required_fields_valid=True,
+        warnings=warnings,
+    )
+
+
+async def _samsung_preflight(
+    source_id: int,
+    company_id: int,
+    company_name: str | None,
+    source_url: str | None,
+    config_json: str | None,
+) -> OfficialSourcePreflightResponse:
+    from app.adapters.samsung_careers import samsung_preflight
+    from app.schemas.collection import OfficialCompanySource
+
+    source = OfficialCompanySource(
+        company_id=company_id,
+        source_type="OFFICIAL_CAREER",
+        source_url=source_url,
+        adapter_type="CUSTOM",
+        config_json=config_json,
+    )
+
+    result = await samsung_preflight(source)
+    reachable: bool = result["reachable"]
+    discovered: int = result.get("discovered_count", 0)
+    warnings: list[str] = result["warnings"]
+    sample = result.get("sample_parsed")
+
+    if not reachable:
+        fc = result.get("failure_code", "URL_UNREACHABLE")
+        msg = result.get("failure_message") or (warnings[0] if warnings else "")
+        return OfficialSourcePreflightResponse(
+            adapter_supported=True,
+            parser_registered=True,
+            failure_code=fc,
+            failure_message=msg,
+        )
+
+    fc = result.get("failure_code")
+    if fc:
+        return OfficialSourcePreflightResponse(
+            adapter_supported=True,
+            parser_registered=True,
+            reachable=True,
+            failure_code=fc,
+            failure_message=result.get("failure_message") or "",
+            warnings=warnings,
+        )
+
+    if discovered == 0:
+        return OfficialSourcePreflightResponse(
+            adapter_supported=True,
+            parser_registered=True,
+            reachable=True,
+            failure_code="NO_ITEMS_DISCOVERED",
+            failure_message=(
+                "No active postings found for configured com_codes — "
+                "activate source once postings appear"
+            ),
+            warnings=warnings,
+        )
+
+    sample_parsed = 1 if (sample is not None and sample.get("title")) else 0
+    required_valid = sample_parsed > 0
+
+    if not required_valid:
+        return OfficialSourcePreflightResponse(
+            adapter_supported=True,
+            parser_registered=True,
+            reachable=True,
+            discovered_count=discovered,
+            failure_code="REQUIRED_FIELD_PARSE_FAILED",
+            failure_message="Sample posting did not yield a title",
+            warnings=warnings,
+        )
+
+    return OfficialSourcePreflightResponse(
+        reachable=True,
+        adapter_supported=True,
+        parser_registered=True,
+        discovered_count=discovered,
+        sample_parsed_count=sample_parsed,
+        required_fields_valid=True,
+        warnings=warnings,
+    )
+
+
+async def _lg_cns_preflight(
+    source_id: int,
+    company_id: int,
+    company_name: str | None,
+    source_url: str | None,
+    config_json: str | None,
+) -> OfficialSourcePreflightResponse:
+    from app.adapters.lg_cns_careers import lg_cns_preflight
+    from app.schemas.collection import OfficialCompanySource
+
+    source = OfficialCompanySource(
+        company_id=company_id,
+        source_type="OFFICIAL_CAREER",
+        source_url=source_url,
+        adapter_type="CUSTOM",
+        config_json=config_json,
+    )
+
+    result = await lg_cns_preflight(source)
+    reachable: bool = result["reachable"]
+    discovered: int = result.get("discovered_count", 0)
+    warnings: list[str] = result["warnings"]
+    sample_parsed_bool: bool = result.get("sample_parsed", False)
+
+    if not reachable:
+        fc = result.get("failure_code", "URL_UNREACHABLE")
+        msg = warnings[0] if warnings else "LG CNS careers API unreachable"
+        return OfficialSourcePreflightResponse(
+            adapter_supported=True,
+            parser_registered=True,
+            failure_code=fc,
+            failure_message=msg,
+        )
+
+    fc = result.get("failure_code")
+    if fc:
+        msg = (
+            "No active postings for companyCode=CNS"
+            if fc == "NO_ITEMS_DISCOVERED"
+            else result.get("failure_message") or ""
+        )
+        return OfficialSourcePreflightResponse(
+            adapter_supported=True,
+            parser_registered=True,
+            reachable=True,
+            failure_code=fc,
+            failure_message=msg,
+            warnings=warnings,
+        )
+
+    if discovered == 0:
+        return OfficialSourcePreflightResponse(
+            adapter_supported=True,
+            parser_registered=True,
+            reachable=True,
+            failure_code="NO_ITEMS_DISCOVERED",
+            failure_message="No active postings for companyCode=CNS",
+            warnings=warnings,
+        )
+
+    sample_parsed = 1 if sample_parsed_bool else 0
+    required_valid = sample_parsed > 0
+
+    if not required_valid:
+        return OfficialSourcePreflightResponse(
+            adapter_supported=True,
+            parser_registered=True,
+            reachable=True,
+            discovered_count=discovered,
+            failure_code="REQUIRED_FIELD_PARSE_FAILED",
+            failure_message="Sample LG CNS posting did not pass validation",
             warnings=warnings,
         )
 

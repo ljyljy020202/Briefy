@@ -306,6 +306,13 @@ def _extract_experience(
 
 # ── Roles builder ─────────────────────────────────────────────────────────────
 
+# "전 직군" 의미의 범용 role 값 — eligibility 필터에서 role mismatch로 잘못 제외되는
+# 것을 막기 위해 빈 리스트로 정규화한다. posting.roles=[]이면
+# _is_clear_role_mismatch가 "Ambiguous → keep"으로 처리한다.
+_UNIVERSAL_ROLES: frozenset[str] = frozenset(
+    {"전체", "All", "all", "전 직군", "전직군"}
+)
+
 
 def _build_roles(main_category: str | None, sub_category: str | None) -> list[str]:
     """Combine mainCategory (broad) and subCategory (specific) into roles list."""
@@ -316,7 +323,7 @@ def _build_roles(main_category: str | None, sub_category: str | None) -> list[st
         if s and s not in seen:
             seen.add(s)
             roles.append(s)
-    return roles
+    return [r for r in roles if r not in _UNIVERSAL_ROLES]
 
 
 # ── Deadline parser ───────────────────────────────────────────────────────────
