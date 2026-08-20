@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     job_collection_use_fixture: bool = False
     job_collection_enable_jasoseol: bool = False
     job_collection_enable_saramin: bool = False
-    job_collection_timeout_seconds: int = 10
+    job_collection_timeout_seconds: int = 25
     jasoseol_base_url: str = "https://jasoseol.com"
 
     # Jasoseol-specific
