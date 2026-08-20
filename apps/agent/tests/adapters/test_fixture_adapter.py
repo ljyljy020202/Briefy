@@ -196,7 +196,7 @@ def test_config_timeout_default():
     from app.core.config import Settings
 
     s = Settings()
-    assert s.job_collection_timeout_seconds == 10
+    assert s.job_collection_timeout_seconds == 25
 
 
 def test_config_jasoseol_base_url_default():
