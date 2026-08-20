@@ -239,7 +239,10 @@ def rank_job_postings_node(state: UserBriefingState) -> dict:
         # Backend is the authoritative personalization layer.
         # When it supplies a computed score, use it as-is (even if 0).
         # Only fall back to agent scoring for direct calls that bypass Backend.
-        base = posting.pre_score if posting.pre_score_computed else _agent_score(posting, pref, today)
+        if posting.pre_score_computed:
+            base = posting.pre_score
+        else:
+            base = _agent_score(posting, pref, today)
         # Official career sites carry richer role/skill metadata than aggregators.
         # Add a bonus so first-party postings rank above aggregator postings at
         # equal relevance scores (e.g. "전직군" from an IT company > non-IT 신입공채).

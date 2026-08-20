@@ -1009,7 +1009,7 @@ async def test_official_source_ranks_above_aggregator_with_equal_pre_score(clien
 
 
 async def test_aggregator_high_score_outranks_official_low_score(client):
-    """역할 매칭으로 높은 점수를 받은 자소설닷컴 공고는 낮은 점수의 공식 사이트 공고보다 우선한다."""
+    """높은 점수의 자소설닷컴 공고가 낮은 점수의 공식 사이트 공고보다 우선한다."""
     posting_jasoseol_match = _posting(
         1, "스타트업A", "백엔드 개발자",
         source="jasoseol", preScore=40, preScoreComputed=True,
