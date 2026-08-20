@@ -358,7 +358,7 @@ async def synthesize_report_node(state: UserBriefingState) -> dict:
     if llm_client.enabled:
         try:
             raw, usage = await llm_client.call_json(
-                briefing_synthesis.get_system_prompt(),
+                briefing_synthesis.get_system_prompt(len(enriched_inputs)),
                 briefing_synthesis.build_user_prompt(
                     req.briefing_date, pref, enriched_inputs
                 ),

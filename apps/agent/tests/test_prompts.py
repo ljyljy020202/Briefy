@@ -237,22 +237,22 @@ def test_enrichment_parse_response_invalid_input_returns_empty():
 
 
 def test_synthesis_system_prompt_instructs_korean_output():
-    prompt = briefing_synthesis.get_system_prompt()
+    prompt = briefing_synthesis.get_system_prompt(7)
     assert "한국어" in prompt
 
 
 def test_synthesis_system_prompt_requires_markdown_content_field():
-    prompt = briefing_synthesis.get_system_prompt()
+    prompt = briefing_synthesis.get_system_prompt(7)
     assert "markdownContent" in prompt
 
 
 def test_synthesis_system_prompt_requires_overall_summary_field():
-    prompt = briefing_synthesis.get_system_prompt()
+    prompt = briefing_synthesis.get_system_prompt(7)
     assert "overallSummary" in prompt
 
 
 def test_synthesis_system_prompt_contains_all_required_sections():
-    prompt = briefing_synthesis.get_system_prompt()
+    prompt = briefing_synthesis.get_system_prompt(7)
     required = [
         "오늘의 핵심 요약",
         "추천 공고 TOP",
@@ -266,17 +266,17 @@ def test_synthesis_system_prompt_contains_all_required_sections():
 
 
 def test_synthesis_system_prompt_requires_source_links():
-    prompt = briefing_synthesis.get_system_prompt()
+    prompt = briefing_synthesis.get_system_prompt(7)
     assert "공고 보기" in prompt or "url" in prompt.lower()
 
 
 def test_synthesis_system_prompt_forbids_investment_advice():
-    prompt = briefing_synthesis.get_system_prompt()
+    prompt = briefing_synthesis.get_system_prompt(7)
     assert "투자" in prompt or "매수" in prompt
 
 
 def test_synthesis_system_prompt_requires_json_format():
-    prompt = briefing_synthesis.get_system_prompt()
+    prompt = briefing_synthesis.get_system_prompt(7)
     assert "JSON" in prompt
 
 
@@ -365,27 +365,27 @@ def test_synthesis_parse_response_raises_on_empty_dict():
 
 
 def test_synthesis_system_prompt_requires_top_level_heading():
-    prompt = briefing_synthesis.get_system_prompt()
+    prompt = briefing_synthesis.get_system_prompt(7)
     assert "# 오늘의 채용 브리핑" in prompt
 
 
 def test_synthesis_system_prompt_requires_three_summary_bullets():
-    prompt = briefing_synthesis.get_system_prompt()
+    prompt = briefing_synthesis.get_system_prompt(7)
     assert "3개" in prompt or "3 개" in prompt
 
 
 def test_synthesis_system_prompt_forbids_salary_hallucination():
-    prompt = briefing_synthesis.get_system_prompt()
+    prompt = briefing_synthesis.get_system_prompt(7)
     assert "급여" in prompt or "연봉" in prompt
 
 
 def test_synthesis_system_prompt_forbids_acceptance_probability():
-    prompt = briefing_synthesis.get_system_prompt()
+    prompt = briefing_synthesis.get_system_prompt(7)
     assert "합격 가능성" in prompt or "합격 보장" in prompt
 
 
 def test_synthesis_system_prompt_forbids_vague_matching_phrases():
-    prompt = briefing_synthesis.get_system_prompt()
+    prompt = briefing_synthesis.get_system_prompt(7)
     prohibited = ["좋은 기회", "적합한 공고", "기대해볼 만한", "추천드립니다"]
     listed_in_prompt = [p for p in prohibited if p in prompt]
     assert listed_in_prompt, (
@@ -394,13 +394,13 @@ def test_synthesis_system_prompt_forbids_vague_matching_phrases():
 
 
 def test_synthesis_system_prompt_requires_concrete_matching_reason():
-    prompt = briefing_synthesis.get_system_prompt()
+    prompt = briefing_synthesis.get_system_prompt(7)
     # Must instruct to reference actual preference fields (role, skill, company, etc.)
     assert "역할" in prompt and "스킬" in prompt
 
 
 def test_synthesis_system_prompt_deadline_omit_rule():
-    prompt = briefing_synthesis.get_system_prompt()
+    prompt = briefing_synthesis.get_system_prompt(7)
     # Deadline must be omitted if not in the posting
     assert "마감일" in prompt and "생략" in prompt
 

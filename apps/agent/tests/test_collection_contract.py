@@ -184,7 +184,7 @@ def test_collection_options_defaults_match_spring_defaults():
     opts = CollectionOptions()
     assert opts.lookback_days == 7
     assert opts.discovery_limit_per_source == 300
-    assert opts.detail_fetch_limit_per_source == 100
+    assert opts.detail_fetch_limit_per_source == 60
     assert opts.max_results_per_source == 100
     assert opts.max_total_results == 500
 

@@ -26,7 +26,7 @@ class CollectionOptions(BaseModel):
 
     lookback_days: int = 7
     discovery_limit_per_source: int = 300
-    detail_fetch_limit_per_source: int = 100
+    detail_fetch_limit_per_source: int = 60
     max_results_per_source: int = 100
     max_total_results: int = 500
 

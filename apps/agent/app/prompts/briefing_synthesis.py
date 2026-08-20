@@ -39,7 +39,8 @@ Markdown 브리핑 필수 구조 (아래 순서와 헤더 명칭 엄수):
 - 오늘 할 수 있는 구체적 행동 제안 불릿
 (정확히 3개의 불릿으로 작성)
 
-## 🏆 추천 공고 TOP {N}
+## 🏆 추천 공고 TOP {n}
+[선택된 채용 공고] 목록의 **모든 공고를 빠짐없이** 포함하세요. 일부 생략 금지.
 각 공고에 다음 항목을 포함:
 - **기업**: 기업명
 - **공고**: 공고 제목 및 [공고 보기](url) 링크 (url이 있는 경우)
@@ -118,8 +119,8 @@ def build_user_prompt(
 """
 
 
-def get_system_prompt() -> str:
-    return _SYSTEM_PROMPT
+def get_system_prompt(n: int) -> str:
+    return _SYSTEM_PROMPT.replace("{n}", str(n))
 
 
 def parse_response(raw: dict) -> BriefingSynthesisResult:
