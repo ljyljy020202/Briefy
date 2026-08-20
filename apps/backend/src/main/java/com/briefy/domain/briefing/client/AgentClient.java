@@ -130,7 +130,7 @@ public class AgentClient {
                                       ErrorCode.AGENT_SERVER_ERROR,
                                       "Agent returned " + resp.statusCode() + ": " + body)))
               .bodyToMono(AgentCollectionResponse.class)
-              .timeout(Duration.ofSeconds(120))
+              .timeout(Duration.ofSeconds(210))
               .block();
       log.info("Agent daily collection succeeded, date={}", request.collectDate());
       return response;
