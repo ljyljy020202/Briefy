@@ -38,6 +38,12 @@ logger = logging.getLogger(__name__)
 
 _TOP_N = 7
 
+# Sources that aggregate third-party postings (role/skill metadata often absent).
+# All other source strings are treated as official company career sites and receive
+# a ranking bonus to prefer first-party postings over aggregator postings.
+_AGGREGATOR_SOURCES: frozenset[str] = frozenset({"jasoseol", "saramin"})
+_SOURCE_OFFICIAL_BONUS: int = 15
+
 _INVESTMENT_ADVICE_PATTERNS = [
     "매수",
     "매도",
@@ -233,9 +239,13 @@ def rank_job_postings_node(state: UserBriefingState) -> dict:
         # Backend is the authoritative personalization layer.
         # When it supplies a computed score, use it as-is (even if 0).
         # Only fall back to agent scoring for direct calls that bypass Backend.
-        if posting.pre_score_computed:
-            return posting.pre_score
-        return _agent_score(posting, pref, today)
+        base = posting.pre_score if posting.pre_score_computed else _agent_score(posting, pref, today)
+        # Official career sites carry richer role/skill metadata than aggregators.
+        # Add a bonus so first-party postings rank above aggregator postings at
+        # equal relevance scores (e.g. "전직군" from an IT company > non-IT 신입공채).
+        if posting.source and posting.source not in _AGGREGATOR_SOURCES:
+            base += _SOURCE_OFFICIAL_BONUS
+        return base
 
     ranked = sorted(state["filtered"], key=final_score, reverse=True)
     return {"ranked": ranked}

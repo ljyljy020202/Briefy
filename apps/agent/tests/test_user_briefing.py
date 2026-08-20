@@ -979,3 +979,75 @@ async def test_select_top7_no_duplicate_postings(client):
     articles = response.json()["articles"]
     urls = [a["url"] for a in articles]
     assert len(urls) == len(set(urls))  # no duplicates
+
+
+# ---------------------------------------------------------------------------
+# Source priority: official career sites rank above aggregators
+# ---------------------------------------------------------------------------
+
+
+async def test_official_source_ranks_above_aggregator_with_equal_pre_score(client):
+    """공식 채용 사이트 공고가 동일 pre_score의 자소설닷컴 공고보다 높게 랭크된다."""
+    posting_jasoseol = _posting(
+        1, "세아제강", "2026년 하반기 신입 공채",
+        source="jasoseol", preScore=5, preScoreComputed=True,
+    )
+    posting_official = _posting(
+        2, "토스인컴", "전 직군 집중채용",
+        source="company_42_custom_toss_careers", preScore=5, preScoreComputed=True,
+    )
+    request = {
+        "userId": 1, "category": "JOB_POSTING",
+        "preference": _BASE_PREF, "briefingDate": "2026-08-21",
+        "candidatePool": _pool(posting_jasoseol, posting_official),
+    }
+    response = await client.post("/briefings/generate", json=request)
+    assert response.status_code == 200
+    articles = response.json()["articles"]
+    assert len(articles) == 2
+    assert articles[0]["companyName"] == "토스인컴"
+
+
+async def test_aggregator_high_score_outranks_official_low_score(client):
+    """역할 매칭으로 높은 점수를 받은 자소설닷컴 공고는 낮은 점수의 공식 사이트 공고보다 우선한다."""
+    posting_jasoseol_match = _posting(
+        1, "스타트업A", "백엔드 개발자",
+        source="jasoseol", preScore=40, preScoreComputed=True,
+    )
+    posting_official_ambiguous = _posting(
+        2, "토스인컴", "전 직군 집중채용",
+        source="company_42_custom_toss_careers", preScore=5, preScoreComputed=True,
+    )
+    request = {
+        "userId": 1, "category": "JOB_POSTING",
+        "preference": _BASE_PREF, "briefingDate": "2026-08-21",
+        "candidatePool": _pool(posting_jasoseol_match, posting_official_ambiguous),
+    }
+    response = await client.post("/briefings/generate", json=request)
+    assert response.status_code == 200
+    articles = response.json()["articles"]
+    assert len(articles) == 2
+    # jasoseol MATCH (40) > official AMBIGUOUS (5 + 15 bonus = 20)
+    assert articles[0]["companyName"] == "스타트업A"
+
+
+async def test_saramin_treated_as_aggregator(client):
+    """사람인도 jasoseol과 동일하게 aggregator로 분류되어 보너스가 없다."""
+    posting_saramin = _posting(
+        1, "일반기업", "신입 공채",
+        source="saramin", preScore=5, preScoreComputed=True,
+    )
+    posting_official = _posting(
+        2, "카카오", "카카오 공채",
+        source="kakao_careers", preScore=5, preScoreComputed=True,
+    )
+    request = {
+        "userId": 1, "category": "JOB_POSTING",
+        "preference": _BASE_PREF, "briefingDate": "2026-08-21",
+        "candidatePool": _pool(posting_saramin, posting_official),
+    }
+    response = await client.post("/briefings/generate", json=request)
+    assert response.status_code == 200
+    articles = response.json()["articles"]
+    assert len(articles) == 2
+    assert articles[0]["companyName"] == "카카오"
