@@ -307,9 +307,12 @@ public class BriefingService {
     }
 
     // target company match: +25
+    // Uses prefix-aware matching so group subsidiaries (e.g. "토스인컴") match
+    // a parent preference entry (e.g. "토스").
     String company = posting.getCompany() != null ? posting.getCompany() : "";
+    String companyL = company.toLowerCase();
     for (String prefCo : prefCompanies) {
-      if (company.equalsIgnoreCase(prefCo)) {
+      if (isCompanyMatch(companyL, prefCo.toLowerCase())) {
         score += SCORE_TARGET_COMPANY;
         break;
       }
@@ -522,7 +525,8 @@ public class BriefingService {
           candidate.companyName() != null ? candidate.companyName().toLowerCase() : "";
       boolean isTargeted =
           !companyLower.isEmpty()
-              && targetedCompanies.stream().anyMatch(t -> t.toLowerCase().equals(companyLower));
+              && targetedCompanies.stream()
+                  .anyMatch(t -> isCompanyMatch(companyLower, t.toLowerCase()));
       int limit = isTargeted ? MAX_PER_TARGETED_COMPANY : MAX_PER_COMPANY;
       int current = companyCount.getOrDefault(companyLower, 0);
       if (current < limit) {
@@ -622,6 +626,20 @@ public class BriefingService {
   // ---------------------------------------------------------------------------
   // Utilities
   // ---------------------------------------------------------------------------
+
+  /**
+   * True when the posting company name matches a preference entry using prefix-aware comparison.
+   *
+   * <p>Both arguments must already be lowercase. A match occurs when either string is a prefix of
+   * the other, so a user preference of "토스" matches posting companies "토스인컴", "토스뱅크", "토스페이먼츠",
+   * etc.
+   */
+  static boolean isCompanyMatch(String postingCompanyLower, String prefCompanyLower) {
+    if (postingCompanyLower.isEmpty() || prefCompanyLower.isEmpty()) return false;
+    return postingCompanyLower.equals(prefCompanyLower)
+        || postingCompanyLower.startsWith(prefCompanyLower)
+        || prefCompanyLower.startsWith(postingCompanyLower);
+  }
 
   private List<String> extractStringList(Map<String, Object> pref, String key) {
     Object val = pref.get(key);

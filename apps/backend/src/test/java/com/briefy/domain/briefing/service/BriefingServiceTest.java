@@ -418,6 +418,33 @@ class BriefingServiceTest {
     assertThat(candidates.get(0).preScore()).isGreaterThan(candidates.get(1).preScore());
   }
 
+  @Test
+  void selectCandidates_subsidiaryCompanyMatch_receivesTargetBonus() {
+    // "토스" preference should match "토스인컴" (subsidiary) via prefix matching.
+    JobPosting subsidiary = samplePosting("토스인컴", "백엔드 개발자", "서울", null);
+    JobPosting unrelated = samplePosting("당근마켓", "백엔드 개발자", "서울", null);
+
+    List<AgentCandidateJobPosting> candidates =
+        candidatesFor(Map.of("companies", List.of("토스")), List.of(unrelated, subsidiary));
+
+    assertThat(candidates.get(0).companyName()).isEqualTo("토스인컴");
+    assertThat(candidates.get(0).preScore()).isGreaterThan(candidates.get(1).preScore());
+  }
+
+  @Test
+  void isCompanyMatch_prefixSubsidiary_returnsTrue() {
+    assertThat(BriefingService.isCompanyMatch("토스인컴", "토스")).isTrue();
+    assertThat(BriefingService.isCompanyMatch("토스뱅크", "토스")).isTrue();
+    assertThat(BriefingService.isCompanyMatch("카카오페이", "카카오")).isTrue();
+    assertThat(BriefingService.isCompanyMatch("토스", "토스인컴")).isTrue();
+  }
+
+  @Test
+  void isCompanyMatch_unrelatedCompanies_returnsFalse() {
+    assertThat(BriefingService.isCompanyMatch("당근마켓", "토스")).isFalse();
+    assertThat(BriefingService.isCompanyMatch("삼성전자", "카카오")).isFalse();
+  }
+
   // ── Diversity selection ──────────────────────────────────────────────────
 
   @Test
