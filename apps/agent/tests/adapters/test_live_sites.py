@@ -14,7 +14,7 @@ from datetime import date
 
 import pytest
 
-from app.adapters.greeting import (
+from app.adapters.official.greeting import (
     GreetingParser,
     _extract_next_data_openings,
     _postings_from_next_data,
@@ -159,7 +159,7 @@ async def test_greeting_live_metadata_fill_rate(site: dict) -> None:
         resp.raise_for_status()
         html = resp.text
 
-    from app.adapters.greeting import _GreetingConfig
+    from app.adapters.official.greeting import _GreetingConfig
 
     openings = _extract_next_data_openings(html)
     assert openings is not None, (

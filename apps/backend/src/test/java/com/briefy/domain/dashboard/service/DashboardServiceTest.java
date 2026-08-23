@@ -9,11 +9,11 @@ import static org.mockito.Mockito.when;
 
 import com.briefy.domain.briefing.entity.BriefingReport;
 import com.briefy.domain.briefing.repository.BriefingReportRepository;
+import com.briefy.domain.dashboard.dto.DashboardResponse;
 import com.briefy.domain.preference.entity.BriefingCategory;
 import com.briefy.domain.preference.entity.BriefingCategoryCode;
 import com.briefy.domain.preference.entity.UserBriefingPreference;
 import com.briefy.domain.preference.repository.UserBriefingPreferenceRepository;
-import com.briefy.domain.dashboard.dto.DashboardResponse;
 import com.briefy.domain.user.entity.User;
 import com.briefy.domain.user.repository.UserRepository;
 import com.briefy.global.exception.BusinessException;

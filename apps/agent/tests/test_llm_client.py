@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.services.llm_client import (
+from app.core.llm_client import (
     LLMClient,
     LLMClientError,
     LLMTokenUsage,
@@ -61,7 +61,7 @@ def _make_mock_openai(
 
 
 def test_llm_client_disabled_when_no_api_key(monkeypatch):
-    import app.services.llm_client as _mod
+    import app.core.llm_client as _mod
 
     monkeypatch.setattr(_mod.settings, "openai_api_key", None)
     client = LLMClient()
@@ -80,7 +80,7 @@ def test_llm_client_enabled_with_injected_client():
 
 
 async def test_call_text_raises_unavailable_when_disabled(monkeypatch):
-    import app.services.llm_client as _mod
+    import app.core.llm_client as _mod
 
     monkeypatch.setattr(_mod.settings, "openai_api_key", None)
     client = LLMClient()
@@ -89,7 +89,7 @@ async def test_call_text_raises_unavailable_when_disabled(monkeypatch):
 
 
 async def test_call_json_raises_unavailable_when_disabled(monkeypatch):
-    import app.services.llm_client as _mod
+    import app.core.llm_client as _mod
 
     monkeypatch.setattr(_mod.settings, "openai_api_key", None)
     client = LLMClient()

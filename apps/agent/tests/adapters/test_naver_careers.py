@@ -42,8 +42,8 @@ from pathlib import Path
 import httpx
 import pytest
 
-import app.adapters.naver_careers  # noqa: F401 — ensure module is imported
-from app.adapters.naver_careers import (
+import app.adapters.official.naver_careers  # noqa: F401 — ensure module is imported
+from app.adapters.official.naver_careers import (
     _WORK_AREA_MAP,
     NaverCareersParser,
     _extract_experience_from_required_text,
@@ -59,7 +59,7 @@ from app.schemas.collection import (
     OfficialCompanySource,
 )
 from app.services.normalization import normalize
-from app.utils.identifiers import compute_source_record_key
+from app.core.identifiers import compute_source_record_key
 
 _FIXTURES = Path(__file__).parent / "fixtures" / "naver"
 _COLLECT_DATE = date(2026, 8, 15)
@@ -174,13 +174,13 @@ def test_naver_careers_registered():
 
 
 def test_greeting_still_registered():
-    import app.adapters.greeting  # noqa: F401
+    import app.adapters.official.greeting  # noqa: F401
     assert "GREETING" in _CUSTOM_REGISTRY_BY_KEY
 
 
 def test_greeting_and_jasoseol_importable():
-    import app.adapters.greeting  # noqa: F401
-    import app.adapters.jasoseol  # noqa: F401
+    import app.adapters.official.greeting  # noqa: F401
+    import app.adapters.aggregators.jasoseol  # noqa: F401
 
 
 # ── _parse_config ─────────────────────────────────────────────────────────────
@@ -512,7 +512,7 @@ async def test_pagination_two_pages(monkeypatch):
         return _html_resp(url, _DETAIL_GENERIC)
 
     mock = _MockClient(handler)
-    monkeypatch.setattr("app.adapters.naver_careers.AsyncClient", lambda **kw: mock)
+    monkeypatch.setattr("app.adapters.official.naver_careers.AsyncClient", lambda **kw: mock)
 
     result = await NaverCareersParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE
@@ -536,7 +536,7 @@ async def test_max_discover_caps_pagination(monkeypatch):
         return _html_resp(url, _DETAIL_GENERIC)
 
     mock = _MockClient(handler)
-    monkeypatch.setattr("app.adapters.naver_careers.AsyncClient", lambda **kw: mock)
+    monkeypatch.setattr("app.adapters.official.naver_careers.AsyncClient", lambda **kw: mock)
 
     cfg = json.dumps({"parser_key": "NAVER_CAREERS", "max_discover": 5, "max_fetch": 3})
     result = await NaverCareersParser().fetch(
@@ -555,7 +555,7 @@ async def test_genuine_empty_response(monkeypatch):
         return _json_resp(url, {"result": "Y", "totalSize": 0, "list": []})
 
     mock = _MockClient(handler)
-    monkeypatch.setattr("app.adapters.naver_careers.AsyncClient", lambda **kw: mock)
+    monkeypatch.setattr("app.adapters.official.naver_careers.AsyncClient", lambda **kw: mock)
 
     result = await NaverCareersParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE
@@ -579,7 +579,7 @@ async def test_malformed_json_emits_warning_and_stops(monkeypatch):
         )
 
     mock = _MockClient(handler)
-    monkeypatch.setattr("app.adapters.naver_careers.AsyncClient", lambda **kw: mock)
+    monkeypatch.setattr("app.adapters.official.naver_careers.AsyncClient", lambda **kw: mock)
 
     result = await NaverCareersParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE
@@ -599,7 +599,7 @@ async def test_http_error_emits_warning(monkeypatch):
         return _html_resp(url, _DETAIL_GENERIC)
 
     mock = _MockClient(handler)
-    monkeypatch.setattr("app.adapters.naver_careers.AsyncClient", lambda **kw: mock)
+    monkeypatch.setattr("app.adapters.official.naver_careers.AsyncClient", lambda **kw: mock)
 
     result = await NaverCareersParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE
@@ -619,7 +619,7 @@ async def test_list_timeout_emits_warning(monkeypatch):
         return _html_resp(url, _DETAIL_GENERIC)
 
     mock = _MockClient(handler)
-    monkeypatch.setattr("app.adapters.naver_careers.AsyncClient", lambda **kw: mock)
+    monkeypatch.setattr("app.adapters.official.naver_careers.AsyncClient", lambda **kw: mock)
 
     result = await NaverCareersParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE
@@ -640,7 +640,7 @@ async def test_detail_timeout_keeps_stub(monkeypatch):
         raise httpx.TimeoutException("detail timeout")
 
     mock = _MockClient(handler)
-    monkeypatch.setattr("app.adapters.naver_careers.AsyncClient", lambda **kw: mock)
+    monkeypatch.setattr("app.adapters.official.naver_careers.AsyncClient", lambda **kw: mock)
 
     result = await NaverCareersParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE
@@ -679,7 +679,7 @@ async def test_malformed_item_skipped_others_preserved(monkeypatch):
         return _html_resp(url, _DETAIL_GENERIC)
 
     mock = _MockClient(handler)
-    monkeypatch.setattr("app.adapters.naver_careers.AsyncClient", lambda **kw: mock)
+    monkeypatch.setattr("app.adapters.official.naver_careers.AsyncClient", lambda **kw: mock)
 
     result = await NaverCareersParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE
@@ -700,7 +700,7 @@ async def test_tech_backend_roles_both_stored(monkeypatch):
         return _html_resp(url, _DETAIL_GENERIC)
 
     mock = _MockClient(handler)
-    monkeypatch.setattr("app.adapters.naver_careers.AsyncClient", lambda **kw: mock)
+    monkeypatch.setattr("app.adapters.official.naver_careers.AsyncClient", lambda **kw: mock)
 
     result = await NaverCareersParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE
@@ -729,7 +729,7 @@ async def test_detail_enriches_experience_3yr(monkeypatch):
         return _html_resp(url, _DETAIL_3YR)
 
     mock = _MockClient(handler)
-    monkeypatch.setattr("app.adapters.naver_careers.AsyncClient", lambda **kw: mock)
+    monkeypatch.setattr("app.adapters.official.naver_careers.AsyncClient", lambda **kw: mock)
 
     result = await NaverCareersParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE
@@ -751,7 +751,7 @@ async def test_moogwan_experience_level(monkeypatch):
         return _html_resp(url, _DETAIL_GENERIC)
 
     mock = _MockClient(handler)
-    monkeypatch.setattr("app.adapters.naver_careers.AsyncClient", lambda **kw: mock)
+    monkeypatch.setattr("app.adapters.official.naver_careers.AsyncClient", lambda **kw: mock)
 
     result = await NaverCareersParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE
@@ -777,7 +777,7 @@ async def test_naver_cloud_subsidiary_preserved(monkeypatch):
         return _html_resp(url, _DETAIL_GENERIC)
 
     mock = _MockClient(handler)
-    monkeypatch.setattr("app.adapters.naver_careers.AsyncClient", lambda **kw: mock)
+    monkeypatch.setattr("app.adapters.official.naver_careers.AsyncClient", lambda **kw: mock)
 
     result = await NaverCareersParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE
@@ -799,7 +799,7 @@ async def test_chuncheon_location(monkeypatch):
         return _html_resp(url, _DETAIL_GENERIC)
 
     mock = _MockClient(handler)
-    monkeypatch.setattr("app.adapters.naver_careers.AsyncClient", lambda **kw: mock)
+    monkeypatch.setattr("app.adapters.official.naver_careers.AsyncClient", lambda **kw: mock)
 
     result = await NaverCareersParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE
@@ -820,7 +820,7 @@ async def test_no_job_detail_link_uses_constructed_url(monkeypatch):
         return _html_resp(url, _DETAIL_GENERIC)
 
     mock = _MockClient(handler)
-    monkeypatch.setattr("app.adapters.naver_careers.AsyncClient", lambda **kw: mock)
+    monkeypatch.setattr("app.adapters.official.naver_careers.AsyncClient", lambda **kw: mock)
 
     result = await NaverCareersParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE

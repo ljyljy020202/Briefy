@@ -7,7 +7,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.briefy.infra.agent.AgentClient;
 import com.briefy.domain.company.dto.admin.CompanySourceAdminResponse;
 import com.briefy.domain.company.dto.admin.CreateCompanySourceRequest;
 import com.briefy.domain.company.dto.admin.UpdateCompanySourceRequest;
@@ -18,6 +17,7 @@ import com.briefy.domain.company.repository.CompanySourceRepository;
 import com.briefy.global.exception.BusinessException;
 import com.briefy.global.exception.ErrorCode;
 import com.briefy.global.response.PageResult;
+import com.briefy.infra.agent.AgentClient;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.Map;

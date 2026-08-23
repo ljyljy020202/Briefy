@@ -8,7 +8,7 @@ from pathlib import Path
 import httpx
 from httpx import TimeoutException
 
-from app.adapters.jasoseol_search import (
+from app.adapters.aggregators.jasoseol_search import (
     SearchCandidate,
     discover_from_search,
     parse_search_html,

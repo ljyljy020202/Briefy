@@ -13,7 +13,7 @@ import httpx
 from httpx import TimeoutException
 
 from app.adapters.base import AdapterResult, RawJobPosting
-from app.adapters.saramin import (
+from app.adapters.aggregators.saramin import (
     SaraminAdapter,
     _build_queries,
     _parse_job,
@@ -372,10 +372,10 @@ async def test_adapter_success_returns_postings(monkeypatch):
         for i in range(3)
     ]
     mock = _MockSaraminClient([(200, _jobs_response(jobs))])
-    monkeypatch.setattr("app.adapters.saramin.AsyncClient", lambda **kw: mock)
-    monkeypatch.setattr("app.adapters.saramin.settings.saramin_access_key", "test-key")
+    monkeypatch.setattr("app.adapters.aggregators.saramin.AsyncClient", lambda **kw: mock)
+    monkeypatch.setattr("app.adapters.aggregators.saramin.settings.saramin_access_key", "test-key")
     monkeypatch.setattr(
-        "app.adapters.saramin.settings.saramin_api_base_url", _BASE_URL
+        "app.adapters.aggregators.saramin.settings.saramin_api_base_url", _BASE_URL
     )
     seed = _seed(roles=["백엔드 개발자"])
     result = await SaraminAdapter().fetch(seed, _options(), _COLLECT_DATE)
@@ -386,10 +386,10 @@ async def test_adapter_success_returns_postings(monkeypatch):
 
 async def test_adapter_empty_results_returns_empty(monkeypatch):
     mock = _MockSaraminClient([(200, _jobs_response([]))])
-    monkeypatch.setattr("app.adapters.saramin.AsyncClient", lambda **kw: mock)
-    monkeypatch.setattr("app.adapters.saramin.settings.saramin_access_key", "test-key")
+    monkeypatch.setattr("app.adapters.aggregators.saramin.AsyncClient", lambda **kw: mock)
+    monkeypatch.setattr("app.adapters.aggregators.saramin.settings.saramin_access_key", "test-key")
     monkeypatch.setattr(
-        "app.adapters.saramin.settings.saramin_api_base_url", _BASE_URL
+        "app.adapters.aggregators.saramin.settings.saramin_api_base_url", _BASE_URL
     )
     seed = _seed(roles=["백엔드 개발자"])
     result = await SaraminAdapter().fetch(seed, _options(), _COLLECT_DATE)
@@ -398,7 +398,7 @@ async def test_adapter_empty_results_returns_empty(monkeypatch):
 
 
 async def test_adapter_no_access_key_returns_warning(monkeypatch):
-    monkeypatch.setattr("app.adapters.saramin.settings.saramin_access_key", "")
+    monkeypatch.setattr("app.adapters.aggregators.saramin.settings.saramin_access_key", "")
     seed = _seed(roles=["백엔드 개발자"])
     result = await SaraminAdapter().fetch(seed, _options(), _COLLECT_DATE)
     assert result.postings == []
@@ -406,7 +406,7 @@ async def test_adapter_no_access_key_returns_warning(monkeypatch):
 
 
 async def test_adapter_no_queries_from_empty_seed(monkeypatch):
-    monkeypatch.setattr("app.adapters.saramin.settings.saramin_access_key", "test-key")
+    monkeypatch.setattr("app.adapters.aggregators.saramin.settings.saramin_access_key", "test-key")
     result = await SaraminAdapter().fetch(_seed(), _options(), _COLLECT_DATE)
     assert result.postings == []
     assert result.warnings == []
@@ -414,10 +414,10 @@ async def test_adapter_no_queries_from_empty_seed(monkeypatch):
 
 async def test_adapter_auth_error_adds_warning(monkeypatch):
     mock = _MockSaraminClient([(401, "{}")])
-    monkeypatch.setattr("app.adapters.saramin.AsyncClient", lambda **kw: mock)
-    monkeypatch.setattr("app.adapters.saramin.settings.saramin_access_key", "bad-key")
+    monkeypatch.setattr("app.adapters.aggregators.saramin.AsyncClient", lambda **kw: mock)
+    monkeypatch.setattr("app.adapters.aggregators.saramin.settings.saramin_access_key", "bad-key")
     monkeypatch.setattr(
-        "app.adapters.saramin.settings.saramin_api_base_url", _BASE_URL
+        "app.adapters.aggregators.saramin.settings.saramin_api_base_url", _BASE_URL
     )
     seed = _seed(roles=["백엔드 개발자"])
     result = await SaraminAdapter().fetch(seed, _options(), _COLLECT_DATE)
@@ -427,10 +427,10 @@ async def test_adapter_auth_error_adds_warning(monkeypatch):
 
 async def test_adapter_timeout_adds_warning(monkeypatch):
     mock = _MockSaraminClient([TimeoutException("timed out")])
-    monkeypatch.setattr("app.adapters.saramin.AsyncClient", lambda **kw: mock)
-    monkeypatch.setattr("app.adapters.saramin.settings.saramin_access_key", "test-key")
+    monkeypatch.setattr("app.adapters.aggregators.saramin.AsyncClient", lambda **kw: mock)
+    monkeypatch.setattr("app.adapters.aggregators.saramin.settings.saramin_access_key", "test-key")
     monkeypatch.setattr(
-        "app.adapters.saramin.settings.saramin_api_base_url", _BASE_URL
+        "app.adapters.aggregators.saramin.settings.saramin_api_base_url", _BASE_URL
     )
     seed = _seed(roles=["백엔드 개발자"])
     result = await SaraminAdapter().fetch(seed, _options(), _COLLECT_DATE)
@@ -440,10 +440,10 @@ async def test_adapter_timeout_adds_warning(monkeypatch):
 
 async def test_adapter_malformed_response_adds_warning(monkeypatch):
     mock = _MockSaraminClient([(200, "not-valid-json{")])
-    monkeypatch.setattr("app.adapters.saramin.AsyncClient", lambda **kw: mock)
-    monkeypatch.setattr("app.adapters.saramin.settings.saramin_access_key", "test-key")
+    monkeypatch.setattr("app.adapters.aggregators.saramin.AsyncClient", lambda **kw: mock)
+    monkeypatch.setattr("app.adapters.aggregators.saramin.settings.saramin_access_key", "test-key")
     monkeypatch.setattr(
-        "app.adapters.saramin.settings.saramin_api_base_url", _BASE_URL
+        "app.adapters.aggregators.saramin.settings.saramin_api_base_url", _BASE_URL
     )
     seed = _seed(roles=["백엔드 개발자"])
     result = await SaraminAdapter().fetch(seed, _options(), _COLLECT_DATE)
@@ -479,13 +479,13 @@ async def test_adapter_pagination_collects_multiple_pages(monkeypatch):
         }
     }
     mock = _MockSaraminClient([(200, page1), (200, page2)])
-    monkeypatch.setattr("app.adapters.saramin.AsyncClient", lambda **kw: mock)
-    monkeypatch.setattr("app.adapters.saramin.settings.saramin_access_key", "test-key")
+    monkeypatch.setattr("app.adapters.aggregators.saramin.AsyncClient", lambda **kw: mock)
+    monkeypatch.setattr("app.adapters.aggregators.saramin.settings.saramin_access_key", "test-key")
     monkeypatch.setattr(
-        "app.adapters.saramin.settings.saramin_api_base_url", _BASE_URL
+        "app.adapters.aggregators.saramin.settings.saramin_api_base_url", _BASE_URL
     )
     monkeypatch.setattr(
-        "app.adapters.saramin.settings.saramin_max_queries_per_collect", 10
+        "app.adapters.aggregators.saramin.settings.saramin_max_queries_per_collect", 10
     )
     seed = _seed(roles=["백엔드 개발자"])
     opts = _options(detail_fetch_limit_per_source=10, max_results_per_source=50)
@@ -507,13 +507,13 @@ async def test_adapter_page_budget_limits_api_calls(monkeypatch):
     mock = _MockSaraminClient(
         [(200, unlimited_jobs), (200, unlimited_jobs), (200, unlimited_jobs)]
     )
-    monkeypatch.setattr("app.adapters.saramin.AsyncClient", lambda **kw: mock)
-    monkeypatch.setattr("app.adapters.saramin.settings.saramin_access_key", "test-key")
+    monkeypatch.setattr("app.adapters.aggregators.saramin.AsyncClient", lambda **kw: mock)
+    monkeypatch.setattr("app.adapters.aggregators.saramin.settings.saramin_access_key", "test-key")
     monkeypatch.setattr(
-        "app.adapters.saramin.settings.saramin_api_base_url", _BASE_URL
+        "app.adapters.aggregators.saramin.settings.saramin_api_base_url", _BASE_URL
     )
     monkeypatch.setattr(
-        "app.adapters.saramin.settings.saramin_max_queries_per_collect", 10
+        "app.adapters.aggregators.saramin.settings.saramin_max_queries_per_collect", 10
     )
     seed = _seed(roles=["백엔드 개발자"])
     # 1 page budget total
@@ -529,13 +529,13 @@ async def test_adapter_overlapping_queries_dedup_by_url(monkeypatch):
     response = _jobs_response([shared_job])
     # Two queries → same job returned by both
     mock = _MockSaraminClient([(200, response), (200, response)])
-    monkeypatch.setattr("app.adapters.saramin.AsyncClient", lambda **kw: mock)
-    monkeypatch.setattr("app.adapters.saramin.settings.saramin_access_key", "test-key")
+    monkeypatch.setattr("app.adapters.aggregators.saramin.AsyncClient", lambda **kw: mock)
+    monkeypatch.setattr("app.adapters.aggregators.saramin.settings.saramin_access_key", "test-key")
     monkeypatch.setattr(
-        "app.adapters.saramin.settings.saramin_api_base_url", _BASE_URL
+        "app.adapters.aggregators.saramin.settings.saramin_api_base_url", _BASE_URL
     )
     monkeypatch.setattr(
-        "app.adapters.saramin.settings.saramin_max_queries_per_collect", 10
+        "app.adapters.aggregators.saramin.settings.saramin_max_queries_per_collect", 10
     )
     seed = _seed(roles=["백엔드 개발자", "서버 개발자"])
     opts = _options(detail_fetch_limit_per_source=10, max_results_per_source=50)
@@ -551,10 +551,10 @@ async def test_adapter_source_stats_correct(monkeypatch):
         for i in range(4)
     ]
     mock = _MockSaraminClient([(200, _jobs_response(jobs))])
-    monkeypatch.setattr("app.adapters.saramin.AsyncClient", lambda **kw: mock)
-    monkeypatch.setattr("app.adapters.saramin.settings.saramin_access_key", "test-key")
+    monkeypatch.setattr("app.adapters.aggregators.saramin.AsyncClient", lambda **kw: mock)
+    monkeypatch.setattr("app.adapters.aggregators.saramin.settings.saramin_access_key", "test-key")
     monkeypatch.setattr(
-        "app.adapters.saramin.settings.saramin_api_base_url", _BASE_URL
+        "app.adapters.aggregators.saramin.settings.saramin_api_base_url", _BASE_URL
     )
     seed = _seed(roles=["백엔드 개발자"])
     result = await SaraminAdapter().fetch(seed, _options(), _COLLECT_DATE)

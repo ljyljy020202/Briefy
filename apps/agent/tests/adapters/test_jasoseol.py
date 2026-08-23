@@ -13,7 +13,7 @@ import pytest
 from httpx import TimeoutException
 
 from app.adapters.base import AdapterResult, RawJobPosting
-from app.adapters.jasoseol import (
+from app.adapters.aggregators.jasoseol import (
     _EXPLORATION_ENABLED,
     JasoseolAdapter,
     _extract_source_external_id,
@@ -306,7 +306,7 @@ async def test_adapter_all_success_returns_postings(monkeypatch):
         _PAGE_URL: (200, _VALID_HTML),
     }
     monkeypatch.setattr(
-        "app.adapters.jasoseol.AsyncClient",
+        "app.adapters.aggregators.jasoseol.AsyncClient",
         lambda **kw: _MockAsyncClient(responses),
     )
     adapter = JasoseolAdapter()
@@ -324,7 +324,7 @@ async def test_adapter_sitemap_timeout_returns_empty_with_warning(monkeypatch):
         _SITEMAP_2: TimeoutException("timeout"),
     }
     monkeypatch.setattr(
-        "app.adapters.jasoseol.AsyncClient",
+        "app.adapters.aggregators.jasoseol.AsyncClient",
         lambda **kw: _MockAsyncClient(responses),
     )
     adapter = JasoseolAdapter()
@@ -340,7 +340,7 @@ async def test_adapter_sitemap_http_error_returns_empty_with_warning(monkeypatch
         _SITEMAP_2: (503, "Service Unavailable"),
     }
     monkeypatch.setattr(
-        "app.adapters.jasoseol.AsyncClient",
+        "app.adapters.aggregators.jasoseol.AsyncClient",
         lambda **kw: _MockAsyncClient(responses),
     )
     adapter = JasoseolAdapter()
@@ -357,7 +357,7 @@ async def test_adapter_page_timeout_returns_partial_with_warning(monkeypatch):
         _PAGE_URL: TimeoutException("page timeout"),
     }
     monkeypatch.setattr(
-        "app.adapters.jasoseol.AsyncClient",
+        "app.adapters.aggregators.jasoseol.AsyncClient",
         lambda **kw: _MockAsyncClient(responses),
     )
     adapter = JasoseolAdapter()
@@ -373,7 +373,7 @@ async def test_adapter_page_parse_fail_returns_empty_not_raises(monkeypatch):
         _PAGE_URL: (200, _read("jasoseol_broken_page.html")),
     }
     monkeypatch.setattr(
-        "app.adapters.jasoseol.AsyncClient",
+        "app.adapters.aggregators.jasoseol.AsyncClient",
         lambda **kw: _MockAsyncClient(responses),
     )
     adapter = JasoseolAdapter()
@@ -402,7 +402,7 @@ async def test_adapter_respects_discovery_limit_per_source(monkeypatch):
         responses[u] = (200, _VALID_HTML)
 
     monkeypatch.setattr(
-        "app.adapters.jasoseol.AsyncClient",
+        "app.adapters.aggregators.jasoseol.AsyncClient",
         lambda **kw: _MockAsyncClient(responses),
     )
     adapter = JasoseolAdapter()
@@ -454,7 +454,7 @@ async def test_adapter_collect_date_none_uses_today(monkeypatch):
         _SITEMAP_2: (200, _EMPTY_SITEMAP),
     }
     monkeypatch.setattr(
-        "app.adapters.jasoseol.AsyncClient",
+        "app.adapters.aggregators.jasoseol.AsyncClient",
         lambda **kw: _MockAsyncClient(responses),
     )
     adapter = JasoseolAdapter()
@@ -477,7 +477,7 @@ async def test_adapter_malformed_sitemap_xml_returns_warning(monkeypatch):
         _SITEMAP_2: (200, _EMPTY_SITEMAP),
     }
     monkeypatch.setattr(
-        "app.adapters.jasoseol.AsyncClient",
+        "app.adapters.aggregators.jasoseol.AsyncClient",
         lambda **kw: _MockAsyncClient(responses),
     )
     adapter = JasoseolAdapter()
@@ -555,7 +555,7 @@ async def test_adapter_respects_detail_fetch_limit_per_source(monkeypatch):
         responses[u] = (200, _VALID_HTML)
 
     monkeypatch.setattr(
-        "app.adapters.jasoseol.AsyncClient",
+        "app.adapters.aggregators.jasoseol.AsyncClient",
         lambda **kw: _MockAsyncClient(responses),
     )
     adapter = JasoseolAdapter()
@@ -579,7 +579,7 @@ async def test_adapter_source_stats_populated_on_success(monkeypatch):
         _PAGE_URL: (200, _VALID_HTML),
     }
     monkeypatch.setattr(
-        "app.adapters.jasoseol.AsyncClient",
+        "app.adapters.aggregators.jasoseol.AsyncClient",
         lambda **kw: _MockAsyncClient(responses),
     )
     adapter = JasoseolAdapter()
@@ -598,7 +598,7 @@ async def test_adapter_source_stats_populated_on_empty(monkeypatch):
         _SITEMAP_2: (200, _EMPTY_SITEMAP),
     }
     monkeypatch.setattr(
-        "app.adapters.jasoseol.AsyncClient",
+        "app.adapters.aggregators.jasoseol.AsyncClient",
         lambda **kw: _MockAsyncClient(responses),
     )
     adapter = JasoseolAdapter()

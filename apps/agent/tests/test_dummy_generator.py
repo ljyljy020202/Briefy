@@ -3,7 +3,7 @@ from app.schemas.briefing import (
     BriefingGenerateResponse,
     JobPostingPreference,
 )
-from app.services.dummy_briefing import generate
+from app.stubs.dummy_briefing import generate
 
 
 def _make_request(**overrides) -> BriefingGenerateRequest:

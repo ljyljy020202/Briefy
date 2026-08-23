@@ -44,9 +44,9 @@ from pathlib import Path
 import httpx
 import pytest
 
-import app.adapters.toss_careers  # noqa: F401
+import app.adapters.official.toss_careers  # noqa: F401
 from app.adapters.official_company import _CUSTOM_REGISTRY_BY_KEY
-from app.adapters.toss_careers import (
+from app.adapters.official.toss_careers import (
     TossCareersParser,
     _build_roles,
     _extract_experience,
@@ -61,7 +61,7 @@ from app.schemas.collection import (
     CompanyProfile,
     OfficialCompanySource,
 )
-from app.utils.identifiers import compute_source_record_key
+from app.core.identifiers import compute_source_record_key
 
 _FIXTURES = Path(__file__).parent / "fixtures" / "toss"
 _COLLECT_DATE = date(2026, 8, 15)
@@ -173,8 +173,8 @@ def test_toss_careers_is_parser_instance():
 
 
 def test_regression_greenhouse_naver_unaffected():
-    import app.adapters.greenhouse  # noqa: F401
-    import app.adapters.naver_careers  # noqa: F401
+    import app.adapters.official.greenhouse  # noqa: F401
+    import app.adapters.official.naver_careers  # noqa: F401
     assert "GREENHOUSE" in _CUSTOM_REGISTRY_BY_KEY
     assert "DAANGN_CAREERS" in _CUSTOM_REGISTRY_BY_KEY
     assert "NAVER_CAREERS" in _CUSTOM_REGISTRY_BY_KEY
@@ -566,7 +566,7 @@ def test_source_record_key_unique_per_job():
 async def test_full_fetch_all_jobs(monkeypatch):
     """Sitemap has 8 unique jobs (after dedup) → 8 postings."""
     mock = _MockClient(_default_handler())
-    monkeypatch.setattr("app.adapters.toss_careers.AsyncClient", lambda **kw: mock)
+    monkeypatch.setattr("app.adapters.official.toss_careers.AsyncClient", lambda **kw: mock)
 
     result = await TossCareersParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE
@@ -592,7 +592,7 @@ async def test_server_dev_fields(monkeypatch):
         return _ok(url, _JOB_HTMLS["1001001003"])
 
     mock = _MockClient(handler)
-    monkeypatch.setattr("app.adapters.toss_careers.AsyncClient", lambda **kw: mock)
+    monkeypatch.setattr("app.adapters.official.toss_careers.AsyncClient", lambda **kw: mock)
 
     result = await TossCareersParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE
@@ -624,7 +624,7 @@ async def test_intern_fields(monkeypatch):
         return _ok(url, _JOB_HTMLS["1002001003"])
 
     mock = _MockClient(handler)
-    monkeypatch.setattr("app.adapters.toss_careers.AsyncClient", lambda **kw: mock)
+    monkeypatch.setattr("app.adapters.official.toss_careers.AsyncClient", lambda **kw: mock)
 
     result = await TossCareersParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE
@@ -642,7 +642,7 @@ async def test_intern_fields(monkeypatch):
 async def test_max_items_cap(monkeypatch):
     """max_items=3 → only 3 jobs fetched despite 8 in sitemap."""
     mock = _MockClient(_default_handler())
-    monkeypatch.setattr("app.adapters.toss_careers.AsyncClient", lambda **kw: mock)
+    monkeypatch.setattr("app.adapters.official.toss_careers.AsyncClient", lambda **kw: mock)
 
     cfg = json.dumps({"parser_key": "TOSS_CAREERS", "max_items": 3})
     result = await TossCareersParser().fetch(
@@ -660,7 +660,7 @@ async def test_sitemap_http_error(monkeypatch):
         return _err(url, 503)
 
     mock = _MockClient(handler)
-    monkeypatch.setattr("app.adapters.toss_careers.AsyncClient", lambda **kw: mock)
+    monkeypatch.setattr("app.adapters.official.toss_careers.AsyncClient", lambda **kw: mock)
 
     result = await TossCareersParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE
@@ -676,7 +676,7 @@ async def test_sitemap_timeout(monkeypatch):
         raise httpx.TimeoutException("timed out")
 
     mock = _MockClient(handler)
-    monkeypatch.setattr("app.adapters.toss_careers.AsyncClient", lambda **kw: mock)
+    monkeypatch.setattr("app.adapters.official.toss_careers.AsyncClient", lambda **kw: mock)
 
     result = await TossCareersParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE
@@ -692,7 +692,7 @@ async def test_sitemap_malformed_xml(monkeypatch):
         return _ok(url, "<not valid xml", "application/xml")
 
     mock = _MockClient(handler)
-    monkeypatch.setattr("app.adapters.toss_careers.AsyncClient", lambda **kw: mock)
+    monkeypatch.setattr("app.adapters.official.toss_careers.AsyncClient", lambda **kw: mock)
 
     result = await TossCareersParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE
@@ -715,7 +715,7 @@ async def test_sitemap_genuine_empty(monkeypatch):
         return _ok(url, xml, "application/xml")
 
     mock = _MockClient(handler)
-    monkeypatch.setattr("app.adapters.toss_careers.AsyncClient", lambda **kw: mock)
+    monkeypatch.setattr("app.adapters.official.toss_careers.AsyncClient", lambda **kw: mock)
 
     result = await TossCareersParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE
@@ -740,7 +740,7 @@ async def test_detail_http_error_skips_job(monkeypatch):
         return _err(url, 404)
 
     mock = _MockClient(handler)
-    monkeypatch.setattr("app.adapters.toss_careers.AsyncClient", lambda **kw: mock)
+    monkeypatch.setattr("app.adapters.official.toss_careers.AsyncClient", lambda **kw: mock)
 
     result = await TossCareersParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE
@@ -773,7 +773,7 @@ async def test_detail_missing_next_data_skips_job(monkeypatch):
         return _err(url, 404)
 
     mock = _MockClient(handler)
-    monkeypatch.setattr("app.adapters.toss_careers.AsyncClient", lambda **kw: mock)
+    monkeypatch.setattr("app.adapters.official.toss_careers.AsyncClient", lambda **kw: mock)
 
     result = await TossCareersParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE
@@ -805,7 +805,7 @@ async def test_detail_timeout_skips_job(monkeypatch):
         return _err(url, 404)
 
     mock = _MockClient(handler)
-    monkeypatch.setattr("app.adapters.toss_careers.AsyncClient", lambda **kw: mock)
+    monkeypatch.setattr("app.adapters.official.toss_careers.AsyncClient", lambda **kw: mock)
 
     result = await TossCareersParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE
@@ -830,7 +830,7 @@ async def test_android_preferred_not_extracted(monkeypatch):
         return _ok(url, _JOB_HTMLS["1007001003"])
 
     mock = _MockClient(handler)
-    monkeypatch.setattr("app.adapters.toss_careers.AsyncClient", lambda **kw: mock)
+    monkeypatch.setattr("app.adapters.official.toss_careers.AsyncClient", lambda **kw: mock)
 
     result = await TossCareersParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE

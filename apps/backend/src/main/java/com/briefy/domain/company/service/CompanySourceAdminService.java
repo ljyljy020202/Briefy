@@ -1,8 +1,5 @@
 package com.briefy.domain.company.service;
 
-import com.briefy.infra.agent.AgentClient;
-import com.briefy.infra.agent.dto.AgentSourcePreflightRequest;
-import com.briefy.infra.agent.dto.AgentSourcePreflightResponse;
 import com.briefy.domain.company.dto.admin.CompanySourceAdminResponse;
 import com.briefy.domain.company.dto.admin.CompanySourcePreflightResponse;
 import com.briefy.domain.company.dto.admin.CreateCompanySourceRequest;
@@ -14,6 +11,9 @@ import com.briefy.domain.company.repository.CompanySourceRepository;
 import com.briefy.global.exception.BusinessException;
 import com.briefy.global.exception.ErrorCode;
 import com.briefy.global.response.PageResult;
+import com.briefy.infra.agent.AgentClient;
+import com.briefy.infra.agent.dto.AgentSourcePreflightRequest;
+import com.briefy.infra.agent.dto.AgentSourcePreflightResponse;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
