@@ -45,9 +45,6 @@ public class UserBriefingPreferenceService {
         .findByUserIdAndCategoryId(userId, category.getId())
         .map(
             existing -> {
-              if (existing.isActive()) {
-                throw new BusinessException(ErrorCode.DUPLICATE_BRIEFING_PREFERENCE);
-              }
               existing.reactivate(request.preference());
               return BriefingPreferenceResponse.from(existing);
             })

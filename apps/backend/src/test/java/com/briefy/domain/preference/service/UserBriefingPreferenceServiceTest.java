@@ -112,22 +112,24 @@ class UserBriefingPreferenceServiceTest {
   }
 
   @Test
-  void upsertPreference_throwsDuplicate_whenActiveExists() {
-    UpsertBriefingPreferenceRequest request =
-        new UpsertBriefingPreferenceRequest(1L, Map.of("roles", List.of("백엔드 개발자")));
+  void upsertPreference_updates_whenActiveExists() {
+    Map<String, Object> preference = Map.of("roles", List.of("백엔드 개발자"));
+    UpsertBriefingPreferenceRequest request = new UpsertBriefingPreferenceRequest(1L, preference);
 
     when(categoryRepository.findByIdAndActiveTrue(1L)).thenReturn(Optional.of(mockCategory));
 
     UserBriefingPreference existing = mock(UserBriefingPreference.class);
     when(existing.isActive()).thenReturn(true);
+    when(existing.getCategory()).thenReturn(mockCategory);
+    when(existing.getPreference()).thenReturn(preference);
+    when(existing.getCreatedAt()).thenReturn(null);
+    when(existing.getUpdatedAt()).thenReturn(null);
     when(preferenceRepository.findByUserIdAndCategoryId(10L, 1L)).thenReturn(Optional.of(existing));
 
-    assertThatThrownBy(() -> preferenceService.upsertPreference(10L, request))
-        .isInstanceOf(BusinessException.class)
-        .satisfies(
-            e ->
-                assertThat(((BusinessException) e).getErrorCode())
-                    .isEqualTo(ErrorCode.DUPLICATE_BRIEFING_PREFERENCE));
+    BriefingPreferenceResponse result = preferenceService.upsertPreference(10L, request);
+
+    verify(existing).reactivate(preference);
+    assertThat(result.categoryCode()).isEqualTo("JOB_POSTING");
   }
 
   @Test

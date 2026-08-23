@@ -1,4 +1,4 @@
-package com.briefy.email;
+package com.briefy.global.email;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
