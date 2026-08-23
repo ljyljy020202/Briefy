@@ -17,6 +17,11 @@ import logging
 from datetime import date as date_cls
 from typing import TypedDict
 
+from app.core.llm_client import (
+    LLMClientError,
+    LLMUnavailableError,
+    llm_client,
+)
 from app.prompts import briefing_synthesis, job_enrichment
 from app.prompts.briefing_synthesis import EnrichedArticleInput
 from app.schemas.briefing import (
@@ -28,11 +33,6 @@ from app.schemas.briefing import (
     TokenUsage,
 )
 from app.schemas.llm import JobPostingEnrichment
-from app.services.llm_client import (
-    LLMClientError,
-    LLMUnavailableError,
-    llm_client,
-)
 
 logger = logging.getLogger(__name__)
 

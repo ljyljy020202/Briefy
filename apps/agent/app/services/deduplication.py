@@ -1,12 +1,12 @@
 from dataclasses import dataclass
 from datetime import date, timedelta
 
-from app.schemas.collection import CollectedJobPosting, CollectionOptions, SourceRef
-from app.utils.identifiers import (
+from app.core.identifiers import (
     compute_canonical_fingerprint,
     normalize_company_name,
     normalize_title,
 )
+from app.schemas.collection import CollectedJobPosting, CollectionOptions, SourceRef
 
 # Postings whose deadline falls within this window are kept even when posted_at
 # is older than lookback_days.  Not configurable from Spring — agent-internal only.
