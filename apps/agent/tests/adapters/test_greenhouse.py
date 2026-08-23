@@ -48,8 +48,8 @@ from pathlib import Path
 import httpx
 import pytest
 
-import app.adapters.greenhouse  # noqa: F401
-from app.adapters.greenhouse import (
+import app.adapters.official.greenhouse  # noqa: F401
+from app.adapters.official.greenhouse import (
     GreenhouseParser,
     _build_roles,
     _extract_year_experience,
@@ -60,13 +60,13 @@ from app.adapters.greenhouse import (
     _parse_deadline,
 )
 from app.adapters.official_company import _CUSTOM_REGISTRY_BY_KEY
+from app.core.identifiers import compute_source_record_key
 from app.schemas.collection import (
     CollectionOptions,
     CompanyProfile,
     OfficialCompanySource,
 )
 from app.services.normalization import normalize
-from app.utils.identifiers import compute_source_record_key
 
 _FIXTURES = Path(__file__).parent / "fixtures" / "greenhouse"
 _COLLECT_DATE = date(2026, 8, 15)
@@ -144,8 +144,8 @@ def test_daangn_careers_is_greenhouse_instance():
 
 
 def test_naver_and_greeting_unaffected():
-    import app.adapters.greeting  # noqa: F401
-    import app.adapters.naver_careers  # noqa: F401
+    import app.adapters.official.greeting  # noqa: F401
+    import app.adapters.official.naver_careers  # noqa: F401
     assert "NAVER_CAREERS" in _CUSTOM_REGISTRY_BY_KEY
     assert "GREETING" in _CUSTOM_REGISTRY_BY_KEY
 
@@ -436,7 +436,8 @@ async def test_full_list_parsed(monkeypatch):
         return _json_resp(url, _LIST_DATA)
 
     mock = _MockClient(handler)
-    monkeypatch.setattr("app.adapters.greenhouse.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greenhouse.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     result = await GreenhouseParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE
@@ -456,7 +457,8 @@ async def test_backend_experience_enriched_from_content(monkeypatch):
         return _json_resp(url, data)
 
     mock = _MockClient(handler)
-    monkeypatch.setattr("app.adapters.greenhouse.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greenhouse.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     result = await GreenhouseParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE
@@ -480,7 +482,8 @@ async def test_ml_engineer_shinip_gyeongryeok(monkeypatch):
         return _json_resp(url, data)
 
     mock = _MockClient(handler)
-    monkeypatch.setattr("app.adapters.greenhouse.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greenhouse.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     result = await GreenhouseParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE
@@ -502,7 +505,8 @@ async def test_android_intern_deadline(monkeypatch):
         return _json_resp(url, data)
 
     mock = _MockClient(handler)
-    monkeypatch.setattr("app.adapters.greenhouse.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greenhouse.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     result = await GreenhouseParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE
@@ -524,7 +528,8 @@ async def test_sales_business_division(monkeypatch):
         return _json_resp(url, data)
 
     mock = _MockClient(handler)
-    monkeypatch.setattr("app.adapters.greenhouse.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greenhouse.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     result = await GreenhouseParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE
@@ -545,7 +550,8 @@ async def test_product_manager_5yr(monkeypatch):
         return _json_resp(url, data)
 
     mock = _MockClient(handler)
-    monkeypatch.setattr("app.adapters.greenhouse.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greenhouse.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     result = await GreenhouseParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE
@@ -566,7 +572,8 @@ async def test_contract_designer_range(monkeypatch):
         return _json_resp(url, data)
 
     mock = _MockClient(handler)
-    monkeypatch.setattr("app.adapters.greenhouse.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greenhouse.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     result = await GreenhouseParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE
@@ -587,7 +594,8 @@ async def test_daangn_market_legal_entity(monkeypatch):
         return _json_resp(url, data)
 
     mock = _MockClient(handler)
-    monkeypatch.setattr("app.adapters.greenhouse.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greenhouse.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     result = await GreenhouseParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE
@@ -605,7 +613,8 @@ async def test_daangn_pay_legal_entity(monkeypatch):
         return _json_resp(url, data)
 
     mock = _MockClient(handler)
-    monkeypatch.setattr("app.adapters.greenhouse.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greenhouse.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     result = await GreenhouseParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE
@@ -624,7 +633,8 @@ async def test_null_deadline_is_none(monkeypatch):
         return _json_resp(url, data)
 
     mock = _MockClient(handler)
-    monkeypatch.setattr("app.adapters.greenhouse.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greenhouse.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     result = await GreenhouseParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE
@@ -645,7 +655,8 @@ async def test_metadata_order_invariance(monkeypatch):
         return _json_resp(url, data)
 
     mock = _MockClient(handler)
-    monkeypatch.setattr("app.adapters.greenhouse.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greenhouse.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     result = await GreenhouseParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE
@@ -665,7 +676,8 @@ async def test_malformed_metadata_produces_posting(monkeypatch):
         return _json_resp(url, data)
 
     mock = _MockClient(handler)
-    monkeypatch.setattr("app.adapters.greenhouse.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greenhouse.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     result = await GreenhouseParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE
@@ -685,7 +697,8 @@ async def test_max_items_cap(monkeypatch):
         return _json_resp(url, _LIST_DATA)
 
     mock = _MockClient(handler)
-    monkeypatch.setattr("app.adapters.greenhouse.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greenhouse.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     cfg = json.dumps({"parser_key": "DAANGN_CAREERS", "max_items": 3})
     result = await GreenhouseParser().fetch(
@@ -702,7 +715,8 @@ async def test_genuine_empty_list(monkeypatch):
         return _json_resp(url, {"jobs": [], "meta": {"total": 0}})
 
     mock = _MockClient(handler)
-    monkeypatch.setattr("app.adapters.greenhouse.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greenhouse.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     result = await GreenhouseParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE
@@ -719,7 +733,8 @@ async def test_schema_failure_missing_jobs_key(monkeypatch):
         return _json_resp(url, {"error": "not found"})
 
     mock = _MockClient(handler)
-    monkeypatch.setattr("app.adapters.greenhouse.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greenhouse.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     result = await GreenhouseParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE
@@ -739,7 +754,8 @@ async def test_malformed_json_warning(monkeypatch):
         )
 
     mock = _MockClient(handler)
-    monkeypatch.setattr("app.adapters.greenhouse.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greenhouse.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     result = await GreenhouseParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE
@@ -755,7 +771,8 @@ async def test_http_error_warning(monkeypatch):
         return _json_resp(url, {}, status=503)
 
     mock = _MockClient(handler)
-    monkeypatch.setattr("app.adapters.greenhouse.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greenhouse.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     result = await GreenhouseParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE
@@ -771,7 +788,8 @@ async def test_timeout_warning(monkeypatch):
         raise httpx.TimeoutException("timed out")
 
     mock = _MockClient(handler)
-    monkeypatch.setattr("app.adapters.greenhouse.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greenhouse.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     result = await GreenhouseParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE
@@ -790,7 +808,8 @@ async def test_daangn_careers_career_url_format(monkeypatch):
         return _json_resp(url, data)
 
     mock = _MockClient(handler)
-    monkeypatch.setattr("app.adapters.greenhouse.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greenhouse.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     result = await GreenhouseParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE

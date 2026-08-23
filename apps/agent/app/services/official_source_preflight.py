@@ -356,7 +356,7 @@ async def _greeting_preflight(
     source_url: str | None,
     config_json: str | None,
 ) -> OfficialSourcePreflightResponse:
-    from app.adapters.greeting import greeting_preflight
+    from app.adapters.official.greeting import greeting_preflight
     from app.schemas.collection import OfficialCompanySource
 
     source = OfficialCompanySource(
@@ -424,7 +424,7 @@ async def _greenhouse_preflight(
     source_url: str | None,
     config_json: str | None,
 ) -> OfficialSourcePreflightResponse:
-    from app.adapters.greenhouse import greenhouse_preflight
+    from app.adapters.official.greenhouse import greenhouse_preflight
     from app.schemas.collection import OfficialCompanySource
 
     source = OfficialCompanySource(
@@ -492,7 +492,7 @@ async def _toss_preflight(
     source_url: str | None,
     config_json: str | None,
 ) -> OfficialSourcePreflightResponse:
-    from app.adapters.toss_careers import toss_preflight
+    from app.adapters.official.toss_careers import toss_preflight
     from app.schemas.collection import OfficialCompanySource
 
     source = OfficialCompanySource(
@@ -560,7 +560,7 @@ async def _naver_preflight(
     source_url: str | None,
     config_json: str | None,
 ) -> OfficialSourcePreflightResponse:
-    from app.adapters.naver_careers import naver_preflight
+    from app.adapters.official.naver_careers import naver_preflight
     from app.schemas.collection import OfficialCompanySource
 
     source = OfficialCompanySource(
@@ -628,7 +628,7 @@ async def _ably_preflight(
     source_url: str | None,
     config_json: str | None,
 ) -> OfficialSourcePreflightResponse:
-    from app.adapters.ably_careers import ably_preflight
+    from app.adapters.official.ably_careers import ably_preflight
     from app.schemas.collection import OfficialCompanySource
 
     source = OfficialCompanySource(
@@ -696,7 +696,7 @@ async def _kakao_preflight(
     source_url: str | None,
     config_json: str | None,
 ) -> OfficialSourcePreflightResponse:
-    from app.adapters.kakao_careers import kakao_preflight
+    from app.adapters.official.kakao_careers import kakao_preflight
     from app.schemas.collection import OfficialCompanySource
 
     source = OfficialCompanySource(
@@ -789,7 +789,7 @@ async def _samsung_preflight(
     source_url: str | None,
     config_json: str | None,
 ) -> OfficialSourcePreflightResponse:
-    from app.adapters.samsung_careers import samsung_preflight
+    from app.adapters.official.samsung_careers import samsung_preflight
     from app.schemas.collection import OfficialCompanySource
 
     source = OfficialCompanySource(
@@ -872,7 +872,7 @@ async def _lg_cns_preflight(
     source_url: str | None,
     config_json: str | None,
 ) -> OfficialSourcePreflightResponse:
-    from app.adapters.lg_cns_careers import lg_cns_preflight
+    from app.adapters.official.lg_cns_careers import lg_cns_preflight
     from app.schemas.collection import OfficialCompanySource
 
     source = OfficialCompanySource(

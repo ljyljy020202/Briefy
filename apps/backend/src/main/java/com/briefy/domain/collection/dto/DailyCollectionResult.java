@@ -1,6 +1,6 @@
 package com.briefy.domain.collection.dto;
 
-import com.briefy.domain.briefing.client.dto.AgentCollectionStats;
+import com.briefy.infra.agent.dto.AgentCollectionStats;
 import java.time.LocalDate;
 import java.util.List;
 

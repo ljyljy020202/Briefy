@@ -5,8 +5,8 @@ collection request and replaces them with canonical names.  Falls back to the
 raw name unchanged when no profile matches.
 """
 
+from app.core.identifiers import normalize_company_name
 from app.schemas.collection import CollectedJobPosting, CompanyProfile
-from app.utils.identifiers import normalize_company_name
 
 
 def canonicalize_company(raw_name: str, profiles: list[CompanyProfile]) -> str:

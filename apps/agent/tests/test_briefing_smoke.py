@@ -31,7 +31,7 @@ from __future__ import annotations
 import re
 from unittest.mock import AsyncMock, patch
 
-from app.services.llm_client import LLMTokenUsage
+from app.core.llm_client import LLMTokenUsage
 
 # ---------------------------------------------------------------------------
 # Fixtures — realistic payloads that mirror what BriefingService sends

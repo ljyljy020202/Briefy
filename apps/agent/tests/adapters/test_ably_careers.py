@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.adapters.ably_careers import (
+from app.adapters.official.ably_careers import (
     AblyCareersParser,
     _AblyConfig,
     _build_posting,
@@ -609,7 +609,7 @@ async def test_fetch_success_two_postings(monkeypatch):
     list_html = _make_list_html(recruits)
     mock = _make_mock_client(list_html, _make_detail_html("<p>JD내용</p>"))
     monkeypatch.setattr(
-        "app.adapters.ably_careers.AsyncClient", lambda **kw: mock
+        "app.adapters.official.ably_careers.AsyncClient", lambda **kw: mock
     )
 
     result = await AblyCareersParser().fetch(
@@ -628,7 +628,7 @@ async def test_fetch_filters_closed_and_private(monkeypatch):
     list_html = _make_list_html(recruits)
     mock = _make_mock_client(list_html)
     monkeypatch.setattr(
-        "app.adapters.ably_careers.AsyncClient", lambda **kw: mock
+        "app.adapters.official.ably_careers.AsyncClient", lambda **kw: mock
     )
 
     result = await AblyCareersParser().fetch(
@@ -646,7 +646,7 @@ async def test_fetch_deduplicates_same_address_key(monkeypatch):
     list_html = _make_list_html(recruits)
     mock = _make_mock_client(list_html)
     monkeypatch.setattr(
-        "app.adapters.ably_careers.AsyncClient", lambda **kw: mock
+        "app.adapters.official.ably_careers.AsyncClient", lambda **kw: mock
     )
 
     result = await AblyCareersParser().fetch(
@@ -659,7 +659,7 @@ async def test_fetch_empty_listing_returns_zero(monkeypatch):
     list_html = _make_list_html([])
     mock = _make_mock_client(list_html)
     monkeypatch.setattr(
-        "app.adapters.ably_careers.AsyncClient", lambda **kw: mock
+        "app.adapters.official.ably_careers.AsyncClient", lambda **kw: mock
     )
 
     result = await AblyCareersParser().fetch(
@@ -679,7 +679,7 @@ async def test_fetch_list_page_unreachable(monkeypatch):
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=False)
     monkeypatch.setattr(
-        "app.adapters.ably_careers.AsyncClient", lambda **kw: mock_client
+        "app.adapters.official.ably_careers.AsyncClient", lambda **kw: mock_client
     )
 
     result = await AblyCareersParser().fetch(
@@ -694,7 +694,7 @@ async def test_fetch_list_parse_failure(monkeypatch):
     bad_html = "<html><body><p>no json here</p></body></html>"
     mock = _make_mock_client(bad_html)
     monkeypatch.setattr(
-        "app.adapters.ably_careers.AsyncClient", lambda **kw: mock
+        "app.adapters.official.ably_careers.AsyncClient", lambda **kw: mock
     )
 
     result = await AblyCareersParser().fetch(
@@ -724,7 +724,7 @@ async def test_fetch_detail_timeout_posting_still_returned(monkeypatch):
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=False)
     monkeypatch.setattr(
-        "app.adapters.ably_careers.AsyncClient", lambda **kw: mock_client
+        "app.adapters.official.ably_careers.AsyncClient", lambda **kw: mock_client
     )
 
     result = await AblyCareersParser().fetch(
@@ -741,7 +741,7 @@ async def test_fetch_respects_max_items(monkeypatch):
     list_html = _make_list_html(recruits)
     mock = _make_mock_client(list_html)
     monkeypatch.setattr(
-        "app.adapters.ably_careers.AsyncClient", lambda **kw: mock
+        "app.adapters.official.ably_careers.AsyncClient", lambda **kw: mock
     )
 
     src = _source('{"parser_key":"ABLY_CAREERS","max_items":2}')
@@ -758,7 +758,7 @@ async def test_fetch_metadata_from_listing_without_detail(monkeypatch):
     list_html = _make_list_html([_PEOPLE_BELOW])
     mock = _make_mock_client(list_html, _make_detail_html())
     monkeypatch.setattr(
-        "app.adapters.ably_careers.AsyncClient", lambda **kw: mock
+        "app.adapters.official.ably_careers.AsyncClient", lambda **kw: mock
     )
 
     result = await AblyCareersParser().fetch(
@@ -777,7 +777,7 @@ async def test_fetch_company_name_from_profile(monkeypatch):
     list_html = _make_list_html([_BACKEND_SENIOR])
     mock = _make_mock_client(list_html)
     monkeypatch.setattr(
-        "app.adapters.ably_careers.AsyncClient", lambda **kw: mock
+        "app.adapters.official.ably_careers.AsyncClient", lambda **kw: mock
     )
 
     profile = CompanyProfile(

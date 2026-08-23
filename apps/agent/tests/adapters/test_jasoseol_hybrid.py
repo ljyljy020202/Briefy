@@ -15,15 +15,15 @@ import httpx
 import pytest
 from httpx import TimeoutException
 
-from app.adapters.base import AdapterResult
-from app.adapters.jasoseol import (
+from app.adapters.aggregators.jasoseol import (
     _EXPLORATION_ENABLED,
     JasoseolAdapter,
     _allocate_fetch_budget,
     _CandidateEntry,
     _merge_candidates,
 )
-from app.adapters.jasoseol_search import SearchCandidate
+from app.adapters.aggregators.jasoseol_search import SearchCandidate
+from app.adapters.base import AdapterResult
 from app.schemas.collection import CollectionOptions, SeedKeywords
 
 _FIXTURES = Path(__file__).parent / "fixtures"
@@ -294,7 +294,7 @@ async def test_adapter_with_backend_role_performs_targeted_discovery(monkeypatch
         f"{_BASE}/intern/201003": (200, _VALID_HTML),
     }
     monkeypatch.setattr(
-        "app.adapters.jasoseol.AsyncClient",
+        "app.adapters.aggregators.jasoseol.AsyncClient",
         lambda **kw: _MockHybridClient(responses),
     )
     seed = SeedKeywords(roles=["백엔드 개발자"])
@@ -323,7 +323,7 @@ async def test_adapter_empty_roles_skips_targeted_discovery(monkeypatch):
             return httpx.Response(404, text="Not Found", request=request)
 
     monkeypatch.setattr(
-        "app.adapters.jasoseol.AsyncClient",
+        "app.adapters.aggregators.jasoseol.AsyncClient",
         lambda **kw: _TrackingClient(),
     )
     await JasoseolAdapter().fetch(SeedKeywords(), CollectionOptions(), _COLLECT_DATE)
@@ -349,7 +349,7 @@ async def test_adapter_unknown_roles_skips_targeted_discovery(monkeypatch):
             return httpx.Response(404, text="", request=request)
 
     monkeypatch.setattr(
-        "app.adapters.jasoseol.AsyncClient",
+        "app.adapters.aggregators.jasoseol.AsyncClient",
         lambda **kw: _TrackingClient(),
     )
     seed = SeedKeywords(roles=["간호사", "영업직"])
@@ -370,7 +370,7 @@ async def test_adapter_targeted_search_timeout_falls_back_to_sitemap(monkeypatch
         f"{_BASE}/recruit/104949": (200, _VALID_HTML),
     }
     monkeypatch.setattr(
-        "app.adapters.jasoseol.AsyncClient",
+        "app.adapters.aggregators.jasoseol.AsyncClient",
         lambda **kw: _MockHybridClient(responses),
     )
     seed = SeedKeywords(roles=["백엔드 개발자"])
@@ -396,7 +396,7 @@ async def test_adapter_stats_discovered_is_unique_merged_count(monkeypatch):
         f"{_BASE}/recruit/104949": (200, _VALID_HTML),
     }
     monkeypatch.setattr(
-        "app.adapters.jasoseol.AsyncClient",
+        "app.adapters.aggregators.jasoseol.AsyncClient",
         lambda **kw: _MockHybridClient(responses),
     )
     seed = SeedKeywords(roles=["백엔드 개발자"])
@@ -417,7 +417,7 @@ async def test_adapter_fetch_count_equals_actual_detail_fetches(monkeypatch):
         f"{_BASE}/intern/201003": (200, _VALID_HTML),
     }
     monkeypatch.setattr(
-        "app.adapters.jasoseol.AsyncClient",
+        "app.adapters.aggregators.jasoseol.AsyncClient",
         lambda **kw: _MockHybridClient(responses),
     )
     seed = SeedKeywords(roles=["백엔드 개발자"])
@@ -445,7 +445,7 @@ async def test_adapter_total_discovery_respects_limit(monkeypatch):
         responses[f"{_BASE}/intern/{uid}"] = (200, _VALID_HTML)
 
     monkeypatch.setattr(
-        "app.adapters.jasoseol.AsyncClient",
+        "app.adapters.aggregators.jasoseol.AsyncClient",
         lambda **kw: _MockHybridClient(responses),
     )
     seed = SeedKeywords(roles=["백엔드 개발자"])
@@ -473,7 +473,7 @@ async def test_adapter_total_fetch_respects_limit(monkeypatch):
     responses[f"{_BASE}/intern/201003"] = (200, _VALID_HTML)
 
     monkeypatch.setattr(
-        "app.adapters.jasoseol.AsyncClient",
+        "app.adapters.aggregators.jasoseol.AsyncClient",
         lambda **kw: _MockHybridClient(responses),
     )
     seed = SeedKeywords(roles=["백엔드 개발자"])
@@ -496,7 +496,7 @@ async def test_adapter_final_count_equals_returned_postings(monkeypatch):
         f"{_BASE}/intern/201003": (200, _VALID_HTML),
     }
     monkeypatch.setattr(
-        "app.adapters.jasoseol.AsyncClient",
+        "app.adapters.aggregators.jasoseol.AsyncClient",
         lambda **kw: _MockHybridClient(responses),
     )
     seed = SeedKeywords(roles=["백엔드 개발자"])
@@ -580,7 +580,7 @@ async def test_developer_postings_survive_non_dev_sitemap(monkeypatch):
     }
 
     monkeypatch.setattr(
-        "app.adapters.jasoseol.AsyncClient",
+        "app.adapters.aggregators.jasoseol.AsyncClient",
         lambda **kw: _MockHybridClient(responses),
     )
 

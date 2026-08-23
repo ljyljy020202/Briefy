@@ -1,14 +1,14 @@
 import re
 
 from app.adapters.base import RawJobPosting
-from app.schemas.collection import CollectedJobPosting, SourceRef
-from app.utils.identifiers import (
+from app.core.identifiers import (
     compute_canonical_fingerprint,
     compute_content_hash,
     compute_source_record_key,
     normalize_company_name,
     normalize_title,
 )
+from app.schemas.collection import CollectedJobPosting, SourceRef
 
 # ── Internship keywords ───────────────────────────────────────────────────────
 

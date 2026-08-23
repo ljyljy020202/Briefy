@@ -9,7 +9,7 @@ import static org.mockito.Mockito.when;
 
 import com.briefy.domain.briefing.repository.BriefingJobRepository;
 import com.briefy.domain.briefing.repository.BriefingReportRepository;
-import com.briefy.domain.briefingpreference.repository.UserBriefingPreferenceRepository;
+import com.briefy.domain.preference.repository.UserBriefingPreferenceRepository;
 import com.briefy.domain.user.dto.UpdateBriefingEmailSubscriptionRequest;
 import com.briefy.domain.user.dto.UpdateBriefingEmailSubscriptionResponse;
 import com.briefy.domain.user.dto.UpdateOnboardingRequest;

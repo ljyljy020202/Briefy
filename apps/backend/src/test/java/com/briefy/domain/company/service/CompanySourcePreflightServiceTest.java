@@ -6,8 +6,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.briefy.domain.briefing.client.AgentClient;
-import com.briefy.domain.briefing.client.dto.AgentSourcePreflightResponse;
 import com.briefy.domain.company.dto.admin.CompanySourceAdminResponse;
 import com.briefy.domain.company.dto.admin.CompanySourcePreflightResponse;
 import com.briefy.domain.company.dto.admin.UpdateCompanySourceRequest;
@@ -17,6 +15,8 @@ import com.briefy.domain.company.repository.CompanyRepository;
 import com.briefy.domain.company.repository.CompanySourceRepository;
 import com.briefy.global.exception.BusinessException;
 import com.briefy.global.exception.ErrorCode;
+import com.briefy.infra.agent.AgentClient;
+import com.briefy.infra.agent.dto.AgentSourcePreflightResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.Optional;

@@ -18,7 +18,7 @@ from datetime import date
 import httpx
 from httpx import TimeoutException
 
-from app.adapters.greeting import (
+from app.adapters.official.greeting import (
     GreetingParser,
     _build_self_hosted_job_url,
     _career_to_experience_level,
@@ -385,7 +385,8 @@ async def test_greeting_parser_fetch_returns_postings(monkeypatch):
         "백엔드 개발자", employment_type="정규직", location="서울"
     )
     mock = _MockClient([(200, list_html), (200, detail_html)])
-    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greeting.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     src = _source()
     result = await GreetingParser().fetch(
@@ -417,7 +418,8 @@ async def test_greeting_parser_fetch_no_profile_uses_company_id(monkeypatch):
     list_html = _list_html(101)
     detail_html = _detail_html("백엔드 개발자")
     mock = _MockClient([(200, list_html), (200, detail_html)])
-    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greeting.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     src = _source(company_id=42)
     result = await GreetingParser().fetch(src, None, _options(), _COLLECT_DATE)
@@ -429,7 +431,8 @@ async def test_greeting_parser_fetch_no_profile_uses_company_id(monkeypatch):
 async def test_greeting_parser_list_page_timeout(monkeypatch):
     request = httpx.Request("GET", _LIST_URL)
     mock = _MockClient([TimeoutException("timeout", request=request)])
-    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greeting.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     result = await GreetingParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE
@@ -440,7 +443,8 @@ async def test_greeting_parser_list_page_timeout(monkeypatch):
 
 async def test_greeting_parser_list_page_http_error(monkeypatch):
     mock = _MockClient([(503, "Service Unavailable")])
-    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greeting.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     result = await GreetingParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE
@@ -456,7 +460,8 @@ async def test_greeting_parser_detail_http_error_skipped(monkeypatch):
         (404, "Not Found"),
         (200, _detail_html("두번째 직무")),
     ])
-    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greeting.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     result = await GreetingParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE
@@ -473,7 +478,8 @@ async def test_greeting_parser_respects_max_fetch(monkeypatch):
         (200, _detail_html("직무 A")),
         (200, _detail_html("직무 B")),
     ])
-    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greeting.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     cfg = json.dumps({"parser_key": "GREETING", "max_fetch": 2})
     result = await GreetingParser().fetch(
@@ -492,7 +498,8 @@ async def test_greeting_parser_multiple_postings(monkeypatch):
         (200, _detail_html("백엔드 개발자")),
         (200, _detail_html("프론트엔드 개발자")),
     ])
-    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greeting.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     result = await GreetingParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE
@@ -505,7 +512,8 @@ async def test_greeting_parser_multiple_postings(monkeypatch):
 async def test_greeting_parser_source_id_format(monkeypatch):
     list_html = _list_html(101)
     mock = _MockClient([(200, list_html), (200, _detail_html("직무"))])
-    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greeting.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     result = await GreetingParser().fetch(
         _source(company_id=7), _profile(company_id=7), _options(), _COLLECT_DATE
@@ -525,7 +533,8 @@ async def test_greeting_preflight_reachable(monkeypatch):
         location="서울",
     )
     mock = _MockClient([(200, list_html), (200, detail_html)])
-    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greeting.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     result = await greeting_preflight(_source())
     assert result["reachable"] is True
@@ -549,7 +558,8 @@ async def test_greeting_preflight_no_source_url():
 
 async def test_greeting_preflight_unreachable(monkeypatch):
     mock = _MockClient([(503, "error")])
-    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greeting.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     result = await greeting_preflight(_source())
     assert result["reachable"] is False
@@ -559,7 +569,8 @@ async def test_greeting_preflight_unreachable(monkeypatch):
 async def test_greeting_preflight_no_jobs_discovered(monkeypatch):
     list_html = "<html><body><p>공고 없음</p></body></html>"
     mock = _MockClient([(200, list_html)])
-    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greeting.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     result = await greeting_preflight(_source())
     assert result["reachable"] is True
@@ -570,7 +581,8 @@ async def test_greeting_preflight_no_jobs_discovered(monkeypatch):
 async def test_greeting_preflight_sample_fetch_error_warns(monkeypatch):
     list_html = _list_html(101)
     mock = _MockClient([(200, list_html), (500, "Internal Server Error")])
-    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greeting.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     result = await greeting_preflight(_source())
     assert result["reachable"] is True
@@ -701,7 +713,8 @@ async def test_selfhosted_type_a_fetch_discovers_and_parses(monkeypatch):
     list_html = _sh_list_html(_SH_A_BASE, 101)
     detail_html = _sh_detail_html("프론트엔드 개발자", employment_type="정규직")
     mock = _MockClient([(200, list_html), (200, detail_html)])
-    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greeting.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     src = _sh_source(_SH_A_BASE, _SH_A_HOME)
     result = await GreetingParser().fetch(
@@ -722,7 +735,8 @@ async def test_selfhosted_type_a_no_jobs_on_home(monkeypatch):
     """Type A edge: home page has no job cards → 0 discovered, no error."""
     list_html = "<html><body><p>채용 준비 중</p></body></html>"
     mock = _MockClient([(200, list_html)])
-    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greeting.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     src = _sh_source(_SH_A_BASE, _SH_A_HOME)
     result = await GreetingParser().fetch(
@@ -741,7 +755,8 @@ async def test_selfhosted_type_b_apply_page_discovered(monkeypatch):
     list_html = _sh_list_html(_SH_B_BASE, 201, 202)
     detail_html = _sh_detail_html("클라우드 엔지니어")
     mock = _MockClient([(200, list_html), (200, detail_html), (200, detail_html)])
-    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greeting.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     src = _sh_source(_SH_B_BASE, _SH_B_APPLY, company_id=20)
     result = await GreetingParser().fetch(
@@ -759,7 +774,8 @@ async def test_selfhosted_type_b_max_fetch_respected(monkeypatch):
     list_html = _sh_list_html(_SH_B_BASE, 201, 202)
     detail_html = _sh_detail_html("SW 개발자")
     mock = _MockClient([(200, list_html), (200, detail_html)])
-    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greeting.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     cfg = json.dumps({"parser_key": "GREETING", "max_fetch": 1})
     src = _sh_source(_SH_B_BASE, _SH_B_APPLY, company_id=20)
@@ -785,7 +801,8 @@ async def test_selfhosted_type_b_detail_title_missing_skipped(monkeypatch):
     list_html = _sh_list_html(_SH_B_BASE, 201)
     no_title_html = "<html><body><p>내용만 있는 페이지</p></body></html>"
     mock = _MockClient([(200, list_html), (200, no_title_html)])
-    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greeting.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     src = _sh_source(_SH_B_BASE, _SH_B_APPLY, company_id=20)
     result = await GreetingParser().fetch(
@@ -802,7 +819,8 @@ async def test_selfhosted_type_b_optional_fields_absent(monkeypatch):
     list_html = _sh_list_html(_SH_B_BASE, 201)
     detail_html = "<html><body><main><h1>데이터 엔지니어</h1></main></body></html>"
     mock = _MockClient([(200, list_html), (200, detail_html)])
-    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greeting.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     src = _sh_source(_SH_B_BASE, _SH_B_APPLY, company_id=20)
     result = await GreetingParser().fetch(
@@ -826,7 +844,8 @@ async def test_selfhosted_type_b_partial_detail_failure_warns(monkeypatch):
         (500, "Internal Server Error"),
         (200, detail_html),
     ])
-    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greeting.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     src = _sh_source(_SH_B_BASE, _SH_B_APPLY, company_id=20)
     result = await GreetingParser().fetch(
@@ -845,7 +864,8 @@ async def test_selfhosted_type_c_apply_page_fetched(monkeypatch):
     list_html = _sh_list_html(_SH_C_BASE, 301)
     detail_html = _sh_detail_html("MD 기획자")
     mock = _MockClient([(200, list_html), (200, detail_html)])
-    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greeting.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     src = _sh_source(_SH_C_BASE, _SH_C_APPLY, company_id=30)
     result = await GreetingParser().fetch(
@@ -864,7 +884,8 @@ async def test_selfhosted_type_c_preflight_success(monkeypatch):
     list_html = _sh_list_html(_SH_C_BASE, 301)
     detail_html = _sh_detail_html("뷰티 MD")
     mock = _MockClient([(200, list_html), (200, detail_html)])
-    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greeting.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     src = _sh_source(_SH_C_BASE, _SH_C_APPLY, company_id=30)
     result = await greeting_preflight(src)
@@ -896,7 +917,8 @@ async def test_hosted_parser_fetch_regression(monkeypatch):
     list_html = _list_html(101)
     detail_html = _detail_html("백엔드 개발자", employment_type="정규직")
     mock = _MockClient([(200, list_html), (200, detail_html)])
-    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greeting.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     result = await GreetingParser().fetch(
         _source(), _profile(), _options(), _COLLECT_DATE
@@ -1315,7 +1337,8 @@ async def test_fetch_next_data_path_extracts_metadata(monkeypatch):
     list_html = _next_data_list_html(openings)
     detail_html = _detail_html_with_description("담당 업무: 서버 개발")
     mock = _MockClient([(200, list_html), (200, detail_html)])
-    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greeting.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     src = _sh_source(_SH_A_BASE, _SH_A_HOME, company_id=10)
     result = await GreetingParser().fetch(
@@ -1346,7 +1369,8 @@ async def test_fetch_non_dev_role_not_misclassified(monkeypatch):
         list_html = _next_data_list_html(openings)
         detail_html = _detail_html_with_description("상세 설명")
         mock = _MockClient([(200, list_html), (200, detail_html)])
-        monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+        _target = "app.adapters.official.greeting.AsyncClient"
+        monkeypatch.setattr(_target, lambda **kw: mock)
 
         src = _sh_source(_SH_B_BASE, _SH_B_APPLY, company_id=20)
         result = await GreetingParser().fetch(
@@ -1365,7 +1389,8 @@ async def test_fetch_next_data_empty_openings_returns_zero_with_warning(monkeypa
     """__NEXT_DATA__ with empty openings list → 0 results + warning (not silent)."""
     list_html = _next_data_list_html([])
     mock = _MockClient([(200, list_html)])
-    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greeting.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     src = _sh_source(_SH_A_BASE, _SH_A_HOME, company_id=10)
     result = await GreetingParser().fetch(
@@ -1384,7 +1409,8 @@ async def test_fetch_next_data_detail_failure_keeps_stub(monkeypatch):
     openings = [_opening(301, "프론트엔드 개발자", job="Frontend Engineering")]
     list_html = _next_data_list_html(openings)
     mock = _MockClient([(200, list_html), (500, "Server Error")])
-    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greeting.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     src = _sh_source(_SH_C_BASE, _SH_C_APPLY, company_id=30)
     result = await GreetingParser().fetch(
@@ -1406,7 +1432,8 @@ async def test_fetch_next_data_detail_timeout_keeps_stub(monkeypatch):
     list_html = _next_data_list_html(openings)
     request = httpx.Request("GET", f"{_SH_C_BASE}/ko/o/302")
     mock = _MockClient([(200, list_html), TimeoutException("timeout", request=request)])
-    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greeting.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     src = _sh_source(_SH_C_BASE, _SH_C_APPLY, company_id=30)
     result = await GreetingParser().fetch(
@@ -1427,7 +1454,8 @@ async def test_fetch_next_data_multiple_openings_respects_max_fetch(monkeypatch)
     mock = _MockClient(
         [(200, list_html)] + [(200, detail_html)] * 3
     )
-    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greeting.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     cfg = json.dumps({"parser_key": "GREETING", "max_fetch": 3})
     src = OfficialCompanySource(
@@ -1457,7 +1485,8 @@ async def test_fetch_structured_data_over_inferred_roles(monkeypatch):
     list_html = _next_data_list_html(openings)
     detail_html = _detail_html_with_description("서버 개발")
     mock = _MockClient([(200, list_html), (200, detail_html)])
-    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greeting.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     src = _sh_source(_SH_A_BASE, _SH_A_HOME, company_id=10)
     result = await GreetingParser().fetch(
@@ -1479,7 +1508,8 @@ async def test_fetch_malformed_next_data_falls_back_to_anchor_links(monkeypatch)
     )
     detail_html = _sh_detail_html("폴백 공고")
     mock = _MockClient([(200, list_html), (200, detail_html)])
-    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greeting.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     src = _sh_source(_SH_A_BASE, _SH_A_HOME, company_id=10)
     result = await GreetingParser().fetch(
@@ -1507,7 +1537,8 @@ async def test_preflight_with_next_data_returns_metadata(monkeypatch):
     list_html = _next_data_list_html(openings)
     detail_html = _detail_html_with_description("서버 개발")
     mock = _MockClient([(200, list_html), (200, detail_html)])
-    monkeypatch.setattr("app.adapters.greeting.AsyncClient", lambda **kw: mock)
+    _target = "app.adapters.official.greeting.AsyncClient"
+    monkeypatch.setattr(_target, lambda **kw: mock)
 
     src = _sh_source(_SH_A_BASE, _SH_A_HOME, company_id=10)
     result = await greeting_preflight(src)

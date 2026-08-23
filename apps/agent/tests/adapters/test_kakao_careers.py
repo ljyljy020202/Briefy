@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.adapters.kakao_careers import (
+from app.adapters.official.kakao_careers import (
     KakaoCareersParser,
     _build_posting,
     _deadline,
@@ -680,7 +680,7 @@ def _make_mock_client(page_map: dict[int, list[dict]], total: int):
 async def test_fetch_single_page_success(monkeypatch):
     mock = _make_mock_client({1: [_SENIOR_ENG, _CAREER_MIN_YR]}, total=2)
     monkeypatch.setattr(
-        "app.adapters.kakao_careers.AsyncClient", lambda **kw: mock
+        "app.adapters.official.kakao_careers.AsyncClient", lambda **kw: mock
     )
 
     result = await KakaoCareersParser().fetch(
@@ -700,7 +700,7 @@ async def test_fetch_multi_page(monkeypatch):
     }
     mock = _make_mock_client(page_map, total=20)
     monkeypatch.setattr(
-        "app.adapters.kakao_careers.AsyncClient", lambda **kw: mock
+        "app.adapters.official.kakao_careers.AsyncClient", lambda **kw: mock
     )
 
     result = await KakaoCareersParser().fetch(
@@ -714,7 +714,7 @@ async def test_fetch_multi_page(monkeypatch):
 async def test_fetch_filters_closed(monkeypatch):
     mock = _make_mock_client({1: [_SENIOR_ENG, _CLOSED]}, total=2)
     monkeypatch.setattr(
-        "app.adapters.kakao_careers.AsyncClient", lambda **kw: mock
+        "app.adapters.official.kakao_careers.AsyncClient", lambda **kw: mock
     )
 
     result = await KakaoCareersParser().fetch(
@@ -729,7 +729,7 @@ async def test_fetch_filters_affiliate_s_id(monkeypatch):
     """S-{id} items in response must be excluded even without company filter."""
     mock = _make_mock_client({1: [_SENIOR_ENG, _AFFILIATE_S]}, total=2)
     monkeypatch.setattr(
-        "app.adapters.kakao_careers.AsyncClient", lambda **kw: mock
+        "app.adapters.official.kakao_careers.AsyncClient", lambda **kw: mock
     )
 
     result = await KakaoCareersParser().fetch(
@@ -743,7 +743,7 @@ async def test_fetch_filters_affiliate_s_id(monkeypatch):
 async def test_fetch_empty_list_no_warnings(monkeypatch):
     mock = _make_mock_client({1: []}, total=0)
     monkeypatch.setattr(
-        "app.adapters.kakao_careers.AsyncClient", lambda **kw: mock
+        "app.adapters.official.kakao_careers.AsyncClient", lambda **kw: mock
     )
 
     result = await KakaoCareersParser().fetch(
@@ -776,7 +776,7 @@ async def test_fetch_cloudflare_shell_response(monkeypatch):
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=False)
     monkeypatch.setattr(
-        "app.adapters.kakao_careers.AsyncClient", lambda **kw: mock_client
+        "app.adapters.official.kakao_careers.AsyncClient", lambda **kw: mock_client
     )
 
     result = await KakaoCareersParser().fetch(
@@ -795,7 +795,7 @@ async def test_fetch_timeout_returns_warning(monkeypatch):
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=False)
     monkeypatch.setattr(
-        "app.adapters.kakao_careers.AsyncClient", lambda **kw: mock_client
+        "app.adapters.official.kakao_careers.AsyncClient", lambda **kw: mock_client
     )
 
     result = await KakaoCareersParser().fetch(
@@ -810,7 +810,7 @@ async def test_fetch_respects_max_items(monkeypatch):
     jobs = [_SENIOR_ENG] * 30
     mock = _make_mock_client({1: jobs}, total=30)
     monkeypatch.setattr(
-        "app.adapters.kakao_careers.AsyncClient", lambda **kw: mock
+        "app.adapters.official.kakao_careers.AsyncClient", lambda **kw: mock
     )
 
     src = _source('{"parser_key":"KAKAO_CAREERS","max_items":5}')
@@ -825,7 +825,7 @@ async def test_fetch_respects_max_items(monkeypatch):
 async def test_fetch_company_name_from_profile(monkeypatch):
     mock = _make_mock_client({1: [_SENIOR_ENG]}, total=1)
     monkeypatch.setattr(
-        "app.adapters.kakao_careers.AsyncClient", lambda **kw: mock
+        "app.adapters.official.kakao_careers.AsyncClient", lambda **kw: mock
     )
 
     profile = CompanyProfile(
@@ -874,7 +874,7 @@ async def test_fetch_page2_shell_produces_warning(monkeypatch):
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=False)
     monkeypatch.setattr(
-        "app.adapters.kakao_careers.AsyncClient", lambda **kw: mock_client
+        "app.adapters.official.kakao_careers.AsyncClient", lambda **kw: mock_client
     )
 
     result = await KakaoCareersParser().fetch(

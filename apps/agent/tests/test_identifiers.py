@@ -1,8 +1,8 @@
-"""Tests for app.utils.identifiers — all deterministic, no I/O."""
+"""Tests for app.core.identifiers — all deterministic, no I/O."""
 
 from datetime import date
 
-from app.utils.identifiers import (
+from app.core.identifiers import (
     canonicalize_url,
     compute_canonical_fingerprint,
     compute_content_hash,

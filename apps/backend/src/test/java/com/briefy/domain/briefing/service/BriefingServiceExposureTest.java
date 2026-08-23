@@ -5,21 +5,21 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.briefy.domain.briefing.client.AgentClient;
-import com.briefy.domain.briefing.client.dto.AgentBriefingRequest;
-import com.briefy.domain.briefing.client.dto.AgentBriefingResponse;
-import com.briefy.domain.briefing.client.dto.AgentCandidateJobPosting;
 import com.briefy.domain.briefing.policy.CandidateType;
 import com.briefy.domain.briefing.repository.BriefingArticleRepository;
 import com.briefy.domain.briefing.repository.BriefingJobRepository;
 import com.briefy.domain.briefing.repository.BriefingReportRepository;
-import com.briefy.domain.briefingpreference.entity.BriefingCategory;
-import com.briefy.domain.briefingpreference.entity.BriefingCategoryCode;
-import com.briefy.domain.briefingpreference.entity.UserBriefingPreference;
-import com.briefy.domain.briefingpreference.repository.UserBriefingPreferenceRepository;
 import com.briefy.domain.candidatepool.entity.JobPosting;
 import com.briefy.domain.candidatepool.service.CandidatePoolService;
+import com.briefy.domain.preference.entity.BriefingCategory;
+import com.briefy.domain.preference.entity.BriefingCategoryCode;
+import com.briefy.domain.preference.entity.UserBriefingPreference;
+import com.briefy.domain.preference.repository.UserBriefingPreferenceRepository;
 import com.briefy.domain.user.repository.UserRepository;
+import com.briefy.infra.agent.AgentClient;
+import com.briefy.infra.agent.dto.AgentBriefingRequest;
+import com.briefy.infra.agent.dto.AgentBriefingResponse;
+import com.briefy.infra.agent.dto.AgentCandidateJobPosting;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -151,7 +151,7 @@ class BriefingServiceExposureTest {
   @Test
   void exposure_deadlineOneDayAway_reducesExposurePenalty() {
     String url = "https://example.com/jobs/urgent";
-    // Deadline tomorrow → urgency bonus +25; exposed yesterday → penalty -40; net = -15
+    // Deadline tomorrow → urgency bonus +20; exposed yesterday → penalty -25; net = -5
     JobPosting p = posting("회사U", "개발자", url, TODAY.plusDays(1), null, null);
     when(briefingArticleRepository.findRecentExposuresByUserId(any(), any()))
         .thenReturn(List.of(exposure(url, TODAY.minusDays(1))));
@@ -160,13 +160,13 @@ class BriefingServiceExposureTest {
     assertThat(candidates).hasSize(1);
 
     // Baseline: no exposure, no deadline → base + 0 = base
-    // Exposed with 1-day deadline: base + urgency(25) - penalty(40) = base - 15
-    // Net gap = base - (base - 15) = 15, proving urgency bonus partially offsets penalty
+    // Exposed with 1-day deadline: base + urgency(20) - penalty(25) = base - 5
+    // Net gap = base - (base - 5) = 5, proving urgency bonus partially offsets penalty
     JobPosting noExposure =
         posting("회사NE", "개발자", "https://example.com/jobs/999", null, null, null);
     List<AgentCandidateJobPosting> noExpCandidates = candidatesFor(Map.of(), List.of(noExposure));
 
-    assertThat(noExpCandidates.get(0).preScore() - candidates.get(0).preScore()).isEqualTo(15);
+    assertThat(noExpCandidates.get(0).preScore() - candidates.get(0).preScore()).isEqualTo(5);
   }
 
   @Test
@@ -396,19 +396,19 @@ class BriefingServiceExposureTest {
   @Test
   void urgencyBonus_deadlineToday_returnsCritical() {
     int bonus = briefingService.computeUrgencyBonus(TODAY, TODAY);
-    assertThat(bonus).isEqualTo(25);
+    assertThat(bonus).isEqualTo(20);
   }
 
   @Test
   void urgencyBonus_deadlineTomorrow_returnsCritical() {
     int bonus = briefingService.computeUrgencyBonus(TODAY.plusDays(1), TODAY);
-    assertThat(bonus).isEqualTo(25);
+    assertThat(bonus).isEqualTo(20);
   }
 
   @Test
   void urgencyBonus_deadlineInThreeDays_returnsNear() {
     int bonus = briefingService.computeUrgencyBonus(TODAY.plusDays(3), TODAY);
-    assertThat(bonus).isEqualTo(15);
+    assertThat(bonus).isEqualTo(10);
   }
 
   @Test
@@ -428,17 +428,17 @@ class BriefingServiceExposureTest {
   // ---------------------------------------------------------------------------
 
   @Test
-  void exposurePenalty_exposedYesterday_returnsFortyPenalty() {
+  void exposurePenalty_exposedYesterday_returnsTwentyFivePenalty() {
     String url = "https://e.com/p1";
     Map<String, LocalDate> map = Map.of("https://e.com/p1", TODAY.minusDays(1));
-    assertThat(briefingService.computeExposurePenalty(url, map, TODAY)).isEqualTo(40);
+    assertThat(briefingService.computeExposurePenalty(url, map, TODAY)).isEqualTo(25);
   }
 
   @Test
-  void exposurePenalty_exposedThreeDaysAgo_returnsTwentyFivePenalty() {
+  void exposurePenalty_exposedThreeDaysAgo_returnsFifteenPenalty() {
     String url = "https://e.com/p2";
     Map<String, LocalDate> map = Map.of("https://e.com/p2", TODAY.minusDays(3));
-    assertThat(briefingService.computeExposurePenalty(url, map, TODAY)).isEqualTo(25);
+    assertThat(briefingService.computeExposurePenalty(url, map, TODAY)).isEqualTo(15);
   }
 
   @Test
@@ -464,10 +464,10 @@ class BriefingServiceExposureTest {
     // Map key must be canonical too
     Map<String, LocalDate> map = Map.of("https://example.com/jobs/42", TODAY.minusDays(2));
 
-    // baseUrl → canonical is the same key → penalty 25
-    assertThat(briefingService.computeExposurePenalty(baseUrl, map, TODAY)).isEqualTo(25);
-    // withQuery → canonical strips query/fragment → same key → penalty 25
-    assertThat(briefingService.computeExposurePenalty(withQuery, map, TODAY)).isEqualTo(25);
+    // baseUrl → canonical is the same key → penalty 15
+    assertThat(briefingService.computeExposurePenalty(baseUrl, map, TODAY)).isEqualTo(15);
+    // withQuery → canonical strips query/fragment → same key → penalty 15
+    assertThat(briefingService.computeExposurePenalty(withQuery, map, TODAY)).isEqualTo(15);
   }
 
   // ---------------------------------------------------------------------------

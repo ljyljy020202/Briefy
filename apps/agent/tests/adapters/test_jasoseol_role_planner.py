@@ -1,6 +1,6 @@
 """Tests for the deterministic Jasoseol role planner."""
 
-from app.adapters.jasoseol_role_planner import (
+from app.adapters.aggregators.jasoseol_role_planner import (
     DUTY_GROUP_IDS,
     DeveloperRoleGroup,
     get_combined_duty_ids,

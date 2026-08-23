@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.adapters.lg_cns_careers import (
+from app.adapters.official.lg_cns_careers import (
     LgCnsCareersParser,
     _build_posting,
     _employment_type,
@@ -418,7 +418,7 @@ class TestBuildPosting:
 # TestLgCnsCareersParserFetch
 # ---------------------------------------------------------------------------
 
-_LIST_PATCH = "app.adapters.lg_cns_careers.httpx.AsyncClient"
+_LIST_PATCH = "app.adapters.official.lg_cns_careers.httpx.AsyncClient"
 
 
 class TestLgCnsCareersParserFetch:
@@ -580,7 +580,7 @@ class TestLgCnsCareersLive:
     async def test_list_api_reachable_and_parseable(self) -> None:
         import httpx as _httpx
 
-        from app.adapters.lg_cns_careers import _HEADERS, _LIST_BODY, _LIST_EP
+        from app.adapters.official.lg_cns_careers import _HEADERS, _LIST_BODY, _LIST_EP
 
         async with _httpx.AsyncClient(headers=_HEADERS, timeout=20) as client:
             r = await client.post(_LIST_EP, json=_LIST_BODY)

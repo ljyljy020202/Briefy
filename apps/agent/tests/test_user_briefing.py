@@ -11,7 +11,7 @@ Covers:
 import re
 from unittest.mock import AsyncMock, patch
 
-from app.services.llm_client import LLMTokenUsage
+from app.core.llm_client import LLMTokenUsage
 from tests.conftest import FULL_REQUEST
 
 _RANKING_REQUEST = {
@@ -356,7 +356,7 @@ async def test_llm_enrichment_receives_only_selected_postings_not_full_pool(clie
 
 async def test_llm_enrichment_failure_falls_back_to_deterministic(client):
     """When enrichment LLM call fails, pipeline continues with deterministic output."""
-    from app.services.llm_client import LLMClientError
+    from app.core.llm_client import LLMClientError
 
     with patch("app.graph.user_briefing_graph.llm_client") as mock_llm:
         mock_llm.enabled = True
@@ -375,7 +375,7 @@ async def test_llm_enrichment_failure_falls_back_to_deterministic(client):
 
 async def test_llm_synthesis_failure_falls_back_to_deterministic(client):
     """When synthesis LLM call fails, pipeline returns a deterministic template."""
-    from app.services.llm_client import LLMClientError
+    from app.core.llm_client import LLMClientError
 
     with patch("app.graph.user_briefing_graph.llm_client") as mock_llm:
         mock_llm.enabled = True
@@ -401,7 +401,7 @@ async def test_llm_synthesis_failure_falls_back_to_deterministic(client):
 
 async def test_llm_invalid_json_falls_back_safely(client):
     """Non-parseable LLM response triggers fallback without crashing."""
-    from app.services.llm_client import LLMClientError
+    from app.core.llm_client import LLMClientError
 
     with patch("app.graph.user_briefing_graph.llm_client") as mock_llm:
         mock_llm.enabled = True

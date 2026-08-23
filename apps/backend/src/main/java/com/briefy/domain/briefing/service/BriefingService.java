@@ -1,10 +1,5 @@
 package com.briefy.domain.briefing.service;
 
-import com.briefy.domain.briefing.client.AgentClient;
-import com.briefy.domain.briefing.client.dto.AgentBriefingRequest;
-import com.briefy.domain.briefing.client.dto.AgentBriefingResponse;
-import com.briefy.domain.briefing.client.dto.AgentCandidateJobPosting;
-import com.briefy.domain.briefing.client.dto.AgentCandidatePool;
 import com.briefy.domain.briefing.dto.BriefingDetailResponse;
 import com.briefy.domain.briefing.dto.BriefingListItem;
 import com.briefy.domain.briefing.dto.GenerateResult;
@@ -20,17 +15,22 @@ import com.briefy.domain.briefing.policy.ParsedExperience;
 import com.briefy.domain.briefing.repository.BriefingArticleRepository;
 import com.briefy.domain.briefing.repository.BriefingJobRepository;
 import com.briefy.domain.briefing.repository.BriefingReportRepository;
-import com.briefy.domain.briefingpreference.entity.BriefingCategoryCode;
-import com.briefy.domain.briefingpreference.entity.UserBriefingPreference;
-import com.briefy.domain.briefingpreference.repository.UserBriefingPreferenceRepository;
 import com.briefy.domain.candidatepool.entity.JobPosting;
 import com.briefy.domain.candidatepool.service.CandidatePoolService;
 import com.briefy.domain.company.entity.Company;
+import com.briefy.domain.preference.entity.BriefingCategoryCode;
+import com.briefy.domain.preference.entity.UserBriefingPreference;
+import com.briefy.domain.preference.repository.UserBriefingPreferenceRepository;
 import com.briefy.domain.user.repository.UserRepository;
 import com.briefy.global.exception.BusinessException;
 import com.briefy.global.exception.ErrorCode;
 import com.briefy.global.response.PageResult;
 import com.briefy.global.util.UrlUtils;
+import com.briefy.infra.agent.AgentClient;
+import com.briefy.infra.agent.dto.AgentBriefingRequest;
+import com.briefy.infra.agent.dto.AgentBriefingResponse;
+import com.briefy.infra.agent.dto.AgentCandidateJobPosting;
+import com.briefy.infra.agent.dto.AgentCandidatePool;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -55,9 +55,9 @@ public class BriefingService {
 
   // ── Top-30 quota ──────────────────────────────────────────────────────────
   private static final int MAX_CANDIDATE_COUNT = 30;
-  private static final int QUOTA_NEW = 12;
+  private static final int QUOTA_NEW = 8;
   private static final int QUOTA_URGENT = 10;
-  private static final int QUOTA_EVERGREEN = 8;
+  private static final int QUOTA_EVERGREEN = 12;
 
   // ── Per-company diversity limits ──────────────────────────────────────────
   private static final int MAX_PER_COMPANY = 2;
@@ -69,19 +69,19 @@ public class BriefingService {
   private static final int SCORE_SKILL = 5;
   private static final int SCORE_SKILLS_MAX = 25;
   private static final int SCORE_EXPERIENCE = 15;
-  private static final int SCORE_INDUSTRY = 12;
+  private static final int SCORE_INDUSTRY = 15;
   private static final int SCORE_LOCATION = 10;
   private static final int SCORE_EMPLOYMENT_TYPE = 10;
-  private static final int SCORE_COMPANY_SIZE = 8;
+  private static final int SCORE_COMPANY_SIZE = 15;
   private static final int SCORE_RECENT = 5;
 
   // ── Deadline urgency bonus (replaces old SCORE_DEADLINE_SOON=10) ──────────
-  private static final int URGENCY_BONUS_CRITICAL = 25; // deadline ≤ 1 day
-  private static final int URGENCY_BONUS_NEAR = 15; // deadline ≤ 3 days
+  private static final int URGENCY_BONUS_CRITICAL = 20; // deadline ≤ 1 day
+  private static final int URGENCY_BONUS_NEAR = 10; // deadline ≤ 3 days
 
   // ── Exposure penalty ──────────────────────────────────────────────────────
-  private static final int EXPOSURE_PENALTY_YESTERDAY = 40; // exposed yesterday or today
-  private static final int EXPOSURE_PENALTY_RECENT = 25; // exposed 2–3 days ago
+  private static final int EXPOSURE_PENALTY_YESTERDAY = 25; // exposed yesterday or today
+  private static final int EXPOSURE_PENALTY_RECENT = 15; // exposed 2–3 days ago
   private static final int EXPOSURE_PENALTY_STALE = 10; // exposed 4–6 days ago
   private static final int EXPOSURE_LOOKBACK_DAYS = 7;
 
