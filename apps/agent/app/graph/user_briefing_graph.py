@@ -42,7 +42,7 @@ _TOP_N = 7
 # All other source strings are treated as official company career sites and receive
 # a ranking bonus to prefer first-party postings over aggregator postings.
 _AGGREGATOR_SOURCES: frozenset[str] = frozenset({"jasoseol", "saramin"})
-_SOURCE_OFFICIAL_BONUS: int = 15
+_SOURCE_OFFICIAL_BONUS: int = 30
 
 _INVESTMENT_ADVICE_PATTERNS = [
     "매수",
