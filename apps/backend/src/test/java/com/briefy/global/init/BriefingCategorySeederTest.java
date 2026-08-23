@@ -7,9 +7,9 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.briefy.domain.briefingpreference.entity.BriefingCategory;
-import com.briefy.domain.briefingpreference.entity.BriefingCategoryCode;
-import com.briefy.domain.briefingpreference.repository.BriefingCategoryRepository;
+import com.briefy.domain.preference.entity.BriefingCategory;
+import com.briefy.domain.preference.entity.BriefingCategoryCode;
+import com.briefy.domain.preference.repository.BriefingCategoryRepository;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

@@ -6,7 +6,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.briefy.domain.briefing.client.dto.AgentCollectionStats;
+import com.briefy.infra.agent.dto.AgentCollectionStats;
 import com.briefy.domain.collection.dto.DailyCollectionResult;
 import com.briefy.domain.collection.service.DailyCollectionService;
 import com.briefy.global.exception.GlobalExceptionHandler;

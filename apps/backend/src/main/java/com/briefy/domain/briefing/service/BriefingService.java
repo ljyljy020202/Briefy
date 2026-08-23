@@ -1,10 +1,10 @@
 package com.briefy.domain.briefing.service;
 
-import com.briefy.domain.briefing.client.AgentClient;
-import com.briefy.domain.briefing.client.dto.AgentBriefingRequest;
-import com.briefy.domain.briefing.client.dto.AgentBriefingResponse;
-import com.briefy.domain.briefing.client.dto.AgentCandidateJobPosting;
-import com.briefy.domain.briefing.client.dto.AgentCandidatePool;
+import com.briefy.infra.agent.AgentClient;
+import com.briefy.infra.agent.dto.AgentBriefingRequest;
+import com.briefy.infra.agent.dto.AgentBriefingResponse;
+import com.briefy.infra.agent.dto.AgentCandidateJobPosting;
+import com.briefy.infra.agent.dto.AgentCandidatePool;
 import com.briefy.domain.briefing.dto.BriefingDetailResponse;
 import com.briefy.domain.briefing.dto.BriefingListItem;
 import com.briefy.domain.briefing.dto.GenerateResult;
@@ -20,9 +20,9 @@ import com.briefy.domain.briefing.policy.ParsedExperience;
 import com.briefy.domain.briefing.repository.BriefingArticleRepository;
 import com.briefy.domain.briefing.repository.BriefingJobRepository;
 import com.briefy.domain.briefing.repository.BriefingReportRepository;
-import com.briefy.domain.briefingpreference.entity.BriefingCategoryCode;
-import com.briefy.domain.briefingpreference.entity.UserBriefingPreference;
-import com.briefy.domain.briefingpreference.repository.UserBriefingPreferenceRepository;
+import com.briefy.domain.preference.entity.BriefingCategoryCode;
+import com.briefy.domain.preference.entity.UserBriefingPreference;
+import com.briefy.domain.preference.repository.UserBriefingPreferenceRepository;
 import com.briefy.domain.candidatepool.entity.JobPosting;
 import com.briefy.domain.candidatepool.service.CandidatePoolService;
 import com.briefy.domain.company.entity.Company;

@@ -6,8 +6,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.briefy.domain.briefing.client.AgentClient;
-import com.briefy.domain.briefing.client.dto.AgentSourcePreflightResponse;
+import com.briefy.infra.agent.AgentClient;
+import com.briefy.infra.agent.dto.AgentSourcePreflightResponse;
 import com.briefy.domain.company.dto.admin.CompanySourceAdminResponse;
 import com.briefy.domain.company.dto.admin.CompanySourcePreflightResponse;
 import com.briefy.domain.company.dto.admin.UpdateCompanySourceRequest;

@@ -1,8 +1,8 @@
 package com.briefy.global.init;
 
-import com.briefy.domain.briefingpreference.entity.BriefingCategory;
-import com.briefy.domain.briefingpreference.entity.BriefingCategoryCode;
-import com.briefy.domain.briefingpreference.repository.BriefingCategoryRepository;
+import com.briefy.domain.preference.entity.BriefingCategory;
+import com.briefy.domain.preference.entity.BriefingCategoryCode;
+import com.briefy.domain.preference.repository.BriefingCategoryRepository;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

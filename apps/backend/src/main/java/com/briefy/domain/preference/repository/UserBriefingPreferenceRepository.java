@@ -1,0 +1,19 @@
+package com.briefy.domain.preference.repository;
+
+import com.briefy.domain.preference.entity.BriefingCategoryCode;
+import com.briefy.domain.preference.entity.UserBriefingPreference;
+import java.util.List;
+import java.util.Optional;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface UserBriefingPreferenceRepository
+    extends JpaRepository<UserBriefingPreference, Long> {
+
+  List<UserBriefingPreference> findAllByUserIdAndActiveTrue(Long userId);
+
+  List<UserBriefingPreference> findAllByCategoryCodeAndActiveTrue(BriefingCategoryCode code);
+
+  Optional<UserBriefingPreference> findByUserIdAndCategoryId(Long userId, Long categoryId);
+
+  void deleteAllByUserId(Long userId);
+}

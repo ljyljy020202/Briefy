@@ -1,9 +1,9 @@
 package com.briefy.domain.delivery.controller;
 
 import com.briefy.domain.delivery.dto.TestEmailRequest;
-import com.briefy.email.EmailMessage;
-import com.briefy.email.EmailSendResult;
-import com.briefy.email.EmailSender;
+import com.briefy.global.email.EmailMessage;
+import com.briefy.global.email.EmailSendResult;
+import com.briefy.global.email.EmailSender;
 import com.briefy.global.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;

@@ -7,7 +7,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.briefy.domain.briefing.client.AgentClient;
+import com.briefy.infra.agent.AgentClient;
 import com.briefy.domain.company.dto.admin.CompanySourceAdminResponse;
 import com.briefy.domain.company.dto.admin.CreateCompanySourceRequest;
 import com.briefy.domain.company.dto.admin.UpdateCompanySourceRequest;

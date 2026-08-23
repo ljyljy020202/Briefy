@@ -1,8 +1,8 @@
 package com.briefy.domain.company.service;
 
-import com.briefy.domain.briefing.client.AgentClient;
-import com.briefy.domain.briefing.client.dto.AgentSourcePreflightRequest;
-import com.briefy.domain.briefing.client.dto.AgentSourcePreflightResponse;
+import com.briefy.infra.agent.AgentClient;
+import com.briefy.infra.agent.dto.AgentSourcePreflightRequest;
+import com.briefy.infra.agent.dto.AgentSourcePreflightResponse;
 import com.briefy.domain.company.dto.admin.CompanySourceAdminResponse;
 import com.briefy.domain.company.dto.admin.CompanySourcePreflightResponse;
 import com.briefy.domain.company.dto.admin.CreateCompanySourceRequest;
