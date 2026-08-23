@@ -13,7 +13,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.adapters.official_company import _CUSTOM_REGISTRY_BY_KEY
 from app.adapters.official.samsung_careers import (
     SamsungCareersParser,
     _build_posting,
@@ -26,6 +25,7 @@ from app.adapters.official.samsung_careers import (
     _parse_deadline,
     _parse_list_html,
 )
+from app.adapters.official_company import _CUSTOM_REGISTRY_BY_KEY
 from app.schemas.collection import (
     CollectionOptions,
     CompanyProfile,
@@ -640,7 +640,9 @@ class TestSamsungCareersParserFetch:
             call_count += 1
             return outer if call_count == 1 else inner
 
-        with patch("app.adapters.official.samsung_careers.AsyncClient", side_effect=factory):
+        with patch(
+            "app.adapters.official.samsung_careers.AsyncClient", side_effect=factory
+        ):
             result = await parser.fetch(source, _make_profile(), _make_options())
 
         assert result.postings == []
@@ -671,7 +673,9 @@ class TestSamsungCareersParserFetch:
             call_count += 1
             return outer if call_count == 1 else inner
 
-        with patch("app.adapters.official.samsung_careers.AsyncClient", side_effect=factory):
+        with patch(
+            "app.adapters.official.samsung_careers.AsyncClient", side_effect=factory
+        ):
             result = await parser.fetch(source, _make_profile(), _make_options())
 
         # Should be at most 1 posting (deduped by seq)
@@ -703,7 +707,9 @@ class TestSamsungCareersParserFetch:
             call_count += 1
             return outer if call_count == 1 else inner
 
-        with patch("app.adapters.official.samsung_careers.AsyncClient", side_effect=factory):
+        with patch(
+            "app.adapters.official.samsung_careers.AsyncClient", side_effect=factory
+        ):
             result = await parser.fetch(
                 source,
                 _make_profile("삼성SDS (테스트)"),

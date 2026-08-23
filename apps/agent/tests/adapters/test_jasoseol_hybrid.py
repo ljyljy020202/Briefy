@@ -15,7 +15,6 @@ import httpx
 import pytest
 from httpx import TimeoutException
 
-from app.adapters.base import AdapterResult
 from app.adapters.aggregators.jasoseol import (
     _EXPLORATION_ENABLED,
     JasoseolAdapter,
@@ -24,6 +23,7 @@ from app.adapters.aggregators.jasoseol import (
     _merge_candidates,
 )
 from app.adapters.aggregators.jasoseol_search import SearchCandidate
+from app.adapters.base import AdapterResult
 from app.schemas.collection import CollectionOptions, SeedKeywords
 
 _FIXTURES = Path(__file__).parent / "fixtures"
