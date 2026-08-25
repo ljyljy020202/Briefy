@@ -1,0 +1,104 @@
+{
+  "userId": 1,
+  "category": "JOB_POSTING",
+  "preference": {
+    "roles": ["백엔드 개발자", "풀스택 개발자"],
+    "companies": ["네이버", "카카오"],
+    "skills": ["Java", "Spring Boot", "Kotlin"],
+    "locations": ["서울", "판교"],
+    "experienceLevels": ["신입", "3년 이상"],
+    "employmentTypes": ["정규직"]
+  },
+  "briefingDate": "2026-06-26",
+  "tone": "easy",
+  "candidatePool": {
+    "jobPostings": [
+      {
+        "id": 1001,
+        "rank": 1,
+        "source": "원티드",
+        "sourceUrl": "https://www.wanted.co.kr/wd/1001",
+        "companyName": "네이버",
+        "title": "네이버 백엔드 개발자 (Java/Spring)",
+        "employmentType": "정규직",
+        "experienceLevel": "신입",
+        "location": "서울",
+        "deadline": "2026-07-15",
+        "skills": ["Java", "Spring Boot", "MySQL"],
+        "roles": ["백엔드 개발자"],
+        "description": "네이버 백엔드 개발자 채용합니다.",
+        "publishedAt": "2026-06-25T10:00:00",
+        "collectedDate": "2026-06-26",
+        "isNew": true,
+        "isUrgent": true,
+        "scoreBreakdown": {
+          "roleScore": 30,
+          "companyScore": 25,
+          "skillScore": 15,
+          "experienceScore": 15,
+          "industryScore": 0,
+          "locationScore": 10,
+          "employmentTypeScore": 10,
+          "companySizeScore": 0,
+          "relevanceScore": 105,
+          "exposurePenalty": 25,
+          "adjustedScore": 80
+        },
+        "matchEvidence": {
+          "matchedRoles": ["백엔드 개발자"],
+          "matchedCompanies": ["네이버"],
+          "matchedSkills": ["Java", "Spring Boot"],
+          "matchedLocations": ["서울"],
+          "matchedExperienceLevels": ["신입"],
+          "matchedEmploymentTypes": ["정규직"],
+          "matchedIndustries": [],
+          "matchedCompanySizes": []
+        }
+      },
+      {
+        "id": 1002,
+        "rank": 2,
+        "source": "카카오채용",
+        "sourceUrl": "https://careers.kakao.com/jobs/1002",
+        "companyName": "카카오",
+        "title": "카카오 풀스택 개발자 (Kotlin/React)",
+        "employmentType": "정규직",
+        "experienceLevel": "3년 이상",
+        "location": "판교",
+        "deadline": "2026-07-30",
+        "skills": ["Kotlin", "React", "TypeScript"],
+        "roles": ["풀스택 개발자"],
+        "description": "카카오 풀스택 개발자 채용합니다.",
+        "publishedAt": "2026-06-20T09:00:00",
+        "collectedDate": "2026-06-26",
+        "isNew": false,
+        "isUrgent": false,
+        "scoreBreakdown": {
+          "roleScore": 30,
+          "companyScore": 25,
+          "skillScore": 5,
+          "experienceScore": 15,
+          "industryScore": 0,
+          "locationScore": 10,
+          "employmentTypeScore": 10,
+          "companySizeScore": 0,
+          "relevanceScore": 95,
+          "exposurePenalty": 0,
+          "adjustedScore": 95
+        },
+        "matchEvidence": {
+          "matchedRoles": ["풀스택 개발자"],
+          "matchedCompanies": ["카카오"],
+          "matchedSkills": ["Kotlin"],
+          "matchedLocations": ["판교"],
+          "matchedExperienceLevels": ["3년 이상"],
+          "matchedEmploymentTypes": ["정규직"],
+          "matchedIndustries": [],
+          "matchedCompanySizes": []
+        }
+      }
+    ],
+    "companyIssues": [],
+    "industryIssues": []
+  }
+}
