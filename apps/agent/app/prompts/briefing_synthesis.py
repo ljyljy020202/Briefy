@@ -26,8 +26,13 @@ enriched 채용 공고 목록과 사용자 선호도를 입력받아, 아래 JSO
 출력 형식 (반드시 JSON 객체만 반환하고 다른 텍스트는 포함하지 마세요):
 {
   "markdownContent": "완성된 Markdown 브리핑 전문",
-  "overallSummary": "브리핑 전체를 한 문장으로 요약"
+  "overallSummary": "브리핑 전체를 한 문장으로 요약",
+  "referencedPostingIds": ["공고 id를 displayOrder 순서 그대로 나열"]
 }
+
+referencedPostingIds 규칙:
+- [선택된 채용 공고] 목록의 id를 displayOrder 순서 그대로 배열에 포함하세요.
+- 추가하거나 제거하거나 순서를 바꾸면 안 됩니다.
 
 Markdown 브리핑 필수 구조 (아래 순서와 헤더 명칭 엄수):
 
@@ -93,6 +98,8 @@ class EnrichedArticleInput(TypedDict):
     deadline: str | None
     days_until_deadline: int | None
     display_order: int
+    is_new: bool
+    is_urgent: bool
 
 
 def build_user_prompt(
