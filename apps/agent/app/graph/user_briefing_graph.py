@@ -1,28 +1,42 @@
-"""LLM-enhanced user briefing workflow with deterministic fallback.
+"""LLM-enhanced user briefing workflow — LangGraph implementation.
 
-Pipeline:
-  filter_job_postings_node   (deterministic: remove invalid/expired)
-    → rank_job_postings_node (deterministic: preScore + preference scoring)
-    → select_top_items_node  (deterministic: top _TOP_N candidates)
-    → enrich_selected_node   (async: LLM batch summary + matching reason)
-    → synthesize_report_node (async: LLM Markdown report + summary line)
-    → quality_check_node     (deterministic: log-only guardrail)
+Graph topology (abbreviated):
+  check_pool → empty_state → END
+             → enrich_postings → [fail] → fallback → END
+                               → synthesize_report → [fail] → fallback
+                                                   → validate_report
+                                                     → pass → END
+                                                     → retryable (n=0) → rewrite_report
+                                                       → [fail] → fallback → END
+                                                       → validate_report (max 1 cycle)
+                                                     → retryable (n≥1) → fallback
+                                                     → fallback_required → fallback
 
-Both LLM nodes fall back to deterministic equivalents on any failure or when
-OPENAI_API_KEY is not configured. The pipeline never raises HTTP 500 due to
-LLM error.
+Invariants:
+- Backend Top-7 rank order is preserved end-to-end.
+- LLM is never called for filtering, ranking, or selection decisions.
+- Rewrite is attempted at most once (rewrite_count ≤ 1).
+- Every LLM failure or validation failure routes to deterministic_fallback_node.
+- The pipeline never raises HTTP 500 due to LLM error.
 """
 
+from __future__ import annotations
+
 import logging
+import re
 from datetime import date as date_cls
 from typing import TypedDict
 
+from langgraph.graph import END, StateGraph
+
 from app.core.llm_client import (
     LLMClientError,
+    LLMTokenUsage,
     LLMUnavailableError,
     llm_client,
 )
 from app.prompts import briefing_synthesis, job_enrichment
+from app.prompts import rewrite as rewrite_prompts
 from app.prompts.briefing_synthesis import EnrichedArticleInput
 from app.schemas.briefing import (
     BriefingGenerateRequest,
@@ -32,31 +46,13 @@ from app.schemas.briefing import (
     JobPostingPreference,
     TokenUsage,
 )
-from app.schemas.llm import JobPostingEnrichment
+from app.schemas.llm import JobPostingEnrichment, ValidationStatus
 
 logger = logging.getLogger(__name__)
 
 _TOP_N = 7
+_MAX_CONTENT_LENGTH = 15000
 
-# Sources that aggregate third-party postings (role/skill metadata often absent).
-# All other source strings are treated as official company career sites and receive
-# a ranking bonus to prefer first-party postings over aggregator postings.
-_AGGREGATOR_SOURCES: frozenset[str] = frozenset({"jasoseol", "saramin"})
-_SOURCE_OFFICIAL_BONUS: int = 30
-
-_INVESTMENT_ADVICE_PATTERNS = [
-    "매수",
-    "매도",
-    "추천 종목",
-    "투자 추천",
-    "수익률 보장",
-]
-_HALLUCINATION_PATTERNS = [
-    "합격 가능성이 높",
-    "합격 보장",
-    "반드시 합격",
-    "경쟁률이 낮",
-]
 _REQUIRED_SECTIONS = [
     "오늘의 핵심 요약",
     "추천 공고 TOP",
@@ -65,408 +61,637 @@ _REQUIRED_SECTIONS = [
     "오늘의 키워드",
     "한 줄 정리",
 ]
-
-# Experience labels that represent senior-only requirements
-_SENIOR_EXPERIENCE_LABELS: frozenset[str] = frozenset(
-    {"3년 이상", "5년 이상", "7년 이상", "10년 이상", "시니어"}
-)
-
-
-def _is_clear_role_mismatch(
-    posting: CandidateJobPosting,
-    pref: JobPostingPreference,
-) -> bool:
-    """True only when both sides have explicit roles with no overlap."""
-    if not pref.roles or not posting.roles:
-        return False  # Ambiguous → keep
-    pref_roles_lower = {r.lower() for r in pref.roles}
-    title_lower = (posting.title or "").lower()
-    position_lower = (posting.position or "").lower()
-    for role in pref.roles:
-        if role.lower() in title_lower or role.lower() in position_lower:
-            return False
-    for role in posting.roles:
-        if role.lower() in pref_roles_lower:
-            return False
-    return True
+_PATTERNS_RETRYABLE = [
+    "합격 가능성이 높",
+    "합격 보장",
+    "반드시 합격",
+    "경쟁률이 낮",
+]
+_PATTERNS_FALLBACK_REQUIRED = [
+    "매수",
+    "매도",
+    "투자 추천",
+    "수익률 보장",
+]
 
 
-def _is_entry_level_mismatch(
-    posting: CandidateJobPosting,
-    pref: JobPostingPreference,
-) -> bool:
-    """True when a 신입-only user encounters a posting that requires 3+ years."""
-    if "신입" not in pref.experience_levels:
-        return False
-    exp = posting.experience_level
-    if not exp:
-        return False  # Unknown experience → keep
-    if exp in pref.experience_levels:
-        return False
-    return exp in _SENIOR_EXPERIENCE_LABELS
+# ---------------------------------------------------------------------------
+# Graph state
+# ---------------------------------------------------------------------------
 
 
 class UserBriefingState(TypedDict):
+    # ── Input (immutable after check_pool) ──────────────────────────────────
     request: BriefingGenerateRequest
-    filtered: list[CandidateJobPosting]
-    ranked: list[CandidateJobPosting]
-    selected: list[CandidateJobPosting]
+    selected: list[CandidateJobPosting]   # Backend Top-7 sorted by rank
+
+    # ── Enrichment (structured, from enrich_postings) ───────────────────────
     enrichments: dict[str, JobPostingEnrichment]
+
+    # ── LLM draft (synthesis or rewrite output) ─────────────────────────────
+    draft_summary: str
+    draft_content: str
+    draft_referenced_ids: list[str]      # posting IDs declared by LLM
+
+    # ── Validation ──────────────────────────────────────────────────────────
+    validation_status: ValidationStatus   # pending|pass|retryable|fallback_required
+    validation_errors: list[str]          # error codes
+    rewrite_count: int                    # max 1
+
+    # ── Final output (written by synthesis/rewrite; overwritten by fallback) ─
     articles: list[JobArticle]
     title: str
     summary: str
     content: str
+
+    # ── Observability ────────────────────────────────────────────────────────
     token_usage: TokenUsage
+    llm_error_category: str  # "" | enrichment_failed | synthesis_failed
+    fallback_reason: str
+    used_fallback: bool
 
 
 # ---------------------------------------------------------------------------
-# Deterministic nodes
+# Node: check_pool  (deterministic — sorts by Backend rank, validates pool)
 # ---------------------------------------------------------------------------
 
 
-def filter_job_postings_node(state: UserBriefingState) -> dict:
+def check_pool_node(state: UserBriefingState) -> dict:
+    """Sort postings by Backend rank; validate contract invariants."""
     req = state["request"]
+    postings = req.candidate_pool.job_postings
+
+    if len(postings) > _TOP_N:
+        logger.warning(
+            "[check_pool] userId=%s received %d postings (max %d); truncating",
+            req.user_id, len(postings), _TOP_N,
+        )
+        postings = postings[:_TOP_N]
+
+    valid: list[CandidateJobPosting] = []
+    for p in postings:
+        if not p.title or not p.source_url:
+            logger.warning(
+                "[check_pool] userId=%s skipping posting id=%s (no title/url)",
+                req.user_id, p.id,
+            )
+            continue
+        valid.append(p)
+
+    selected = sorted(valid, key=lambda p: p.rank if p.rank > 0 else _TOP_N + 1)
 
     if req.category != "JOB_POSTING":
-        return {"filtered": []}
+        logger.info("[check_pool] category=%s → empty selected", req.category)
+        return {"selected": []}
 
-    try:
-        today = date_cls.fromisoformat(req.briefing_date)
-    except ValueError:
-        today = date_cls.today()
-
-    pref = req.preference
-    filtered = []
-    for p in req.candidate_pool.job_postings:
-        if not p.title or not p.company_name:
-            continue
-        if not p.source_url:
-            continue
-        if p.deadline:
-            try:
-                if date_cls.fromisoformat(p.deadline) < today:
-                    continue
-            except ValueError:
-                pass
-        if _is_clear_role_mismatch(p, pref):
-            continue
-        if _is_entry_level_mismatch(p, pref):
-            continue
-        filtered.append(p)
-
-    return {"filtered": filtered}
+    logger.info(
+        "[check_pool] userId=%s briefingDate=%s selected=%d postings",
+        req.user_id, req.briefing_date, len(selected),
+    )
+    return {"selected": selected}
 
 
-def _agent_score(
-    posting: CandidateJobPosting,
-    pref: JobPostingPreference,
-    today: date_cls,
-) -> int:
-    score = 0
-    title_lower = (posting.title or "").lower()
-    position_lower = (posting.position or "").lower()
-
-    for role in pref.roles:
-        if role.lower() in title_lower or role.lower() in position_lower:
-            score += 30
-            break
-
-    for co in pref.companies:
-        if co == posting.company_name:
-            score += 15
-            break
-
-    skill_score = 0
-    posting_skills_lower = [s.lower() for s in posting.skills]
-    for skill in pref.skills:
-        if skill.lower() in posting_skills_lower:
-            skill_score += 5
-            if skill_score >= 25:
-                break
-    score += skill_score
-
-    for loc in pref.locations:
-        if loc in (posting.location or ""):
-            score += 10
-            break
-
-    for exp in pref.experience_levels:
-        if exp == posting.experience_level:
-            score += 10
-            break
-
-    for emp in pref.employment_types:
-        if emp == posting.employment_type:
-            score += 5
-            break
-
-    # company_sizes and industries: rough heuristic against description (fallback only)
-    for size in pref.company_sizes:
-        if size and size in (posting.description or ""):
-            score += 5
-            break
-
-    for ind in pref.industries:
-        if ind and ind in (posting.description or ""):
-            score += 5
-            break
-
-    # Deadline urgency is already reflected in the backend preScore (urgency bonus).
-    # Adding it here again would double-count, so this node only applies recency.
-
-    # Recency bonus: collected within the last 3 days
-    if posting.collected_date:
-        try:
-            collected = date_cls.fromisoformat(posting.collected_date)
-            if (today - collected).days <= 3:
-                score += 5
-        except ValueError:
-            pass
-
-    return score
+# ---------------------------------------------------------------------------
+# Node: empty_state  (deterministic — no candidates)
+# ---------------------------------------------------------------------------
 
 
-def rank_job_postings_node(state: UserBriefingState) -> dict:
+def empty_state_node(state: UserBriefingState) -> dict:
     req = state["request"]
-    pref = req.preference
-
-    try:
-        today = date_cls.fromisoformat(req.briefing_date)
-    except ValueError:
-        today = date_cls.today()
-
-    def final_score(posting: CandidateJobPosting) -> int:
-        # Backend is the authoritative personalization layer.
-        # When it supplies a computed score, use it as-is (even if 0).
-        # Only fall back to agent scoring for direct calls that bypass Backend.
-        if posting.pre_score_computed:
-            base = posting.pre_score
-        else:
-            base = _agent_score(posting, pref, today)
-        # Official career sites carry richer role/skill metadata than aggregators.
-        # Add a bonus so first-party postings rank above aggregator postings at
-        # equal relevance scores (e.g. "전직군" from an IT company > non-IT 신입공채).
-        if posting.source and posting.source not in _AGGREGATOR_SOURCES:
-            base += _SOURCE_OFFICIAL_BONUS
-        return base
-
-    ranked = sorted(state["filtered"], key=final_score, reverse=True)
-    return {"ranked": ranked}
-
-
-def _build_top7(ranked: list[CandidateJobPosting]) -> list[CandidateJobPosting]:
-    """Select up to _TOP_N with candidateType-aware quotas.
-
-    NEW:    at most 3 (at least 2 if ≥2 available)
-    URGENT: at most 2 (at least 1 if ≥1 available)
-    Rest:   highest final_score regardless of type, to fill remaining slots
-    """
-    selected: list[CandidateJobPosting] = []
-    selected_ids: set = set()
-
-    def _key(p: CandidateJobPosting) -> object:
-        return p.id if p.id is not None else p.source_url
-
-    def _add(p: CandidateJobPosting) -> None:
-        k = _key(p)
-        if k not in selected_ids:
-            selected.append(p)
-            selected_ids.add(k)
-
-    new_group = [p for p in ranked if p.candidate_type == "NEW"]
-    urgent_group = [p for p in ranked if p.candidate_type == "URGENT"]
-
-    for p in new_group[:3]:
-        _add(p)
-
-    for p in urgent_group[:2]:
-        _add(p)
-
-    for p in ranked:
-        if len(selected) >= _TOP_N:
-            break
-        _add(p)  # no-op if already selected
-
-    return selected
-
-
-def select_top_items_node(state: UserBriefingState) -> dict:
-    return {"selected": _build_top7(state["ranked"])}
+    logger.info("[empty_state] userId=%s no candidates", req.user_id)
+    result = _build_empty_report(req.briefing_date)
+    return {**result, "used_fallback": False, "fallback_reason": ""}
 
 
 # ---------------------------------------------------------------------------
-# Async: LLM enrichment (per-posting summary + matching reason)
+# Node: enrich_postings  (async — LLM batch enrichment)
 # ---------------------------------------------------------------------------
 
 
-async def enrich_selected_node(state: UserBriefingState) -> dict:
+async def enrich_postings_node(state: UserBriefingState) -> dict:
     """Call LLM once to enrich all selected postings in a single batch.
 
-    Falls back to an empty enrichment dict — deterministic summaries are
-    applied in the synthesis node.
+    On LLM exception: sets llm_error_category → graph routes to fallback.
+    When LLM is disabled: returns empty enrichments and proceeds normally.
     """
+    req = state["request"]
     selected = state["selected"]
+    existing_usage = state.get("token_usage", TokenUsage())
+
     if not selected or not llm_client.enabled:
-        return {"enrichments": {}, "token_usage": TokenUsage()}
+        return {"enrichments": {}, "token_usage": existing_usage}
 
     try:
         raw, usage = await llm_client.call_json(
             job_enrichment.get_system_prompt(),
-            job_enrichment.build_user_prompt(state["request"].preference, selected),
+            job_enrichment.build_user_prompt(req.preference, selected),
         )
         enrichment_list = job_enrichment.parse_response(raw)
         enrichments: dict[str, JobPostingEnrichment] = {
             e.id: e for e in enrichment_list
         }
+        new_usage = _add_usage(existing_usage, usage)
         logger.info(
-            "LLM enrichment: %d/%d postings enriched",
-            len(enrichments),
-            len(selected),
+            "[enrich_postings] userId=%s enriched=%d/%d inputTokens=%d",
+            req.user_id, len(enrichments), len(selected), new_usage.input_tokens,
         )
         return {
             "enrichments": enrichments,
-            "token_usage": TokenUsage(
-                input_tokens=usage.input_tokens,
-                output_tokens=usage.output_tokens,
-            ),
+            "token_usage": new_usage,
+            "llm_error_category": "",
         }
     except (LLMUnavailableError, LLMClientError) as exc:
         logger.warning(
-            "LLM enrichment failed (%s); using deterministic fallback", exc
+            "[enrich_postings] userId=%s LLM enrichment failed (%s: %s)",
+            req.user_id, type(exc).__name__, exc,
         )
-        return {"enrichments": {}, "token_usage": TokenUsage()}
+        return {
+            "enrichments": {},
+            "token_usage": existing_usage,
+            "llm_error_category": "enrichment_failed",
+            "fallback_reason": f"enrichment_llm_error: {type(exc).__name__}",
+        }
 
 
 # ---------------------------------------------------------------------------
-# Async: report synthesis (LLM Markdown or deterministic template)
+# Node: synthesize_report  (async — LLM full report synthesis)
 # ---------------------------------------------------------------------------
 
 
 async def synthesize_report_node(state: UserBriefingState) -> dict:
-    """Write the final briefing report.
+    """Build the full briefing report.
 
-    Merges LLM enrichment results with deterministic fallbacks, then calls
-    LLM to synthesise the Markdown report. Falls back to a template report
-    if LLM synthesis is unavailable or fails.
+    Deterministic path (LLM disabled): builds template-based report and sets
+    draft_referenced_ids to the expected Backend ID order so validation passes.
+
+    LLM path: calls LLM for markdownContent + overallSummary + referencedPostingIds.
+    On exception: sets llm_error_category → graph routes to fallback.
     """
     req = state["request"]
-    pref = req.preference
     selected = state["selected"]
-    enrichments = state["enrichments"]
-    enrich_token_usage = state["token_usage"]
+    enrichments = state.get("enrichments", {})
+    existing_usage = state.get("token_usage", TokenUsage())
 
     try:
         today = date_cls.fromisoformat(req.briefing_date)
     except ValueError:
         today = date_cls.today()
 
-    if not selected:
-        return _empty_state_report(req.briefing_date)
-
-    # Merge LLM enrichment with deterministic fallback per posting.
-    # Deterministic helpers fill in any posting not covered by LLM.
-    enriched_inputs = _build_enriched_inputs(selected, enrichments, pref, today)
+    enriched_inputs = _build_enriched_inputs(
+        selected, enrichments, req.preference, today
+    )
     articles = _build_articles_from_inputs(enriched_inputs, req.briefing_date)
+    primary_role = req.preference.roles[0] if req.preference.roles else "개발자"
+    title = f"오늘의 채용 브리핑 — {primary_role} ({req.briefing_date})"
+    expected_ids = [str(p.id) for p in selected]
 
     if llm_client.enabled:
         try:
             raw, usage = await llm_client.call_json(
                 briefing_synthesis.get_system_prompt(len(enriched_inputs)),
                 briefing_synthesis.build_user_prompt(
-                    req.briefing_date, pref, enriched_inputs
+                    req.briefing_date, req.preference, enriched_inputs
                 ),
             )
             result = briefing_synthesis.parse_response(raw)
-            total_usage = TokenUsage(
-                input_tokens=enrich_token_usage.input_tokens + usage.input_tokens,
-                output_tokens=enrich_token_usage.output_tokens + usage.output_tokens,
+            new_usage = _add_usage(existing_usage, usage)
+            logger.info(
+                "[synthesize_report] userId=%s LLM synthesis ok inputTokens=%d",
+                req.user_id, new_usage.input_tokens,
             )
-            primary_role = pref.roles[0] if pref.roles else "개발자"
             return {
                 "articles": articles,
-                "title": (
-                    f"오늘의 채용 브리핑 — {primary_role} ({req.briefing_date})"
-                ),
+                "title": title,
+                "draft_summary": result.overall_summary,
+                "draft_content": result.markdown_content,
+                "draft_referenced_ids": result.referenced_posting_ids,
                 "summary": result.overall_summary,
                 "content": result.markdown_content,
-                "token_usage": total_usage,
+                "token_usage": new_usage,
+                "llm_error_category": "",
+                "validation_status": "pending",
+                "validation_errors": [],
             }
         except (LLMUnavailableError, LLMClientError) as exc:
             logger.warning(
-                "LLM synthesis failed (%s); using deterministic fallback", exc
+                "[synthesize_report] userId=%s LLM synthesis failed (%s: %s)",
+                req.user_id, type(exc).__name__, exc,
             )
+            return {
+                "articles": articles,
+                "title": title,
+                "draft_summary": "",
+                "draft_content": "",
+                "draft_referenced_ids": [],
+                "token_usage": existing_usage,
+                "llm_error_category": "synthesis_failed",
+                "fallback_reason": f"synthesis_llm_error: {type(exc).__name__}",
+            }
         except Exception as exc:
-            # Pydantic ValidationError or other processing errors
             logger.warning(
-                "LLM synthesis response invalid (%s: %s); "
-                "using deterministic fallback",
-                type(exc).__name__,
-                exc,
+                "[synthesize_report] userId=%s synthesis response invalid (%s: %s)",
+                req.user_id, type(exc).__name__, exc,
             )
+            return {
+                "articles": articles,
+                "title": title,
+                "draft_summary": "",
+                "draft_content": "",
+                "draft_referenced_ids": [],
+                "token_usage": existing_usage,
+                "llm_error_category": "synthesis_failed",
+                "fallback_reason": f"synthesis_parse_error: {type(exc).__name__}",
+            }
 
-    return _build_deterministic_report(
-        enriched_inputs, pref, req.briefing_date, articles, enrich_token_usage
+    # LLM disabled — build deterministic report; set referenced IDs correctly so
+    # validate_report_node passes on the first check.
+    det = _build_deterministic_report(
+        enriched_inputs, req.preference, req.briefing_date, articles, existing_usage
+    )
+    return {
+        **det,
+        "draft_summary": det["summary"],
+        "draft_content": det["content"],
+        "draft_referenced_ids": expected_ids,
+        "llm_error_category": "",
+        "validation_status": "pending",
+        "validation_errors": [],
+    }
+
+
+# ---------------------------------------------------------------------------
+# Node: validate_report  (deterministic — no LLM)
+# ---------------------------------------------------------------------------
+
+
+def validate_report_node(state: UserBriefingState) -> dict:
+    """Validate LLM draft content deterministically.
+
+    Returns validation_status (PASS / RETRYABLE / FALLBACK_REQUIRED) and a
+    list of error codes. Does not call LLM.
+    """
+    draft_content = state.get("draft_content", "")
+    draft_summary = state.get("draft_summary", "")
+    draft_referenced_ids = state.get("draft_referenced_ids", [])
+    selected = state.get("selected", [])
+    enrichments = state.get("enrichments", {})
+    req = state["request"]
+
+    errors: list[str] = []
+    status: ValidationStatus = "pass"
+
+    def retryable(code: str) -> None:
+        nonlocal status
+        errors.append(code)
+        if status == "pass":
+            status = "retryable"
+
+    def fallback_required(code: str) -> None:
+        nonlocal status
+        errors.append(code)
+        status = "fallback_required"
+
+    # 1. Empty content → FALLBACK_REQUIRED (nothing for LLM to fix)
+    if not draft_content.strip():
+        fallback_required("EMPTY_CONTENT")
+        logger.warning(
+            "[validate_report] userId=%s FALLBACK_REQUIRED: EMPTY_CONTENT",
+            req.user_id,
+        )
+        return {"validation_status": status, "validation_errors": errors}
+
+    # 2. Empty summary → RETRYABLE
+    if not draft_summary.strip():
+        retryable("EMPTY_SUMMARY")
+
+    # 3. Required sections
+    for section in _REQUIRED_SECTIONS:
+        if section not in draft_content:
+            retryable(f"MISSING_SECTION:{section}")
+
+    # 4. referencedPostingIds must match Backend IDs (count + order)
+    expected_ids = [str(p.id) for p in selected]
+    if draft_referenced_ids != expected_ids:
+        expected_set = set(expected_ids)
+        draft_set = set(draft_referenced_ids)
+        if draft_set == expected_set:
+            retryable("ID_ORDER_MISMATCH")
+        else:
+            retryable("ID_SET_MISMATCH")
+
+    # 5. No posting IDs unknown to Backend
+    allowed_ids = set(expected_ids)
+    for pid in draft_referenced_ids:
+        if pid not in allowed_ids:
+            retryable(f"UNKNOWN_POSTING_ID:{pid}")
+
+    # 6. URLs in content must be from allowed sourceUrls
+    allowed_urls = {p.source_url for p in selected if p.source_url}
+    for m in re.finditer(r"\(https?://[^)\s]+\)", draft_content):
+        url = m.group()[1:-1]
+        if url not in allowed_urls:
+            retryable(f"UNKNOWN_URL:{url[:80]}")
+
+    # 7. matchedKeywords scope — keywords must be in matchEvidence or posting skills
+    all_allowed_kw: set[str] = set()
+    for p in selected:
+        all_allowed_kw.update(s.lower() for s in p.skills)
+        ev = p.match_evidence
+        all_allowed_kw.update(s.lower() for s in ev.matched_skills)
+        all_allowed_kw.update(s.lower() for s in ev.matched_roles)
+        all_allowed_kw.update(s.lower() for s in ev.matched_companies)
+    for enrich in enrichments.values():
+        for kw in enrich.matched_keywords:
+            if len(kw) > 1 and kw.lower() not in all_allowed_kw:
+                retryable(f"KEYWORD_OUT_OF_SCOPE:{kw[:30]}")
+                break
+
+    # 8. Hallucination patterns → RETRYABLE
+    for phrase in _PATTERNS_RETRYABLE:
+        if phrase in draft_content:
+            retryable(f"HALLUCINATION:{phrase}")
+
+    # 9. Investment advice → FALLBACK_REQUIRED
+    for phrase in _PATTERNS_FALLBACK_REQUIRED:
+        if phrase in draft_content:
+            fallback_required(f"INVESTMENT_ADVICE:{phrase}")
+
+    # 10. Content length
+    if len(draft_content) > _MAX_CONTENT_LENGTH:
+        retryable(f"CONTENT_TOO_LONG:{len(draft_content)}")
+
+    if errors:
+        logger.warning(
+            "[validate_report] userId=%s status=%s errors=%s rewrite_count=%d",
+            req.user_id, status, errors, state.get("rewrite_count", 0),
+        )
+    else:
+        logger.info("[validate_report] userId=%s status=pass", req.user_id)
+
+    return {"validation_status": status, "validation_errors": errors}
+
+
+# ---------------------------------------------------------------------------
+# Node: rewrite_report  (async — LLM targeted rewrite, max 1)
+# ---------------------------------------------------------------------------
+
+
+async def rewrite_report_node(state: UserBriefingState) -> dict:
+    """Ask LLM to fix only the flagged validation errors.
+
+    Increments rewrite_count (bounded at 1 by graph routing).
+    On LLM exception: sets llm_error_category → graph routes to fallback.
+    """
+    req = state["request"]
+    selected = state["selected"]
+    enrichments = state.get("enrichments", {})
+    existing_usage = state.get("token_usage", TokenUsage())
+    rewrite_count = state.get("rewrite_count", 0)
+
+    try:
+        today = date_cls.fromisoformat(req.briefing_date)
+    except ValueError:
+        today = date_cls.today()
+
+    enriched_inputs = _build_enriched_inputs(
+        selected, enrichments, req.preference, today
+    )
+    expected_ids = [str(p.id) for p in selected]
+
+    try:
+        raw, usage = await llm_client.call_json(
+            rewrite_prompts.get_system_prompt(),
+            rewrite_prompts.build_user_prompt(
+                draft_content=state.get("draft_content", ""),
+                draft_summary=state.get("draft_summary", ""),
+                validation_errors=state.get("validation_errors", []),
+                expected_posting_ids=expected_ids,
+                briefing_date=req.briefing_date,
+                preference=req.preference,
+                enriched_inputs=enriched_inputs,
+            ),
+        )
+        result = rewrite_prompts.parse_response(raw)
+        new_count = rewrite_count + 1
+        new_usage = _add_usage(existing_usage, usage)
+        logger.info(
+            "[rewrite_report] userId=%s rewrite #%d ok inputTokens=%d",
+            req.user_id, new_count, new_usage.input_tokens,
+        )
+        return {
+            "draft_summary": result.overall_summary,
+            "draft_content": result.markdown_content,
+            "draft_referenced_ids": result.referenced_posting_ids,
+            "summary": result.overall_summary,
+            "content": result.markdown_content,
+            "rewrite_count": new_count,
+            "token_usage": new_usage,
+            "llm_error_category": "",
+            "validation_status": "pending",
+            "validation_errors": [],
+        }
+    except (LLMUnavailableError, LLMClientError) as exc:
+        logger.warning(
+            "[rewrite_report] userId=%s LLM rewrite failed (%s: %s)",
+            req.user_id, type(exc).__name__, exc,
+        )
+        return {
+            "rewrite_count": rewrite_count + 1,
+            "token_usage": existing_usage,
+            "llm_error_category": "rewrite_failed",
+            "fallback_reason": f"rewrite_llm_error: {type(exc).__name__}",
+        }
+    except Exception as exc:
+        logger.warning(
+            "[rewrite_report] userId=%s rewrite response invalid (%s: %s)",
+            req.user_id, type(exc).__name__, exc,
+        )
+        return {
+            "rewrite_count": rewrite_count + 1,
+            "token_usage": existing_usage,
+            "llm_error_category": "rewrite_failed",
+            "fallback_reason": f"rewrite_parse_error: {type(exc).__name__}",
+        }
+
+
+# ---------------------------------------------------------------------------
+# Node: deterministic_fallback  (deterministic — no LLM)
+# ---------------------------------------------------------------------------
+
+
+def deterministic_fallback_node(state: UserBriefingState) -> dict:
+    """Build a guaranteed-valid report from Backend data without calling LLM.
+
+    Uses matchEvidence from each posting for matching reasons. Preserves Backend
+    rank order. Never exposes internal error details in user-facing content.
+    """
+    req = state["request"]
+    selected = state.get("selected", [])
+    enrichments = state.get("enrichments", {})
+    existing_usage = state.get("token_usage", TokenUsage())
+    fallback_reason = state.get("fallback_reason", "unknown")
+    llm_error_category = state.get("llm_error_category", "")
+    validation_errors = state.get("validation_errors", [])
+
+    logger.warning(
+        "[deterministic_fallback] userId=%s briefingDate=%s "
+        "error_category=%s validation_errors=%s rewrite_count=%d fallback_reason=%s",
+        req.user_id, req.briefing_date,
+        llm_error_category, validation_errors, state.get("rewrite_count", 0),
+        fallback_reason,
+    )
+
+    try:
+        today = date_cls.fromisoformat(req.briefing_date)
+    except ValueError:
+        today = date_cls.today()
+
+    enriched_inputs = _build_enriched_inputs(
+        selected, enrichments, req.preference, today
+    )
+    articles = _build_articles_from_inputs(enriched_inputs, req.briefing_date)
+    det = _build_deterministic_report(
+        enriched_inputs, req.preference, req.briefing_date, articles, existing_usage
+    )
+    return {
+        **det,
+        "draft_summary": det["summary"],
+        "draft_content": det["content"],
+        "draft_referenced_ids": [str(p.id) for p in selected],
+        "used_fallback": True,
+        "fallback_reason": (
+            fallback_reason or llm_error_category or "deterministic_fallback"
+        ),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Graph routing functions
+# ---------------------------------------------------------------------------
+
+
+def _route_pool(state: UserBriefingState) -> str:
+    return "empty" if not state.get("selected") else "proceed"
+
+
+def _route_after_enrich(state: UserBriefingState) -> str:
+    if state.get("llm_error_category") == "enrichment_failed":
+        return "fallback"
+    return "proceed"
+
+
+def _route_after_synthesize(state: UserBriefingState) -> str:
+    if state.get("llm_error_category") == "synthesis_failed":
+        return "fallback"
+    return "proceed"
+
+
+def _route_after_validate(state: UserBriefingState) -> str:
+    status = state.get("validation_status", "fallback_required")
+    if status == "pass":
+        return "pass"
+    rewrite_count = state.get("rewrite_count", 0)
+    if status == "retryable" and rewrite_count == 0:
+        return "rewrite"
+    return "fallback"
+
+
+def _route_after_rewrite(state: UserBriefingState) -> str:
+    if state.get("llm_error_category") == "rewrite_failed":
+        return "fallback"
+    return "validate"
+
+
+# ---------------------------------------------------------------------------
+# Build and compile the LangGraph StateGraph
+# ---------------------------------------------------------------------------
+
+_builder = StateGraph(UserBriefingState)
+
+_builder.add_node("check_pool", check_pool_node)
+_builder.add_node("empty_state", empty_state_node)
+_builder.add_node("enrich_postings", enrich_postings_node)
+_builder.add_node("synthesize_report", synthesize_report_node)
+_builder.add_node("validate_report", validate_report_node)
+_builder.add_node("rewrite_report", rewrite_report_node)
+_builder.add_node("deterministic_fallback", deterministic_fallback_node)
+
+_builder.set_entry_point("check_pool")
+_builder.add_conditional_edges(
+    "check_pool",
+    _route_pool,
+    {"empty": "empty_state", "proceed": "enrich_postings"},
+)
+_builder.add_edge("empty_state", END)
+_builder.add_conditional_edges(
+    "enrich_postings",
+    _route_after_enrich,
+    {"fallback": "deterministic_fallback", "proceed": "synthesize_report"},
+)
+_builder.add_conditional_edges(
+    "synthesize_report",
+    _route_after_synthesize,
+    {"fallback": "deterministic_fallback", "proceed": "validate_report"},
+)
+_builder.add_conditional_edges(
+    "validate_report",
+    _route_after_validate,
+    {"pass": END, "rewrite": "rewrite_report", "fallback": "deterministic_fallback"},
+)
+_builder.add_conditional_edges(
+    "rewrite_report",
+    _route_after_rewrite,
+    {"fallback": "deterministic_fallback", "validate": "validate_report"},
+)
+_builder.add_edge("deterministic_fallback", END)
+
+_graph = _builder.compile()
+
+
+# ---------------------------------------------------------------------------
+# Pipeline entry point
+# ---------------------------------------------------------------------------
+
+
+async def run(request: BriefingGenerateRequest) -> BriefingGenerateResponse:
+    """Invoke the LangGraph workflow and return the briefing response."""
+    initial_state: UserBriefingState = {
+        "request": request,
+        "selected": [],
+        "enrichments": {},
+        "draft_summary": "",
+        "draft_content": "",
+        "draft_referenced_ids": [],
+        "validation_status": "pending",
+        "validation_errors": [],
+        "rewrite_count": 0,
+        "articles": [],
+        "title": "",
+        "summary": "",
+        "content": "",
+        "token_usage": TokenUsage(),
+        "llm_error_category": "",
+        "fallback_reason": "",
+        "used_fallback": False,
+    }
+
+    result = await _graph.ainvoke(initial_state)
+
+    token = result.get("token_usage", TokenUsage())
+    return BriefingGenerateResponse(
+        title=result.get("title", ""),
+        summary=result.get("summary", ""),
+        content=result.get("content", ""),
+        articles=result.get("articles", []),
+        token_usage=TokenUsage(
+            input_tokens=token.input_tokens,
+            output_tokens=token.output_tokens,
+        ),
     )
 
 
 # ---------------------------------------------------------------------------
-# Quality check (log-only guardrail, never crashes the pipeline)
-# ---------------------------------------------------------------------------
-
-
-def quality_check_node(state: UserBriefingState) -> dict:
-    content = state.get("content", "")
-    articles = state.get("articles", [])
-    selected = state.get("selected", [])
-
-    if "# 오늘의 채용 브리핑" not in content:
-        logger.warning(
-            "[quality_check] missing top-level heading: # 오늘의 채용 브리핑"
-        )
-
-    for section in _REQUIRED_SECTIONS:
-        if section not in content:
-            logger.warning(
-                "[quality_check] required section missing: %s", section
-            )
-
-    for phrase in _INVESTMENT_ADVICE_PATTERNS:
-        if phrase in content:
-            logger.warning(
-                "[quality_check] investment advice phrase detected: %r", phrase
-            )
-
-    for phrase in _HALLUCINATION_PATTERNS:
-        if phrase in content:
-            logger.warning(
-                "[quality_check] hallucination phrase detected: %r", phrase
-            )
-
-    for i, article in enumerate(articles):
-        if not article.summary:
-            logger.warning("[quality_check] article[%d] has no summary", i)
-        if not article.why_it_matters:
-            logger.warning(
-                "[quality_check] article[%d] has no whyItMatters", i
-            )
-
-    if selected and len(articles) != len(selected):
-        logger.warning(
-            "[quality_check] article count (%d) != selected count (%d)",
-            len(articles),
-            len(selected),
-        )
-
-    if len(content) > 15000:
-        logger.warning(
-            "[quality_check] content very long: %d chars", len(content)
-        )
-
-    return {}
-
-
-# ---------------------------------------------------------------------------
-# Deterministic helpers
+# Deterministic helpers (shared by synthesize_report and deterministic_fallback)
 # ---------------------------------------------------------------------------
 
 
@@ -476,7 +701,7 @@ def _build_enriched_inputs(
     pref: JobPostingPreference,
     today: date_cls,
 ) -> list[EnrichedArticleInput]:
-    result = []
+    result: list[EnrichedArticleInput] = []
     for i, posting in enumerate(selected):
         post_id = str(posting.id or "")
         enrichment = enrichments.get(post_id)
@@ -490,27 +715,26 @@ def _build_enriched_inputs(
         else:
             summary = _deterministic_summary(posting)
             matching_reason = _build_why_it_matters(posting, pref, today)
-            posting_skills_lower = [s.lower() for s in posting.skills]
-            matched_keywords = [
+            ev = posting.match_evidence
+            matched_keywords = list(ev.matched_skills) if ev.matched_skills else [
                 s for s in pref.skills
-                if s.lower() in posting_skills_lower
+                if s.lower() in [sk.lower() for sk in posting.skills]
             ]
 
         days_until = (
-            _safe_days_until(posting.deadline, today)
-            if posting.deadline
-            else None
+            _safe_days_until(posting.deadline, today) if posting.deadline else None
         )
 
-        _company = posting.company_name or ""
-        _raw_title = posting.title or "채용 공고"
-        _display_title = f"{_company} — {_raw_title}" if _company else _raw_title
+        company = posting.company_name or ""
+        raw_title = posting.title or "채용 공고"
+        display_title = f"{company} — {raw_title}" if company else raw_title
+        display_order = posting.rank if posting.rank > 0 else i + 1
 
         result.append(
             EnrichedArticleInput(
                 id=post_id,
-                title=_display_title,
-                company_name=_company,
+                title=display_title,
+                company_name=company,
                 url=posting.source_url,
                 source=posting.source,
                 summary=summary,
@@ -518,7 +742,9 @@ def _build_enriched_inputs(
                 matched_keywords=matched_keywords,
                 deadline=posting.deadline,
                 days_until_deadline=days_until,
-                display_order=i + 1,
+                display_order=display_order,
+                is_new=posting.is_new,
+                is_urgent=posting.is_urgent,
             )
         )
     return result
@@ -544,7 +770,7 @@ def _build_articles_from_inputs(
 
 
 def _deterministic_summary(posting: CandidateJobPosting) -> str:
-    return f"{posting.company_name} — {posting.position or posting.title} 채용"
+    return f"{posting.company_name} — {posting.title} 채용"
 
 
 def _build_why_it_matters(
@@ -552,67 +778,63 @@ def _build_why_it_matters(
     pref: JobPostingPreference,
     today: date_cls | None = None,
 ) -> str:
-    """Build a concrete matching reason from actual preference-posting overlap."""
     reasons: list[str] = []
+    ev = posting.match_evidence
 
-    # Company match
-    for co in pref.companies:
-        if co == posting.company_name:
-            reasons.append(f"관심 기업 {co}")
-            break
+    if ev.matched_companies:
+        reasons.append(f"관심 기업 {', '.join(ev.matched_companies[:2])}")
+    if ev.matched_roles:
+        reasons.append(f"{', '.join(ev.matched_roles[:2])} 역할 일치")
+    if ev.matched_skills:
+        reasons.append(f"{', '.join(ev.matched_skills[:3])} 스킬 매칭")
+    if ev.matched_locations:
+        reasons.append(f"{', '.join(ev.matched_locations[:2])} 근무")
+    if ev.matched_experience_levels:
+        reasons.append(f"{', '.join(ev.matched_experience_levels[:1])} 경력 조건 부합")
+    if ev.matched_employment_types:
+        reasons.append(f"{', '.join(ev.matched_employment_types[:1])}")
 
-    # Role match — check title and position
-    title_lower = (posting.title or "").lower()
-    position_lower = (posting.position or "").lower()
-    for role in pref.roles:
-        if role.lower() in title_lower or role.lower() in position_lower:
-            reasons.append(f"{role} 역할 일치")
-            break
+    if not reasons:
+        for co in pref.companies:
+            if co == posting.company_name:
+                reasons.append(f"관심 기업 {co}")
+                break
+        title_lower = (posting.title or "").lower()
+        for role in pref.roles:
+            if role.lower() in title_lower:
+                reasons.append(f"{role} 역할 일치")
+                break
+        posting_skills_lower = [s.lower() for s in posting.skills]
+        matched = [s for s in pref.skills if s.lower() in posting_skills_lower]
+        if matched:
+            reasons.append(f"{', '.join(matched[:3])} 스킬 매칭")
+        for loc in pref.locations:
+            if loc in (posting.location or ""):
+                reasons.append(f"{loc} 근무")
+                break
+        for exp in pref.experience_levels:
+            if exp == posting.experience_level:
+                reasons.append(f"{exp} 경력 조건 부합")
+                break
 
-    # Skill match
-    posting_skills_lower = [s.lower() for s in posting.skills]
-    matched_skills = [s for s in pref.skills if s.lower() in posting_skills_lower]
-    if matched_skills:
-        reasons.append(f"{', '.join(matched_skills[:3])} 스킬 매칭")
-
-    # Location match
-    for loc in pref.locations:
-        if loc in (posting.location or ""):
-            reasons.append(f"{loc} 근무")
-            break
-
-    # Experience level match
-    for exp in pref.experience_levels:
-        if exp == posting.experience_level:
-            reasons.append(f"{exp} 경력 조건 부합")
-            break
-
-    # Employment type match
-    for emp in pref.employment_types:
-        if emp == posting.employment_type:
-            reasons.append(f"{emp}")
-            break
-
-    # Deadline urgency
-    if posting.deadline and today:
+    if posting.is_urgent and posting.deadline and today:
         try:
             days = (date_cls.fromisoformat(posting.deadline) - today).days
             if 0 <= days <= 3:
                 reasons.append(f"마감 {days}일 전 — 긴급")
-            elif 0 <= days <= 7:
+            elif 0 < days <= 7:
                 reasons.append(f"마감 {days}일 이내")
         except ValueError:
             pass
 
     if reasons:
         return " · ".join(reasons)
-    # Non-vague fallback when nothing matched: at least name the company/title
     company = posting.company_name or ""
     title = posting.title or ""
     return f"{company} {title}".strip() or "관심 조건에 기반한 추천"
 
 
-def _empty_state_report(briefing_date: str) -> dict:
+def _build_empty_report(briefing_date: str) -> dict:
     content = "\n".join([
         "# 오늘의 채용 브리핑",
         "",
@@ -659,6 +881,9 @@ def _empty_state_report(briefing_date: str) -> dict:
         "summary": "오늘은 설정하신 조건에 맞는 채용 공고가 없습니다.",
         "content": content,
         "token_usage": TokenUsage(),
+        "draft_summary": "",
+        "draft_content": content,
+        "draft_referenced_ids": [],
     }
 
 
@@ -673,11 +898,9 @@ def _build_deterministic_report(
     primary_role = pref.roles[0] if pref.roles else "개발자"
     title = f"오늘의 채용 브리핑 — {primary_role} ({briefing_date})"
 
-    unique_companies = list(
-        dict.fromkeys(
-            inp["company_name"] for inp in enriched_inputs if inp["company_name"]
-        )
-    )
+    unique_companies = list(dict.fromkeys(
+        inp["company_name"] for inp in enriched_inputs if inp["company_name"]
+    ))
     co_display = " · ".join(unique_companies[:3])
     extra = len(unique_companies) - 3
     extra_str = f" 외 {extra}개 기업" if extra > 0 else ""
@@ -686,7 +909,6 @@ def _build_deterministic_report(
         f"추천 공고 {n}건을 선별했습니다."
     )
 
-    # ── 핵심 요약: exactly 3 bullets ─────────────────────────────────────
     bullet1 = (
         f"- {briefing_date} 기준, {co_display}{extra_str}"
         f"에서 {n}건의 추천 공고를 선별했습니다."
@@ -697,16 +919,14 @@ def _build_deterministic_report(
     if pref.skills:
         match_parts.append(f"{', '.join(pref.skills[:2])} 스킬")
     if match_parts:
-        bullet2 = (
-            f"- 주요 매칭 조건: {' 및 '.join(match_parts)}"
-            "이 선별 기준으로 반영되었습니다."
-        )
+        cond = " 및 ".join(match_parts)
+        bullet2 = f"- 주요 매칭 조건: {cond}이 선별 기준으로 반영되었습니다."
     else:
         bullet2 = f"- 선호도 설정에 따라 {n}건의 공고가 추천되었습니다."
     top_company = unique_companies[0] if unique_companies else "관심 기업"
     bullet3 = f"- {top_company}의 공고를 오늘 확인해 지원 타이밍을 놓치지 마세요."
 
-    lines = [
+    lines: list[str] = [
         "# 오늘의 채용 브리핑",
         "",
         "## 오늘의 핵심 요약",
@@ -725,8 +945,18 @@ def _build_deterministic_report(
         source_label = inp.get("source") or "채용 사이트"
         url = inp.get("url") or ""
         link = f"[공고 보기]({url})" if url else source_label
+
+        badge = ""
+        badges: list[str] = []
+        if inp.get("is_new"):
+            badges.append("🆕 NEW")
+        if inp.get("is_urgent"):
+            badges.append("⏰ URGENT")
+        if badges:
+            badge = " " + " ".join(badges)
+
         lines += [
-            f"### {i}. {inp['title']}",
+            f"### {i}. {inp['title']}{badge}",
             f"- **기업**: {inp['company_name']}",
             f"- **출처**: {link}",
             f"- **추천 이유**: {inp['matching_reason']}",
@@ -735,55 +965,49 @@ def _build_deterministic_report(
             lines.append(f"- **마감일**: {inp['deadline']}")
         lines.append("")
 
-    # ── 신규/마감 임박 공고 ───────────────────────────────────────────────
     deadline_near = [
         inp for inp in enriched_inputs
         if inp.get("days_until_deadline") is not None
         and 0 <= inp["days_until_deadline"] <= 7
     ]
-
     lines += ["---", "", "## ⏰ 신규/마감 임박 공고", ""]
     if deadline_near:
         for inp in deadline_near:
             lines.append(
-                f"- **{inp['title']}** ({inp['company_name']}) — "
-                f"마감: {inp.get('deadline', '')}"
+                f"- **{inp['title']}** ({inp['company_name']})"
+                f" — 마감: {inp.get('deadline', '')}"
             )
     else:
         lines.append("선별된 공고 중 7일 이내 마감 임박 공고가 없습니다.")
     lines.append("")
 
-    # ── 오늘의 지원 추천 액션 ─────────────────────────────────────────────
-    action_num = 1
     action_lines = ["---", "", "## 💡 오늘의 지원 추천 액션", ""]
+    action_num = 1
     action_lines.append(
-        f"{action_num}. {top_company}의 공고를 "
-        "확인하고 즉시 지원해 보세요."
+        f"{action_num}. {top_company}의 공고를 확인하고 즉시 지원해 보세요."
     )
     action_num += 1
     if pref.skills:
         skills_str = ", ".join(pref.skills[:2])
         action_lines.append(
-            f"{action_num}. 이력서에 **{skills_str}** "
-            "관련 프로젝트 경험을 구체적으로 작성하세요."
+            f"{action_num}. 이력서에 **{skills_str}**"
+            " 관련 프로젝트 경험을 구체적으로 작성하세요."
         )
         action_num += 1
     if deadline_near:
-        near_count = len(deadline_near)
         action_lines.append(
-            f"{action_num}. 마감 임박 공고({near_count}건)를 "
-            "오늘 안에 지원 검토하세요."
+            f"{action_num}. 마감 임박 공고({len(deadline_near)}건)를"
+            " 오늘 안에 지원 검토하세요."
         )
         action_num += 1
     if pref.roles:
         action_lines.append(
-            f"{action_num}. {pref.roles[0]} 관련 "
-            "GitHub 또는 기술 포트폴리오를 최신화하세요."
+            f"{action_num}. {pref.roles[0]}"
+            " 관련 GitHub 또는 기술 포트폴리오를 최신화하세요."
         )
     action_lines.append("")
     lines += action_lines
 
-    # ── 오늘의 키워드 ─────────────────────────────────────────────────────
     all_keywords: list[str] = []
     for inp in enriched_inputs:
         for kw in inp.get("matched_keywords", []):
@@ -829,40 +1053,8 @@ def _safe_days_until(deadline: str, today: date_cls) -> int | None:
         return None
 
 
-# ---------------------------------------------------------------------------
-# Pipeline entry point
-# ---------------------------------------------------------------------------
-
-
-async def run(request: BriefingGenerateRequest) -> BriefingGenerateResponse:
-    state: UserBriefingState = {
-        "request": request,
-        "filtered": [],
-        "ranked": [],
-        "selected": [],
-        "enrichments": {},
-        "articles": [],
-        "title": "",
-        "summary": "",
-        "content": "",
-        "token_usage": TokenUsage(),
-    }
-
-    state.update(filter_job_postings_node(state))
-    state.update(rank_job_postings_node(state))
-    state.update(select_top_items_node(state))
-    state.update(await enrich_selected_node(state))
-    state.update(await synthesize_report_node(state))
-    state.update(quality_check_node(state))
-
-    token = state["token_usage"]
-    return BriefingGenerateResponse(
-        title=state["title"],
-        summary=state["summary"],
-        content=state["content"],
-        articles=state["articles"],
-        token_usage=TokenUsage(
-            input_tokens=token.input_tokens,
-            output_tokens=token.output_tokens,
-        ),
+def _add_usage(existing: TokenUsage, new: LLMTokenUsage) -> TokenUsage:
+    return TokenUsage(
+        input_tokens=existing.input_tokens + new.input_tokens,
+        output_tokens=existing.output_tokens + new.output_tokens,
     )
