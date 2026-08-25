@@ -138,16 +138,40 @@ def _format_preference(pref: JobPostingPreference) -> str:
 
 def _posting_to_dict(p: CandidateJobPosting) -> dict:
     description = (p.description or "").strip()
-    return {
+    d: dict = {
         "id": str(p.id or ""),
+        "rank": p.rank,
         "title": p.title or "",
         "companyName": p.company_name or "",
-        "position": p.position or p.title or "",
         "skills": p.skills,
         "roles": p.roles,
         "location": p.location or "",
         "employmentType": p.employment_type or "",
         "experienceLevel": p.experience_level or "",
         "deadline": p.deadline or "",
+        "isNew": p.is_new,
+        "isUrgent": p.is_urgent,
         "description": description[:500] if description else "",
     }
+    # Include Backend match signals to ground LLM matching reasons
+    ev = p.match_evidence
+    match_evidence = {
+        k: v for k, v in {
+            "matchedRoles": ev.matched_roles,
+            "matchedCompanies": ev.matched_companies,
+            "matchedSkills": ev.matched_skills,
+            "matchedLocations": ev.matched_locations,
+            "matchedExperienceLevels": ev.matched_experience_levels,
+            "matchedEmploymentTypes": ev.matched_employment_types,
+        }.items() if v
+    }
+    if match_evidence:
+        d["matchEvidence"] = match_evidence
+    bd = p.score_breakdown
+    if bd.adjusted_score != 0 or bd.relevance_score != 0:
+        d["scoreBreakdown"] = {
+            "adjustedScore": bd.adjusted_score,
+            "relevanceScore": bd.relevance_score,
+            "exposurePenalty": bd.exposure_penalty,
+        }
+    return d

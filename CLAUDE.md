@@ -147,9 +147,10 @@ Spring profile `local` (activated via `--spring.profiles.active=local`) uses `dd
 ### Agent
 
 - Keep LangGraph nodes small and single-responsibility.
-- Split workflows into two phases: `DailyCollectWorkflow` (collect → deduplicate → store candidate pool) and `UserBriefingWorkflow` (load pool → filter → rank → summarize → format).
-- Do not call external sources during `UserBriefingWorkflow`; read from the pre-collected candidate pool in DB instead.
-- Do not call LLM for deterministic operations such as URL deduplication, keyword matching, or preference-based score ranking; use simple code instead.
+- Two workflows: `DailyCollectWorkflow` (collect → deduplicate → store candidate pool) and `UserBriefingWorkflow` (enrich → synthesize → validate → rewrite → fallback).
+- Do not call external sources during `UserBriefingWorkflow`; the Agent receives the final Top-7 list from the Backend request body and is stateless.
+- Backend (Spring) owns all candidate filtering, scoring, and Top-7 selection. Agent must not re-rank or re-filter.
+- Do not call LLM for deterministic operations such as URL deduplication, keyword matching, validation logic, or fallback report generation; use simple code instead.
 - Log token usage and processing time when possible.
 - Test graph workflows independently before integration.
 

@@ -5,7 +5,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.briefy.domain.briefing.policy.CandidateType;
 import com.briefy.domain.briefing.repository.BriefingArticleRepository;
 import com.briefy.domain.briefing.repository.BriefingJobRepository;
 import com.briefy.domain.briefing.repository.BriefingReportRepository;
@@ -23,10 +22,8 @@ import com.briefy.infra.agent.dto.AgentCandidateJobPosting;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.IntStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,8 +35,8 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
 /**
- * Unit tests for exposure penalty, urgency bonus, CandidateType classification, and Top-30
- * quota-based candidate selection.
+ * Integration tests for exposure-penalty effect on ranking, isNew/isUrgent flags, and per-company
+ * diversity cap in the Top-7 selection pipeline.
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -76,22 +73,20 @@ class BriefingServiceExposureTest {
             new AgentBriefingResponse.TokenUsage(100, 50));
   }
 
-  // ---------------------------------------------------------------------------
-  // Exposure penalty tests
-  // ---------------------------------------------------------------------------
+  // ── Exposure penalty integration ─────────────────────────────────────────
 
   @Test
   void exposure_yesterday_appliesHigherPenaltyThan_fiveDaysAgo() {
-    String url = "https://example.com/jobs/1";
-    JobPosting posting1 = posting("회사A", "백엔드 개발자", url, null, null, null);
-    JobPosting posting2 = posting("회사B", "백엔드 개발자", "https://example.com/jobs/2", null, null, null);
+    String url1 = "https://example.com/jobs/1";
+    String url2 = "https://example.com/jobs/2";
+    JobPosting posting1 = posting("회사A", "백엔드 개발자", url1, null, null, null);
+    JobPosting posting2 = posting("회사B", "백엔드 개발자", url2, null, null, null);
 
-    // posting1 exposed yesterday; posting2 exposed 5 days ago
     when(briefingArticleRepository.findRecentExposuresByUserId(any(), any()))
         .thenReturn(
             List.of(
-                exposure(url, TODAY.minusDays(1)),
-                exposure("https://example.com/jobs/2", TODAY.minusDays(5))));
+                exposure(url1, TODAY.minusDays(1)), // YESTERDAY → penalty 25
+                exposure(url2, TODAY.minusDays(5)))); // STALE → penalty 10
 
     List<AgentCandidateJobPosting> candidates =
         candidatesFor(Map.of(), List.of(posting1, posting2));
@@ -101,72 +96,47 @@ class BriefingServiceExposureTest {
     AgentCandidateJobPosting candidate2 =
         candidates.stream().filter(c -> "회사B".equals(c.companyName())).findFirst().orElseThrow();
 
-    // posting1 (yesterday) penalised by 40, posting2 (5 days ago) penalised by 10 → posting2 scores
-    // higher
-    assertThat(candidate2.preScore()).isGreaterThan(candidate1.preScore());
+    // 5-day penalty (10) yields higher adjustedScore than 1-day penalty (25)
+    assertThat(candidate2.scoreBreakdown().adjustedScore())
+        .isGreaterThan(candidate1.scoreBreakdown().adjustedScore());
   }
 
   @Test
   void exposure_sevenOrMoreDaysAgo_appliesNoPenalty() {
     String url = "https://example.com/jobs/old";
-    JobPosting posting = posting("회사Z", "개발자", url, null, null, null);
+    JobPosting p = posting("회사Z", "개발자", url, null, null, null);
 
     when(briefingArticleRepository.findRecentExposuresByUserId(any(), any()))
-        .thenReturn(List.of(exposure(url, TODAY.minusDays(7))));
+        .thenReturn(List.of(exposure(url, TODAY.minusDays(7)))); // 7d → no penalty
 
-    List<AgentCandidateJobPosting> candidates = candidatesFor(Map.of(), List.of(posting));
+    List<AgentCandidateJobPosting> candidates = candidatesFor(Map.of(), List.of(p));
+
     assertThat(candidates).hasSize(1);
-
-    // No exposure penalty → score equals base score (SCORE_RECENT applies since
-    // collectedDate=today)
-    JobPosting noExposure =
-        posting("회사X", "개발자", "https://example.com/jobs/fresh", null, null, null);
-    List<AgentCandidateJobPosting> noExposureCandidates =
-        candidatesFor(Map.of(), List.of(noExposure));
-
-    assertThat(candidates.get(0).preScore()).isEqualTo(noExposureCandidates.get(0).preScore());
+    assertThat(candidates.get(0).scoreBreakdown().exposurePenalty()).isEqualTo(0);
   }
 
   @Test
   void exposure_urlWithQueryFragment_recognisedAsSamePosting() {
-    // Base URL and a URL with query/fragment should canonicalize to the same value
     String baseUrl = "https://example.com/jobs/123";
     String withQuery = "https://example.com/jobs/123?utm_source=email&ref=test";
 
-    // Posting uses baseUrl; exposure recorded with withQuery variant
-    JobPosting p = posting("회사Q", "개발자", baseUrl, null, null, null);
+    // Posting URL is clean; exposure was recorded under the query-bearing variant.
+    // Both should canonicalize to the same key.
+    JobPosting exposed = posting("회사Q", "개발자", baseUrl, null, null, null);
     when(briefingArticleRepository.findRecentExposuresByUserId(any(), any()))
-        .thenReturn(List.of(exposure(withQuery, TODAY.minusDays(1))));
+        .thenReturn(List.of(exposure(withQuery, TODAY.minusDays(1)))); // YESTERDAY penalty 25
 
-    List<AgentCandidateJobPosting> candidates = candidatesFor(Map.of(), List.of(p));
-    assertThat(candidates).hasSize(1);
+    List<AgentCandidateJobPosting> exposedCandidates = candidatesFor(Map.of(), List.of(exposed));
 
-    // Exposure was yesterday → penalty -40 → score lower than base
+    // Verify penalty was applied (not zero)
+    assertThat(exposedCandidates.get(0).scoreBreakdown().exposurePenalty()).isEqualTo(25);
+
+    // Fresh posting with no exposure should score higher
     JobPosting fresh = posting("회사F", "개발자", "https://example.com/jobs/999", null, null, null);
     List<AgentCandidateJobPosting> freshCandidates = candidatesFor(Map.of(), List.of(fresh));
 
-    assertThat(freshCandidates.get(0).preScore()).isGreaterThan(candidates.get(0).preScore());
-  }
-
-  @Test
-  void exposure_deadlineOneDayAway_reducesExposurePenalty() {
-    String url = "https://example.com/jobs/urgent";
-    // Deadline tomorrow → urgency bonus +20; exposed yesterday → penalty -25; net = -5
-    JobPosting p = posting("회사U", "개발자", url, TODAY.plusDays(1), null, null);
-    when(briefingArticleRepository.findRecentExposuresByUserId(any(), any()))
-        .thenReturn(List.of(exposure(url, TODAY.minusDays(1))));
-
-    List<AgentCandidateJobPosting> candidates = candidatesFor(Map.of(), List.of(p));
-    assertThat(candidates).hasSize(1);
-
-    // Baseline: no exposure, no deadline → base + 0 = base
-    // Exposed with 1-day deadline: base + urgency(20) - penalty(25) = base - 5
-    // Net gap = base - (base - 5) = 5, proving urgency bonus partially offsets penalty
-    JobPosting noExposure =
-        posting("회사NE", "개발자", "https://example.com/jobs/999", null, null, null);
-    List<AgentCandidateJobPosting> noExpCandidates = candidatesFor(Map.of(), List.of(noExposure));
-
-    assertThat(noExpCandidates.get(0).preScore() - candidates.get(0).preScore()).isEqualTo(5);
+    assertThat(freshCandidates.get(0).scoreBreakdown().adjustedScore())
+        .isGreaterThan(exposedCandidates.get(0).scoreBreakdown().adjustedScore());
   }
 
   @Test
@@ -177,7 +147,6 @@ class BriefingServiceExposureTest {
             posting("회사2", "개발자", "https://e.com/2", null, null, null),
             posting("회사3", "개발자", "https://e.com/3", null, null, null));
 
-    // All exposed yesterday
     when(briefingArticleRepository.findRecentExposuresByUserId(any(), any()))
         .thenReturn(
             List.of(
@@ -185,150 +154,48 @@ class BriefingServiceExposureTest {
                 exposure("https://e.com/2", TODAY.minusDays(1)),
                 exposure("https://e.com/3", TODAY.minusDays(1))));
 
+    // Exposure penalty reduces score but does not exclude candidates
     List<AgentCandidateJobPosting> candidates = candidatesFor(Map.of(), postings);
-
-    // All candidates are still present (exposure causes penalty, not exclusion)
     assertThat(candidates).hasSize(3);
   }
 
-  // ---------------------------------------------------------------------------
-  // CandidateType classification
-  // ---------------------------------------------------------------------------
+  // ── isNew / isUrgent flags ────────────────────────────────────────────────
 
   @Test
-  void candidateType_publishedAtWithinThreeDays_isNEW() {
+  void flags_postingCollectedToday_isNewTrue() {
+    JobPosting p = posting("회사N", "개발자", "https://e.com/new", null, null, TODAY);
+    assertThat(candidatesFor(Map.of(), List.of(p)).get(0).isNew()).isTrue();
+  }
+
+  @Test
+  void flags_postingCollectedTenDaysAgo_isNewFalse() {
+    JobPosting p = posting("회사O", "개발자", "https://e.com/old", null, null, TODAY.minusDays(10));
+    assertThat(candidatesFor(Map.of(), List.of(p)).get(0).isNew()).isFalse();
+  }
+
+  @Test
+  void flags_deadlineWithinSevenDays_isUrgentTrue() {
     JobPosting p =
-        posting("회사A", "개발자", "https://e.com/a", null, TODAY.minusDays(2).atStartOfDay(), null);
-
-    CandidateType type = briefingService.classifyCandidateType(p, TODAY);
-    assertThat(type).isEqualTo(CandidateType.NEW);
+        posting("회사U", "개발자", "https://e.com/urg", TODAY.plusDays(5), null, TODAY.minusDays(10));
+    assertThat(candidatesFor(Map.of(), List.of(p)).get(0).isUrgent()).isTrue();
   }
 
   @Test
-  void candidateType_publishedAtNull_collectedDateWithinThreeDays_isNEW() {
-    // publishedAt is null → use collectedDate as firstSeenAt
-    JobPosting p = posting("회사B", "개발자", "https://e.com/b", null, null, TODAY.minusDays(1));
-
-    CandidateType type = briefingService.classifyCandidateType(p, TODAY);
-    assertThat(type).isEqualTo(CandidateType.NEW);
+  void flags_noDeadline_isUrgentFalse() {
+    JobPosting p = posting("회사V", "개발자", "https://e.com/noDl", null, null, TODAY.minusDays(10));
+    assertThat(candidatesFor(Map.of(), List.of(p)).get(0).isUrgent()).isFalse();
   }
 
   @Test
-  void candidateType_publishedAtNull_collectedDateOld_deadlineWithinSevenDays_isURGENT() {
-    JobPosting p =
-        posting("회사C", "개발자", "https://e.com/c", TODAY.plusDays(5), null, TODAY.minusDays(10));
-
-    CandidateType type = briefingService.classifyCandidateType(p, TODAY);
-    assertThat(type).isEqualTo(CandidateType.URGENT);
+  void flags_newAndUrgent_bothTrueIndependently() {
+    // Collected today (isNew) + deadline in 3 days (isUrgent) → both true simultaneously
+    JobPosting p = posting("회사NU", "개발자", "https://e.com/nu", TODAY.plusDays(3), null, TODAY);
+    AgentCandidateJobPosting c = candidatesFor(Map.of(), List.of(p)).get(0);
+    assertThat(c.isNew()).isTrue();
+    assertThat(c.isUrgent()).isTrue();
   }
 
-  @Test
-  void candidateType_notNewNotUrgent_isEVERGREEN() {
-    JobPosting p =
-        posting("회사D", "개발자", "https://e.com/d", TODAY.plusDays(30), null, TODAY.minusDays(10));
-
-    CandidateType type = briefingService.classifyCandidateType(p, TODAY);
-    assertThat(type).isEqualTo(CandidateType.EVERGREEN);
-  }
-
-  @Test
-  void candidateType_sentInAgentRequest() {
-    // Verify that candidateType is populated in the DTO sent to the agent
-    LocalDate oldDate = TODAY.minusDays(10);
-
-    // OLD posting with imminent deadline → URGENT
-    JobPosting urgent = posting("회사U", "개발자", "https://e.com/u", TODAY.plusDays(3), null, oldDate);
-
-    List<AgentCandidateJobPosting> candidates = candidatesFor(Map.of(), List.of(urgent));
-
-    assertThat(candidates).hasSize(1);
-    assertThat(candidates.get(0).candidateType()).isEqualTo("URGENT");
-  }
-
-  // ---------------------------------------------------------------------------
-  // Top-30 quota tests
-  // ---------------------------------------------------------------------------
-
-  @Test
-  void quota_exactlyFillsEachGroup() {
-    LocalDate old = TODAY.minusDays(10);
-    List<JobPosting> newPosts =
-        buildPostings("새회사", 12, null, TODAY.minusDays(1).atStartOfDay(), null);
-    List<JobPosting> urgentPosts = buildPostings("급회사", 10, TODAY.plusDays(5), null, old);
-    List<JobPosting> evergreenPosts = buildPostings("상시회사", 8, TODAY.plusDays(60), null, old);
-
-    List<JobPosting> all = new ArrayList<>();
-    all.addAll(newPosts);
-    all.addAll(urgentPosts);
-    all.addAll(evergreenPosts);
-
-    List<AgentCandidateJobPosting> candidates = candidatesFor(Map.of(), all);
-
-    long newCount = candidates.stream().filter(c -> "NEW".equals(c.candidateType())).count();
-    long urgentCount = candidates.stream().filter(c -> "URGENT".equals(c.candidateType())).count();
-    long evergreenCount =
-        candidates.stream().filter(c -> "EVERGREEN".equals(c.candidateType())).count();
-
-    assertThat(newCount).isEqualTo(12);
-    assertThat(urgentCount).isEqualTo(10);
-    assertThat(evergreenCount).isEqualTo(8);
-    assertThat(candidates).hasSize(30);
-  }
-
-  @Test
-  void quota_insufficientNewGroup_fillsFromLeftovers() {
-    LocalDate old = TODAY.minusDays(10);
-    // Only 3 NEW postings (quota is 12)
-    List<JobPosting> newPosts =
-        buildPostings("새회사", 3, null, TODAY.minusDays(1).atStartOfDay(), null);
-    // 20 EVERGREEN postings
-    List<JobPosting> evergreenPosts = buildPostings("상시회사", 20, TODAY.plusDays(60), null, old);
-
-    List<JobPosting> all = new ArrayList<>();
-    all.addAll(newPosts);
-    all.addAll(evergreenPosts);
-
-    List<AgentCandidateJobPosting> candidates = candidatesFor(Map.of(), all);
-
-    // 3 NEW + 0 URGENT + 8 EVERGREEN = 11 from quota; fill 19 more from leftovers (EVERGREEN)
-    // Total min(11 + leftovers, 30) → limited by 23 total postings → 23
-    assertThat(candidates).hasSize(23);
-
-    // All 3 NEW postings should be included
-    long newCount = candidates.stream().filter(c -> "NEW".equals(c.candidateType())).count();
-    assertThat(newCount).isEqualTo(3);
-  }
-
-  @Test
-  void quota_noDuplicatesAcrossGroups() {
-    // Each posting belongs to exactly one group — verify no URL appears twice
-    LocalDate old = TODAY.minusDays(10);
-    List<JobPosting> all = new ArrayList<>();
-    all.addAll(buildPostings("새회사", 5, null, TODAY.minusDays(1).atStartOfDay(), null));
-    all.addAll(buildPostings("급회사", 5, TODAY.plusDays(3), null, old));
-    all.addAll(buildPostings("상시회사", 5, TODAY.plusDays(60), null, old));
-
-    List<AgentCandidateJobPosting> candidates = candidatesFor(Map.of(), all);
-
-    long distinctUrls =
-        candidates.stream().map(AgentCandidateJobPosting::sourceUrl).distinct().count();
-    assertThat(distinctUrls).isEqualTo(candidates.size());
-  }
-
-  @Test
-  void quota_finalResultNeverExceedsThirty() {
-    // 50 postings from different companies, all EVERGREEN
-    LocalDate old = TODAY.minusDays(10);
-    List<JobPosting> all = buildPostings("회사", 50, TODAY.plusDays(60), null, old);
-
-    List<AgentCandidateJobPosting> candidates = candidatesFor(Map.of(), all);
-
-    assertThat(candidates.size()).isLessThanOrEqualTo(30);
-  }
-
-  // ---------------------------------------------------------------------------
-  // Diversity tests
-  // ---------------------------------------------------------------------------
+  // ── Diversity cap ─────────────────────────────────────────────────────────
 
   @Test
   void diversity_regularCompanyLimitedToTwo() {
@@ -347,7 +214,8 @@ class BriefingServiceExposureTest {
   }
 
   @Test
-  void diversity_targetedCompanyAllowedUpToThree() {
+  void diversity_targetedCompanyStillCappedAtTwo() {
+    // MAX_PER_COMPANY=2 applies regardless of whether the company is in the user's target list
     LocalDate old = TODAY.minusDays(10);
     List<JobPosting> naverPosts =
         List.of(
@@ -360,28 +228,26 @@ class BriefingServiceExposureTest {
         candidatesFor(Map.of("companies", List.of("네이버")), naverPosts);
 
     long naverCount = candidates.stream().filter(c -> "네이버".equals(c.companyName())).count();
-    assertThat(naverCount).isGreaterThan(2).isLessThanOrEqualTo(3);
+    assertThat(naverCount).isLessThanOrEqualTo(2);
   }
 
   @Test
-  void diversity_companyLimitRespectedDuringFillUp() {
-    // Fill-up phase must still obey the per-company cap
+  void diversity_companyCapRespectedAcrossAllCandidates() {
+    // 5 postings from one company: only 2 should be selected regardless of isNew/score
     LocalDate old = TODAY.minusDays(10);
-
-    // Only 1 NEW (quota=12): forces fill-up. Fill-up pool has 4 more from same company.
-    List<JobPosting> all = new ArrayList<>();
-    all.add(
-        posting(
-            "채움회사",
-            "NEW개발자",
-            "https://e.com/fill-new",
-            null,
-            TODAY.minusDays(1).atStartOfDay(),
-            null));
-    all.add(posting("채움회사", "EVER1", "https://e.com/fill1", null, null, old));
-    all.add(posting("채움회사", "EVER2", "https://e.com/fill2", null, null, old));
-    all.add(posting("채움회사", "EVER3", "https://e.com/fill3", null, null, old));
-    all.add(posting("채움회사", "EVER4", "https://e.com/fill4", null, null, old));
+    List<JobPosting> all =
+        List.of(
+            posting(
+                "채움회사",
+                "NEW개발자",
+                "https://e.com/fill-new",
+                null,
+                TODAY.minusDays(1).atStartOfDay(),
+                null),
+            posting("채움회사", "EVER1", "https://e.com/fill1", null, null, old),
+            posting("채움회사", "EVER2", "https://e.com/fill2", null, null, old),
+            posting("채움회사", "EVER3", "https://e.com/fill3", null, null, old),
+            posting("채움회사", "EVER4", "https://e.com/fill4", null, null, old));
 
     List<AgentCandidateJobPosting> candidates = candidatesFor(Map.of(), all);
 
@@ -389,90 +255,28 @@ class BriefingServiceExposureTest {
     assertThat(companyCount).isLessThanOrEqualTo(2);
   }
 
-  // ---------------------------------------------------------------------------
-  // Urgency bonus unit tests
-  // ---------------------------------------------------------------------------
-
   @Test
-  void urgencyBonus_deadlineToday_returnsCritical() {
-    int bonus = briefingService.computeUrgencyBonus(TODAY, TODAY);
-    assertThat(bonus).isEqualTo(20);
+  void diversity_noDuplicates_allUrlsDistinct() {
+    LocalDate old = TODAY.minusDays(10);
+    List<JobPosting> all =
+        List.of(
+            posting(
+                "새회사A", "개발자", "https://e.com/a1", null, TODAY.minusDays(1).atStartOfDay(), null),
+            posting(
+                "새회사B", "개발자", "https://e.com/b1", null, TODAY.minusDays(1).atStartOfDay(), null),
+            posting("급회사A", "개발자", "https://e.com/c1", TODAY.plusDays(3), null, old),
+            posting("급회사B", "개발자", "https://e.com/d1", TODAY.plusDays(5), null, old),
+            posting("상시회사A", "개발자", "https://e.com/e1", null, null, old),
+            posting("상시회사B", "개발자", "https://e.com/f1", null, null, old));
+
+    List<AgentCandidateJobPosting> candidates = candidatesFor(Map.of(), all);
+
+    long distinctUrls =
+        candidates.stream().map(AgentCandidateJobPosting::sourceUrl).distinct().count();
+    assertThat(distinctUrls).isEqualTo(candidates.size());
   }
 
-  @Test
-  void urgencyBonus_deadlineTomorrow_returnsCritical() {
-    int bonus = briefingService.computeUrgencyBonus(TODAY.plusDays(1), TODAY);
-    assertThat(bonus).isEqualTo(20);
-  }
-
-  @Test
-  void urgencyBonus_deadlineInThreeDays_returnsNear() {
-    int bonus = briefingService.computeUrgencyBonus(TODAY.plusDays(3), TODAY);
-    assertThat(bonus).isEqualTo(10);
-  }
-
-  @Test
-  void urgencyBonus_deadlineInFourDays_returnsZero() {
-    int bonus = briefingService.computeUrgencyBonus(TODAY.plusDays(4), TODAY);
-    assertThat(bonus).isEqualTo(0);
-  }
-
-  @Test
-  void urgencyBonus_nullDeadline_returnsZero() {
-    int bonus = briefingService.computeUrgencyBonus(null, TODAY);
-    assertThat(bonus).isEqualTo(0);
-  }
-
-  // ---------------------------------------------------------------------------
-  // Exposure penalty unit tests
-  // ---------------------------------------------------------------------------
-
-  @Test
-  void exposurePenalty_exposedYesterday_returnsTwentyFivePenalty() {
-    String url = "https://e.com/p1";
-    Map<String, LocalDate> map = Map.of("https://e.com/p1", TODAY.minusDays(1));
-    assertThat(briefingService.computeExposurePenalty(url, map, TODAY)).isEqualTo(25);
-  }
-
-  @Test
-  void exposurePenalty_exposedThreeDaysAgo_returnsFifteenPenalty() {
-    String url = "https://e.com/p2";
-    Map<String, LocalDate> map = Map.of("https://e.com/p2", TODAY.minusDays(3));
-    assertThat(briefingService.computeExposurePenalty(url, map, TODAY)).isEqualTo(15);
-  }
-
-  @Test
-  void exposurePenalty_exposedSixDaysAgo_returnsTenPenalty() {
-    String url = "https://e.com/p3";
-    Map<String, LocalDate> map = Map.of("https://e.com/p3", TODAY.minusDays(6));
-    assertThat(briefingService.computeExposurePenalty(url, map, TODAY)).isEqualTo(10);
-  }
-
-  @Test
-  void exposurePenalty_exposedSevenDaysAgo_returnsZero() {
-    String url = "https://e.com/p4";
-    Map<String, LocalDate> map = Map.of("https://e.com/p4", TODAY.minusDays(7));
-    assertThat(briefingService.computeExposurePenalty(url, map, TODAY)).isEqualTo(0);
-  }
-
-  @Test
-  void exposurePenalty_urlWithQueryAndFragment_matchesBaseUrl() {
-    // Base URL is what we look up; exposure was recorded with a query-bearing variant.
-    // Both canonicalize to https://example.com/jobs/42
-    String baseUrl = "https://example.com/jobs/42";
-    String withQuery = "https://example.com/jobs/42?ref=email#top";
-    // Map key must be canonical too
-    Map<String, LocalDate> map = Map.of("https://example.com/jobs/42", TODAY.minusDays(2));
-
-    // baseUrl → canonical is the same key → penalty 15
-    assertThat(briefingService.computeExposurePenalty(baseUrl, map, TODAY)).isEqualTo(15);
-    // withQuery → canonical strips query/fragment → same key → penalty 15
-    assertThat(briefingService.computeExposurePenalty(withQuery, map, TODAY)).isEqualTo(15);
-  }
-
-  // ---------------------------------------------------------------------------
-  // Helpers
-  // ---------------------------------------------------------------------------
+  // ── Helpers ──────────────────────────────────────────────────────────────
 
   private List<AgentCandidateJobPosting> candidatesFor(
       Map<String, Object> prefMap, List<JobPosting> postings) {
@@ -499,7 +303,6 @@ class BriefingServiceExposureTest {
     return captor.getValue().candidatePool().jobPostings();
   }
 
-  /** Creates a posting with controlled publishedAt and collectedDate for type classification. */
   private static JobPosting posting(
       String company,
       String title,
@@ -522,29 +325,6 @@ class BriefingServiceExposureTest {
         "hash-" + company + "-" + title,
         collectedDate != null ? collectedDate : TODAY,
         publishedAt);
-  }
-
-  /**
-   * Builds {@code count} postings from companies named "{prefix}0", "{prefix}1", … Each posting
-   * gets a unique URL so company diversity limits do not interfere with count assertions.
-   */
-  private static List<JobPosting> buildPostings(
-      String companyPrefix,
-      int count,
-      LocalDate deadline,
-      LocalDateTime publishedAt,
-      LocalDate collectedDate) {
-    return IntStream.range(0, count)
-        .mapToObj(
-            i ->
-                posting(
-                    companyPrefix + i,
-                    "개발자" + i,
-                    "https://e.com/" + companyPrefix + i,
-                    deadline,
-                    publishedAt,
-                    collectedDate))
-        .toList();
   }
 
   private static BriefingArticleRepository.ExposedUrlInfo exposure(String url, LocalDate date) {

@@ -37,15 +37,18 @@ from app.core.llm_client import LLMTokenUsage
 # Fixtures — realistic payloads that mirror what BriefingService sends
 # ---------------------------------------------------------------------------
 
-# 10 job postings that resemble what AgentCandidateJobPosting carries.
+# 7 job postings mirroring what BriefingService.selectTop7() sends to the Agent.
+# Legacy fields (preScore, position, contentHash, postedAt) are absent; new
+# contract fields (rank, isNew, isUrgent, scoreBreakdown, matchEvidence,
+# publishedAt) are present. briefingDate = 2026-06-26.
 _POOL_10 = [
     {
         "id": 101,
+        "rank": 1,
         "source": "원티드",
         "sourceUrl": "https://www.wanted.co.kr/wd/00101",
         "companyName": "네이버",
         "title": "네이버 서버 백엔드 개발자 (Java/Spring)",
-        "position": "백엔드 개발자",
         "employmentType": "정규직",
         "experienceLevel": "신입",
         "location": "성남시 분당구",
@@ -53,18 +56,32 @@ _POOL_10 = [
         "skills": ["Java", "Spring Boot", "MySQL", "Redis"],
         "roles": ["백엔드 개발자"],
         "description": "네이버 서버 플랫폼팀에서 백엔드 개발자를 채용합니다.",
-        "postedAt": "2026-06-25T10:00:00",
+        "publishedAt": "2026-06-25T10:00:00",
         "collectedDate": "2026-06-26",
-        "contentHash": "a" * 64,
-        "preScore": 90,
+        "isNew": True,
+        "isUrgent": False,
+        "scoreBreakdown": {
+            "roleScore": 30, "companyScore": 25, "skillScore": 15,
+            "experienceScore": 15, "industryScore": 0, "locationScore": 10,
+            "employmentTypeScore": 10, "companySizeScore": 0,
+            "relevanceScore": 105, "exposurePenalty": 25, "adjustedScore": 80,
+        },
+        "matchEvidence": {
+            "matchedRoles": ["백엔드 개발자"], "matchedCompanies": ["네이버"],
+            "matchedSkills": ["Java", "Spring Boot", "MySQL"],
+            "matchedLocations": ["성남"],
+            "matchedExperienceLevels": ["신입"],
+            "matchedEmploymentTypes": ["정규직"],
+            "matchedIndustries": [], "matchedCompanySizes": [],
+        },
     },
     {
         "id": 102,
+        "rank": 2,
         "source": "카카오채용",
         "sourceUrl": "https://careers.kakao.com/jobs/102",
         "companyName": "카카오",
         "title": "카카오 플랫폼 백엔드 개발자",
-        "position": "백엔드 개발자",
         "employmentType": "정규직",
         "experienceLevel": "3년 이상",
         "location": "판교",
@@ -72,18 +89,32 @@ _POOL_10 = [
         "skills": ["Kotlin", "Spring Boot", "Kafka"],
         "roles": ["백엔드 개발자"],
         "description": "카카오 플랫폼팀 백엔드 개발자 채용. Kotlin/Spring Boot 기반.",
-        "postedAt": "2026-06-24T09:00:00",
+        "publishedAt": "2026-06-24T09:00:00",
         "collectedDate": "2026-06-26",
-        "contentHash": "b" * 64,
-        "preScore": 85,
+        "isNew": True,
+        "isUrgent": False,
+        "scoreBreakdown": {
+            "roleScore": 30, "companyScore": 25, "skillScore": 10,
+            "experienceScore": 15, "industryScore": 0, "locationScore": 10,
+            "employmentTypeScore": 10, "companySizeScore": 0,
+            "relevanceScore": 100, "exposurePenalty": 15, "adjustedScore": 85,
+        },
+        "matchEvidence": {
+            "matchedRoles": ["백엔드 개발자"], "matchedCompanies": ["카카오"],
+            "matchedSkills": ["Kotlin", "Spring Boot"],
+            "matchedLocations": ["판교"],
+            "matchedExperienceLevels": ["3년 이상"],
+            "matchedEmploymentTypes": ["정규직"],
+            "matchedIndustries": [], "matchedCompanySizes": [],
+        },
     },
     {
         "id": 103,
+        "rank": 3,
         "source": "LinkedIn",
         "sourceUrl": "https://www.linkedin.com/jobs/view/103",
         "companyName": "라인",
         "title": "LINE 풀스택 개발자 (Java/React)",
-        "position": "풀스택 개발자",
         "employmentType": "정규직",
         "experienceLevel": "3년 이상",
         "location": "서울 강남구",
@@ -91,18 +122,32 @@ _POOL_10 = [
         "skills": ["Java", "React", "TypeScript"],
         "roles": ["풀스택 개발자"],
         "description": "LINE Plus 풀스택 개발자 모집. Java + React 경험자 우대.",
-        "postedAt": "2026-06-23T09:00:00",
+        "publishedAt": "2026-06-23T09:00:00",
         "collectedDate": "2026-06-26",
-        "contentHash": "c" * 64,
-        "preScore": 75,
+        "isNew": True,
+        "isUrgent": False,
+        "scoreBreakdown": {
+            "roleScore": 30, "companyScore": 25, "skillScore": 5,
+            "experienceScore": 15, "industryScore": 0, "locationScore": 10,
+            "employmentTypeScore": 10, "companySizeScore": 0,
+            "relevanceScore": 95, "exposurePenalty": 15, "adjustedScore": 80,
+        },
+        "matchEvidence": {
+            "matchedRoles": ["풀스택 개발자"], "matchedCompanies": ["라인"],
+            "matchedSkills": ["Java"],
+            "matchedLocations": ["서울"],
+            "matchedExperienceLevels": ["3년 이상"],
+            "matchedEmploymentTypes": ["정규직"],
+            "matchedIndustries": [], "matchedCompanySizes": [],
+        },
     },
     {
         "id": 104,
+        "rank": 4,
         "source": "잡코리아",
         "sourceUrl": "https://www.jobkorea.co.kr/Recruit/GI_Read/00104",
         "companyName": "쿠팡",
         "title": "쿠팡 물류 플랫폼 백엔드 개발자",
-        "position": "백엔드 개발자",
         "employmentType": "정규직",
         "experienceLevel": "3년 이상",
         "location": "서울 강남구",
@@ -110,18 +155,32 @@ _POOL_10 = [
         "skills": ["Java", "Spring Boot", "AWS", "DynamoDB"],
         "roles": ["백엔드 개발자"],
         "description": "쿠팡 물류 플랫폼 백엔드 개발. AWS 기반 대용량 처리 우대.",
-        "postedAt": "2026-06-22T11:00:00",
+        "publishedAt": "2026-06-22T11:00:00",
         "collectedDate": "2026-06-26",
-        "contentHash": "d" * 64,
-        "preScore": 70,
+        "isNew": False,
+        "isUrgent": False,
+        "scoreBreakdown": {
+            "roleScore": 30, "companyScore": 0, "skillScore": 10,
+            "experienceScore": 15, "industryScore": 0, "locationScore": 10,
+            "employmentTypeScore": 10, "companySizeScore": 0,
+            "relevanceScore": 75, "exposurePenalty": 10, "adjustedScore": 65,
+        },
+        "matchEvidence": {
+            "matchedRoles": ["백엔드 개발자"], "matchedCompanies": [],
+            "matchedSkills": ["Java", "Spring Boot"],
+            "matchedLocations": ["서울"],
+            "matchedExperienceLevels": ["3년 이상"],
+            "matchedEmploymentTypes": ["정규직"],
+            "matchedIndustries": [], "matchedCompanySizes": [],
+        },
     },
     {
         "id": 105,
+        "rank": 5,
         "source": "사람인",
         "sourceUrl": "https://www.saramin.co.kr/zf_user/jobs/relay/view?job_cd=105",
         "companyName": "토스",
         "title": "토스 서버 개발자 (Kotlin/Spring)",
-        "position": "백엔드 개발자",
         "employmentType": "정규직",
         "experienceLevel": "신입",
         "location": "서울 강남구",
@@ -129,18 +188,32 @@ _POOL_10 = [
         "skills": ["Kotlin", "Spring Boot", "MySQL"],
         "roles": ["백엔드 개발자"],
         "description": "토스 서버팀 개발자 채용. Kotlin 기반 서비스 개발 및 운영.",
-        "postedAt": "2026-06-26T08:00:00",
+        "publishedAt": "2026-06-26T08:00:00",
         "collectedDate": "2026-06-26",
-        "contentHash": "e" * 64,
-        "preScore": 65,
+        "isNew": True,
+        "isUrgent": False,
+        "scoreBreakdown": {
+            "roleScore": 30, "companyScore": 25, "skillScore": 10,
+            "experienceScore": 15, "industryScore": 0, "locationScore": 10,
+            "employmentTypeScore": 10, "companySizeScore": 0,
+            "relevanceScore": 100, "exposurePenalty": 25, "adjustedScore": 75,
+        },
+        "matchEvidence": {
+            "matchedRoles": ["백엔드 개발자"], "matchedCompanies": ["토스"],
+            "matchedSkills": ["Kotlin", "Spring Boot", "MySQL"],
+            "matchedLocations": ["서울"],
+            "matchedExperienceLevels": ["신입"],
+            "matchedEmploymentTypes": ["정규직"],
+            "matchedIndustries": [], "matchedCompanySizes": [],
+        },
     },
     {
         "id": 106,
+        "rank": 6,
         "source": "원티드",
         "sourceUrl": "https://www.wanted.co.kr/wd/00106",
         "companyName": "당근마켓",
         "title": "당근마켓 백엔드 엔지니어",
-        "position": "백엔드 개발자",
         "employmentType": "정규직",
         "experienceLevel": "3년 이상",
         "location": "서울 서초구",
@@ -148,18 +221,32 @@ _POOL_10 = [
         "skills": ["Go", "gRPC", "PostgreSQL"],
         "roles": ["백엔드 엔지니어"],
         "description": "당근마켓 백엔드 엔지니어 채용. Go 마이크로서비스 경험 우대.",
-        "postedAt": "2026-06-20T10:00:00",
+        "publishedAt": "2026-06-20T10:00:00",
         "collectedDate": "2026-06-26",
-        "contentHash": "f" * 64,
-        "preScore": 60,
+        "isNew": False,
+        "isUrgent": False,
+        "scoreBreakdown": {
+            "roleScore": 30, "companyScore": 0, "skillScore": 0,
+            "experienceScore": 15, "industryScore": 0, "locationScore": 10,
+            "employmentTypeScore": 10, "companySizeScore": 0,
+            "relevanceScore": 65, "exposurePenalty": 10, "adjustedScore": 55,
+        },
+        "matchEvidence": {
+            "matchedRoles": [], "matchedCompanies": [],
+            "matchedSkills": [],
+            "matchedLocations": ["서울"],
+            "matchedExperienceLevels": ["3년 이상"],
+            "matchedEmploymentTypes": ["정규직"],
+            "matchedIndustries": [], "matchedCompanySizes": [],
+        },
     },
     {
         "id": 107,
+        "rank": 7,
         "source": "LinkedIn",
         "sourceUrl": "https://www.linkedin.com/jobs/view/107",
         "companyName": "배달의민족",
         "title": "배민 서버 개발자 (Java)",
-        "position": "서버 개발자",
         "employmentType": "정규직",
         "experienceLevel": "신입",
         "location": "서울 송파구",
@@ -167,67 +254,24 @@ _POOL_10 = [
         "skills": ["Java", "Spring Boot", "AWS"],
         "roles": ["서버 개발자"],
         "description": "배달의민족 서버팀에서 Java 서버 개발자를 채용합니다.",
-        "postedAt": "2026-06-21T14:00:00",
+        "publishedAt": "2026-06-21T14:00:00",
         "collectedDate": "2026-06-26",
-        "contentHash": "g" * 64,
-        "preScore": 55,
-    },
-    {
-        "id": 108,
-        "source": "잡코리아",
-        "sourceUrl": "https://www.jobkorea.co.kr/Recruit/GI_Read/00108",
-        "companyName": "카카오페이",
-        "title": "카카오페이 결제 시스템 백엔드 개발자",
-        "position": "백엔드 개발자",
-        "employmentType": "정규직",
-        "experienceLevel": "3년 이상",
-        "location": "판교",
-        "deadline": "2026-08-15",
-        "skills": ["Java", "Spring Boot", "MySQL", "Redis"],
-        "roles": ["백엔드 개발자"],
-        "description": "카카오페이 결제 시스템 개발. 금융 서비스 도메인 경험 우대.",
-        "postedAt": "2026-06-19T09:00:00",
-        "collectedDate": "2026-06-26",
-        "contentHash": "h" * 64,
-        "preScore": 50,
-    },
-    {
-        "id": 109,
-        "source": "사람인",
-        "sourceUrl": "https://www.saramin.co.kr/zf_user/jobs/relay/view?job_cd=109",
-        "companyName": "네이버파이낸셜",
-        "title": "네이버파이낸셜 Java 백엔드 개발자",
-        "position": "백엔드 개발자",
-        "employmentType": "계약직",
-        "experienceLevel": "신입",
-        "location": "성남시 분당구",
-        "deadline": "2026-07-12",
-        "skills": ["Java", "Spring"],
-        "roles": ["백엔드 개발자"],
-        "description": "네이버파이낸셜 핀테크 서비스 Java 기반 금융 플랫폼 개발.",
-        "postedAt": "2026-06-18T10:00:00",
-        "collectedDate": "2026-06-26",
-        "contentHash": "i" * 64,
-        "preScore": 45,
-    },
-    {
-        "id": 110,
-        "source": "원티드",
-        "sourceUrl": "https://www.wanted.co.kr/wd/00110",
-        "companyName": "스포카",
-        "title": "스포카 백엔드 개발자 (Python/Java)",
-        "position": "백엔드 개발자",
-        "employmentType": "정규직",
-        "experienceLevel": "신입",
-        "location": "서울 마포구",
-        "deadline": "2026-07-31",
-        "skills": ["Python", "Django", "Java"],
-        "roles": ["백엔드 개발자"],
-        "description": "스포카 백엔드팀 개발자 채용. Python/Java 기반 서비스 개발.",
-        "postedAt": "2026-06-17T09:00:00",
-        "collectedDate": "2026-06-26",
-        "contentHash": "j" * 64,
-        "preScore": 40,
+        "isNew": False,
+        "isUrgent": False,
+        "scoreBreakdown": {
+            "roleScore": 30, "companyScore": 0, "skillScore": 10,
+            "experienceScore": 15, "industryScore": 0, "locationScore": 10,
+            "employmentTypeScore": 10, "companySizeScore": 0,
+            "relevanceScore": 75, "exposurePenalty": 10, "adjustedScore": 65,
+        },
+        "matchEvidence": {
+            "matchedRoles": ["서버 개발자"], "matchedCompanies": [],
+            "matchedSkills": ["Java", "Spring Boot"],
+            "matchedLocations": ["서울"],
+            "matchedExperienceLevels": ["신입"],
+            "matchedEmploymentTypes": ["정규직"],
+            "matchedIndustries": [], "matchedCompanySizes": [],
+        },
     },
 ]
 
@@ -267,7 +311,7 @@ _REQUEST_EMPTY_POOL = {
     "candidatePool": {"jobPostings": [], "companyIssues": [], "industryIssues": []},
 }
 
-# Postings where every optional field is absent — only id, title, companyName, preScore.
+# Postings where many optional fields are absent — only id, title, companyName present.
 _REQUEST_MISSING_OPTIONAL = {
     "userId": 30,
     "category": "JOB_POSTING",
@@ -285,18 +329,18 @@ _REQUEST_MISSING_OPTIONAL = {
         "jobPostings": [
             {
                 "id": 200,
+                "rank": 1,
                 "companyName": "테스트회사",
                 "title": "백엔드 개발자",
-                "preScore": 50,
             },
             {
                 "id": 201,
+                "rank": 2,
                 "companyName": "스타트업B",
                 "title": "Java 서버 개발자",
                 "source": "원티드",
                 "skills": [],
                 "roles": [],
-                "preScore": 30,
             },
         ],
         "companyIssues": [],
@@ -304,7 +348,9 @@ _REQUEST_MISSING_OPTIONAL = {
     },
 }
 
-# Mix: one posting with a past deadline (should be filtered) + one valid.
+# Backend already filtered out past-deadline postings before sending Top-7.
+# This fixture simulates a correct Backend payload — only the valid posting
+# was selected and ranked. The "기간만료" posting is intentionally absent.
 _REQUEST_PAST_DEADLINE = {
     "userId": 40,
     "category": "JOB_POSTING",
@@ -321,18 +367,8 @@ _REQUEST_PAST_DEADLINE = {
     "candidatePool": {
         "jobPostings": [
             {
-                "id": 300,
-                "source": "원티드",
-                "sourceUrl": "https://www.wanted.co.kr/wd/00300",
-                "companyName": "만료회사",
-                "title": "기간만료 백엔드 개발자",
-                "deadline": "2026-06-25",  # one day before briefingDate
-                "skills": ["Java"],
-                "roles": ["백엔드 개발자"],
-                "preScore": 80,
-            },
-            {
                 "id": 301,
+                "rank": 1,
                 "source": "잡코리아",
                 "sourceUrl": "https://www.jobkorea.co.kr/Recruit/GI_Read/00301",
                 "companyName": "유효회사",
@@ -340,7 +376,20 @@ _REQUEST_PAST_DEADLINE = {
                 "deadline": "2026-07-30",
                 "skills": ["Java"],
                 "roles": ["백엔드 개발자"],
-                "preScore": 60,
+                "isNew": True,
+                "isUrgent": False,
+                "scoreBreakdown": {
+                    "roleScore": 30, "companyScore": 0, "skillScore": 10,
+                    "experienceScore": 0, "industryScore": 0, "locationScore": 10,
+                    "employmentTypeScore": 0, "companySizeScore": 0,
+                    "relevanceScore": 50, "exposurePenalty": 0, "adjustedScore": 50,
+                },
+                "matchEvidence": {
+                    "matchedRoles": ["백엔드 개발자"], "matchedCompanies": [],
+                    "matchedSkills": ["Java"], "matchedLocations": ["서울"],
+                    "matchedExperienceLevels": [], "matchedEmploymentTypes": [],
+                    "matchedIndustries": [], "matchedCompanySizes": [],
+                },
             },
         ],
         "companyIssues": [],
@@ -381,6 +430,8 @@ _MOCK_SYNTHESIS_10 = {
     "overallSummary": (
         "네이버·카카오·라인 등 7건의 Java/Spring Boot 백엔드 공고를 선별했습니다."
     ),
+    # _REQUEST_10 sends 10 postings (IDs 101-110); truncated to 7 → 101-107
+    "referencedPostingIds": ["101", "102", "103", "104", "105", "106", "107"],
 }
 
 
@@ -719,7 +770,7 @@ async def test_smoke_missing_optional_fields_articles_have_non_empty_title(clien
 
 
 # ---------------------------------------------------------------------------
-# 6. Past-deadline postings are excluded
+# 6. Past-deadline postings are excluded by Backend (not Agent)
 # ---------------------------------------------------------------------------
 
 
@@ -729,12 +780,13 @@ async def test_smoke_past_deadline_returns_200(client):
 
 
 async def test_smoke_past_deadline_posting_excluded_from_articles(client):
+    # Backend filters past-deadline postings before sending Top-7 to Agent.
+    # _REQUEST_PAST_DEADLINE only contains the valid posting (Backend already filtered).
     articles = (
         await client.post("/briefings/generate", json=_REQUEST_PAST_DEADLINE)
     ).json()["articles"]
-    titles = [a["title"] for a in articles]
-    assert not any("기간만료" in t for t in titles), (
-        "posting with past deadline must not appear in articles"
+    assert len(articles) == 1, (
+        "exactly the one valid posting sent by Backend should appear"
     )
 
 

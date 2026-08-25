@@ -67,11 +67,11 @@ async def test_generate_with_empty_preference_returns_valid_response(client):
             "jobPostings": [
                 {
                     "id": 99,
+                    "rank": 1,
                     "source": "원티드",
                     "sourceUrl": "https://www.wanted.co.kr/wd/00099",
                     "companyName": "스타트업A",
                     "title": "백엔드 개발자",
-                    "position": "백엔드 개발자",
                     "employmentType": "정규직",
                     "experienceLevel": "신입",
                     "location": "서울",
@@ -79,7 +79,23 @@ async def test_generate_with_empty_preference_returns_valid_response(client):
                     "skills": ["Python"],
                     "roles": ["백엔드 개발자"],
                     "description": "백엔드 개발자 채용",
-                    "preScore": 30,
+                    "publishedAt": "2026-07-01T10:00:00",
+                    "isNew": False,
+                    "isUrgent": False,
+                    "scoreBreakdown": {
+                        "roleScore": 30, "companyScore": 0, "skillScore": 5,
+                        "experienceScore": 0, "industryScore": 0,
+                        "locationScore": 10, "employmentTypeScore": 10,
+                        "companySizeScore": 0, "relevanceScore": 55,
+                        "exposurePenalty": 0, "adjustedScore": 55,
+                    },
+                    "matchEvidence": {
+                        "matchedRoles": ["백엔드 개발자"], "matchedCompanies": [],
+                        "matchedSkills": [], "matchedLocations": ["서울"],
+                        "matchedExperienceLevels": [],
+                        "matchedEmploymentTypes": [],
+                        "matchedIndustries": [], "matchedCompanySizes": [],
+                    },
                 }
             ],
             "companyIssues": [],
