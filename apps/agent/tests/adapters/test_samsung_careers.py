@@ -777,3 +777,599 @@ class TestSamsungCareersLive:
             assert c.seq > 0
             assert c.company_name
             assert c.title
+
+
+# =============================================================================
+# New Samsung subsidiary sources
+# (삼성디스플레이 C90, 삼성SDI C31, 삼성생명 E11, 삼성화재 E21,
+#  삼성카드 E31, 삼성증권 E40)
+# =============================================================================
+
+# ── Additional fixture data ───────────────────────────────────────────────────
+
+_CARD_DISPLAY = _CardInfo(
+    seq=22922,
+    company_name="삼성디스플레이",
+    title="R&D분야 외국인 경력사원 채용",
+    type_text="경력",
+    period_text="2026.08.20 ~ 2026.09.02",
+    role_flags=["패널설계", "재료/소자/공정", "AI/자동화 및 설비개발"],
+)
+
+_DETAIL_DISPLAY: dict[str, Any] = {
+    "compCd": "C90",
+    "cmpNameKr": "삼성디스플레이",
+    "title": "R&D분야 외국인 경력사원 채용",
+    "recruitType": "B",
+    "startdate": "202608201000",
+    "enddate": "202609021700",
+    "qlfctKr": "관련 분야 석·박사 또는 학사 취득 후 2년 이상",
+    "etcKr": "",
+    "introKr": "삼성디스플레이는 OLED 디스플레이 선두기업입니다.",
+}
+
+_CARD_SDI_C31 = _CardInfo(
+    seq=22828,
+    company_name="삼성SDI",
+    title="경력사원 채용(생성형 AI Agent 및 Service Platform개발)",
+    type_text="경력",
+    period_text="2026.08.12 ~ 2026.08.19",
+    role_flags=["AI Agent 및 Service Platform 개발"],
+)
+
+_DETAIL_SDI_C31: dict[str, Any] = {
+    "compCd": "C31",
+    "cmpNameKr": "삼성SDI",
+    "title": "경력사원 채용(생성형 AI Agent 및 Service Platform개발)",
+    "recruitType": "B",
+    "startdate": "202608121000",
+    "enddate": "202608191700",
+    "qlfctKr": "학사 취득 후 2년 이상 유관경력 보유자",
+    "etcKr": "",
+    "introKr": "삼성SDI는 친환경 에너지와 첨단소재를 사업의 양대축으로 합니다.",
+}
+
+_CARD_FINANCE_E11 = _CardInfo(
+    seq=30001,
+    company_name="삼성생명",
+    title="삼성생명 IT개발 경력사원 채용",
+    type_text="경력",
+    period_text="2026.10.01 ~ 2026.10.31",
+    role_flags=["IT개발", "보험상품 개발"],
+)
+
+_DETAIL_FINANCE_E11: dict[str, Any] = {
+    "compCd": "E11",
+    "cmpNameKr": "삼성생명",
+    "title": "삼성생명 IT개발 경력사원 채용",
+    "recruitType": "B",
+    "startdate": "202610011000",
+    "enddate": "202610311700",
+    "qlfctKr": "IT 관련 전공, Java/Spring 경력 3년 이상",
+    "etcKr": "",
+    "introKr": "삼성생명 회사소개",
+}
+
+_LIST_HTML_DISPLAY = """\
+<input type="hidden" class="divCnt" data-value="1" data-max="1">
+<ul>
+  <li>
+    <div>
+      <div class="btnWrap">
+        <button class="btnShare" data-value="22,922" type="button">
+          <i>공유</i>
+        </button>
+      </div>
+      <a data-value="22,922" href="/#none">
+        <p class="company">삼성디스플레이</p>
+        <h3 class="title">R&amp;D분야 외국인 경력사원 채용</h3>
+        <p class="info">
+          <span>경력</span>
+          <span class="period">2026.08.20 ~ 2026.09.02</span>
+        </p>
+      </a>
+      <div class="flagWrap">
+        <span class="flag grey">패널설계</span>
+        <span class="flag grey">재료/소자/공정</span>
+        <span class="flag grey">AI/자동화 및 설비개발</span>
+      </div>
+    </div>
+  </li>
+</ul>
+"""
+
+_LIST_HTML_FINANCE_EMPTY = """\
+<input type="hidden" class="divCnt" data-value="0" data-max="0">
+<div class="noData">
+  <p class="text1">현재 채용중인 공고가 없습니다.</p>
+</div>
+"""
+
+_LIST_HTML_TWO_SAME_SEQ = """\
+<input type="hidden" class="divCnt" data-value="2" data-max="1">
+<ul>
+  <li>
+    <div>
+      <button class="btnShare" data-value="22,828" type="button"></button>
+      <a href="/#none">
+        <p class="company">삼성SDI</p>
+        <h3 class="title">채용공고 A</h3>
+        <p class="info">
+          <span>경력</span>
+          <span class="period">2026.08.12 ~ 2026.08.19</span>
+        </p>
+      </a>
+    </div>
+  </li>
+  <li>
+    <div>
+      <button class="btnShare" data-value="22,828" type="button"></button>
+      <a href="/#none">
+        <p class="company">삼성SDI</p>
+        <h3 class="title">채용공고 A (중복)</h3>
+        <p class="info">
+          <span>경력</span>
+          <span class="period">2026.08.12 ~ 2026.08.19</span>
+        </p>
+      </a>
+    </div>
+  </li>
+</ul>
+"""
+
+_LIST_HTML_TWO_DIFF_SEQ = """\
+<input type="hidden" class="divCnt" data-value="2" data-max="1">
+<ul>
+  <li>
+    <div>
+      <button class="btnShare" data-value="22,828" type="button"></button>
+      <a href="/#none">
+        <p class="company">삼성디스플레이</p>
+        <h3 class="title">공고 A</h3>
+        <p class="info">
+          <span>경력</span>
+          <span class="period">2026.08.12 ~ 2026.08.19</span>
+        </p>
+      </a>
+    </div>
+  </li>
+  <li>
+    <div>
+      <button class="btnShare" data-value="22,922" type="button"></button>
+      <a href="/#none">
+        <p class="company">삼성디스플레이</p>
+        <h3 class="title">공고 B</h3>
+        <p class="info">
+          <span>경력</span>
+          <span class="period">2026.08.20 ~ 2026.09.02</span>
+        </p>
+      </a>
+    </div>
+  </li>
+</ul>
+"""
+
+_PATCH = "app.adapters.official.samsung_careers.AsyncClient"
+
+
+def _make_clients(
+    list_html: str,
+    *detail_dicts: dict | Exception,
+) -> tuple[MagicMock, MagicMock]:
+    """Build (outer, inner) mocks.
+
+    outer handles POST list; inner.get cycles through detail_dicts in order.
+    Pass an Exception instance to simulate a detail fetch error.
+    """
+    outer = MagicMock()
+    outer.__aenter__ = AsyncMock(return_value=outer)
+    outer.__aexit__ = AsyncMock(return_value=False)
+    outer.post = AsyncMock(return_value=_list_response(list_html))
+
+    inner = MagicMock()
+    inner.__aenter__ = AsyncMock(return_value=inner)
+    inner.__aexit__ = AsyncMock(return_value=False)
+
+    get_returns = []
+    for d in detail_dicts:
+        if isinstance(d, Exception):
+            get_returns.append(d)
+        else:
+            get_returns.append(_detail_response(d))
+    if get_returns:
+        inner.get = AsyncMock(side_effect=get_returns)
+    else:
+        inner.get = AsyncMock(return_value=MagicMock())
+
+    return outer, inner
+
+
+def _factory(outer: MagicMock, inner: MagicMock):
+    call_count = 0
+
+    def _make(**kwargs):
+        nonlocal call_count
+        call_count += 1
+        return outer if call_count == 1 else inner
+
+    return _make
+
+
+# ── Fixture tests for new company codes ───────────────────────────────────────
+
+
+@pytest.mark.asyncio
+class TestNewSamsungSourceCodes:
+    """comCode 필터 및 compCd 검증 — 신규 6개 코드."""
+
+    async def _fetch(
+        self,
+        code: str,
+        profile_name: str,
+        list_html: str,
+        *detail_dicts: dict,
+    ):
+        source = _make_source([code])
+        profile = _make_profile(profile_name)
+        outer, inner = _make_clients(list_html, *detail_dicts)
+        with patch(_PATCH, side_effect=_factory(outer, inner)):
+            return await SamsungCareersParser().fetch(
+                source, profile, _make_options()
+            )
+
+    async def test_c90_display_happy_path(self) -> None:
+        result = await self._fetch(
+            "C90", "삼성디스플레이",
+            _LIST_HTML_DISPLAY, _DETAIL_DISPLAY,
+        )
+        assert len(result.postings) == 1
+        p = result.postings[0]
+        assert p.company_name == "삼성디스플레이"
+        assert p.source == "samsung_careers"
+        assert p.source_external_id == "22922"
+
+    async def test_c90_display_roles_preserved(self) -> None:
+        result = await self._fetch(
+            "C90", "삼성디스플레이",
+            _LIST_HTML_DISPLAY, _DETAIL_DISPLAY,
+        )
+        roles = result.postings[0].roles
+        assert "패널설계" in roles
+        assert "AI/자동화 및 설비개발" in roles
+
+    async def test_c90_display_experience_career(self) -> None:
+        result = await self._fetch(
+            "C90", "삼성디스플레이",
+            _LIST_HTML_DISPLAY, _DETAIL_DISPLAY,
+        )
+        assert result.postings[0].experience_level == "경력"
+
+    async def test_c31_sdi_happy_path(self) -> None:
+        list_html = _LIST_HTML_ONE_CARD  # existing fixture, has seq=22828
+        detail = {**_DETAIL_SDI_C31}
+        result = await self._fetch(
+            "C31", "삼성SDI", list_html, detail
+        )
+        assert len(result.postings) == 1
+        p = result.postings[0]
+        assert p.company_name == "삼성SDI"
+        assert p.source_external_id == "22828"
+
+    async def test_c31_sdi_dev_role(self) -> None:
+        list_html = _LIST_HTML_ONE_CARD
+        detail = {**_DETAIL_SDI_C31}
+        result = await self._fetch(
+            "C31", "삼성SDI", list_html, detail
+        )
+        # _LIST_HTML_ONE_CARD has role_flag "AI Agent 및 Service Platform 개발"
+        roles = result.postings[0].roles
+        assert any("AI Agent" in r for r in roles)
+
+    @pytest.mark.parametrize("code,profile_name,exp_comp", [
+        ("E11", "삼성생명", "삼성생명"),
+        ("E21", "삼성화재", "삼성화재"),
+        ("E31", "삼성카드", "삼성카드"),
+        ("E40", "삼성증권", "삼성증권"),
+    ])
+    async def test_financial_empty_is_valid(
+        self, code: str, profile_name: str, exp_comp: str
+    ) -> None:
+        """0건 응답은 오류 없이 빈 리스트를 반환해야 한다."""
+        source = _make_source([code])
+        profile = _make_profile(profile_name)
+        outer = MagicMock()
+        outer.__aenter__ = AsyncMock(return_value=outer)
+        outer.__aexit__ = AsyncMock(return_value=False)
+        outer.post = AsyncMock(
+            return_value=_list_response(_LIST_HTML_FINANCE_EMPTY)
+        )
+        with patch(_PATCH, return_value=outer):
+            result = await SamsungCareersParser().fetch(
+                source, profile, _make_options()
+            )
+        assert result.postings == []
+        assert result.warnings == []
+        assert result.source_stats is not None
+        assert result.source_stats.discovered == 0
+
+    async def test_e11_finance_posting_happy_path(self) -> None:
+        """삼성생명 공고가 있을 때 company_name과 roles가 올바른지 확인."""
+        html = """\
+<input type="hidden" class="divCnt" data-value="1" data-max="1">
+<ul>
+  <li>
+    <div>
+      <button class="btnShare" data-value="30,001" type="button"></button>
+      <a href="/#none">
+        <p class="company">삼성생명</p>
+        <h3 class="title">삼성생명 IT개발 경력사원 채용</h3>
+        <p class="info">
+          <span>경력</span>
+          <span class="period">2026.10.01 ~ 2026.10.31</span>
+        </p>
+      </a>
+      <div class="flagWrap">
+        <span class="flag grey">IT개발</span>
+        <span class="flag grey">보험상품 개발</span>
+      </div>
+    </div>
+  </li>
+</ul>"""
+        result = await self._fetch(
+            "E11", "삼성생명", html, _DETAIL_FINANCE_E11
+        )
+        assert len(result.postings) == 1
+        p = result.postings[0]
+        assert p.company_name == "삼성생명"
+        assert "IT개발" in p.roles
+        assert "보험상품 개발" in p.roles
+
+    async def test_e11_non_dev_role_preserved(self) -> None:
+        """금융사 비개발 직무(영업, 자산운용 등)도 roles에 보존된다."""
+        html = """\
+<input type="hidden" class="divCnt" data-value="1" data-max="1">
+<ul>
+  <li>
+    <div>
+      <button class="btnShare" data-value="30,002" type="button"></button>
+      <a href="/#none">
+        <p class="company">삼성생명</p>
+        <h3 class="title">보험 영업 채용</h3>
+        <p class="info">
+          <span>경력</span>
+          <span class="period">2026.10.01 ~ 2026.10.31</span>
+        </p>
+      </a>
+      <div class="flagWrap">
+        <span class="flag grey">보험 영업</span>
+        <span class="flag grey">자산운용</span>
+      </div>
+    </div>
+  </li>
+</ul>"""
+        detail = {
+            **_DETAIL_FINANCE_E11,
+            "seq": 30002,
+            "title": "보험 영업 채용",
+        }
+        result = await self._fetch("E11", "삼성생명", html, detail)
+        assert len(result.postings) == 1
+        roles = result.postings[0].roles
+        assert "보험 영업" in roles
+        assert "자산운용" in roles
+
+    async def test_compcd_mismatch_for_new_code_skipped(self) -> None:
+        """detail.compCd가 요청한 코드와 다르면 공고를 건너뛴다."""
+        # Request C90 but detail returns C31
+        detail_wrong = {**_DETAIL_DISPLAY, "compCd": "C31"}
+        result = await self._fetch(
+            "C90", "삼성디스플레이",
+            _LIST_HTML_DISPLAY, detail_wrong,
+        )
+        assert result.postings == []
+        assert any("compCd mismatch" in w for w in result.warnings)
+
+    async def test_display_source_record_key_stability(self) -> None:
+        """같은 seq로 두 번 빌드하면 source/source_external_id가 동일."""
+        p1 = _build_posting(_CARD_DISPLAY, _DETAIL_DISPLAY, "삼성디스플레이")
+        p2 = _build_posting(_CARD_DISPLAY, _DETAIL_DISPLAY, "삼성디스플레이")
+        assert p1.source == p2.source
+        assert p1.source_external_id == p2.source_external_id
+
+    async def test_sdi_source_record_key_stability(self) -> None:
+        p1 = _build_posting(_CARD_SDI_C31, _DETAIL_SDI_C31, "삼성SDI")
+        p2 = _build_posting(_CARD_SDI_C31, _DETAIL_SDI_C31, "삼성SDI")
+        assert p1.source == p2.source
+        assert p1.source_external_id == p2.source_external_id
+
+
+@pytest.mark.asyncio
+class TestDuplicateSeqnoDedup:
+    """중복 seqno 공고는 한 번만 처리된다."""
+
+    async def test_same_seq_twice_deduped(self) -> None:
+        # _LIST_HTML_TWO_SAME_SEQ has seq 22828 twice
+        source = _make_source(["C31"])
+        profile = _make_profile("삼성SDI")
+        detail = {**_DETAIL_SDI_C31}
+
+        outer = MagicMock()
+        outer.__aenter__ = AsyncMock(return_value=outer)
+        outer.__aexit__ = AsyncMock(return_value=False)
+        outer.post = AsyncMock(
+            return_value=_list_response(_LIST_HTML_TWO_SAME_SEQ)
+        )
+
+        inner = MagicMock()
+        inner.__aenter__ = AsyncMock(return_value=inner)
+        inner.__aexit__ = AsyncMock(return_value=False)
+        inner.get = AsyncMock(return_value=_detail_response(detail))
+
+        with patch(_PATCH, side_effect=_factory(outer, inner)):
+            result = await SamsungCareersParser().fetch(
+                source, profile, _make_options()
+            )
+
+        # Parser deduplicates into all_cards dict keyed by seq,
+        # so discovered = len(all_cards) = 1 (not raw HTML count).
+        assert result.source_stats is not None
+        assert result.source_stats.discovered == 1
+        assert len(result.postings) == 1
+
+
+@pytest.mark.asyncio
+class TestPartialDetailFailure:
+    """1건 상세 실패 시 나머지 공고는 정상 파싱된다."""
+
+    async def test_first_detail_fail_second_succeeds(self) -> None:
+        source = _make_source(["C90"])
+        profile = _make_profile("삼성디스플레이")
+
+        detail_b = {
+            "compCd": "C90",
+            "cmpNameKr": "삼성디스플레이",
+            "title": "공고 B",
+            "recruitType": "B",
+            "startdate": "202608201000",
+            "enddate": "202609021700",
+            "qlfctKr": "경력 2년 이상",
+            "etcKr": "",
+            "introKr": "",
+        }
+
+        outer = MagicMock()
+        outer.__aenter__ = AsyncMock(return_value=outer)
+        outer.__aexit__ = AsyncMock(return_value=False)
+        outer.post = AsyncMock(
+            return_value=_list_response(_LIST_HTML_TWO_DIFF_SEQ)
+        )
+
+        inner = MagicMock()
+        inner.__aenter__ = AsyncMock(return_value=inner)
+        inner.__aexit__ = AsyncMock(return_value=False)
+        # First detail call raises; second succeeds
+        inner.get = AsyncMock(
+            side_effect=[Exception("timeout"), _detail_response(detail_b)]
+        )
+
+        with patch(_PATCH, side_effect=_factory(outer, inner)):
+            result = await SamsungCareersParser().fetch(
+                source, profile, _make_options()
+            )
+
+        assert len(result.postings) == 1
+        assert result.postings[0].title == "공고 B"
+        assert any("detail" in w for w in result.warnings)
+
+
+@pytest.mark.asyncio
+class TestSamsungCareersExistingRegression:
+    """삼성전자 DX/DS 기존 동작 회귀 검증."""
+
+    async def test_samsung_elec_dx_ds_happy_path(self) -> None:
+        """C10CAA + C10CAH 두 코드 모두 수집 후 dedup."""
+        source = _make_source(["C10CAA", "C10CAH"])
+        profile = _make_profile("삼성전자")
+
+        list_mock_dx = _list_response(_LIST_HTML_ONE_CARD)
+        list_mock_ds = _list_response(_LIST_HTML_EMPTY)
+        detail_elec = {**_DETAIL_ELEC, "compCd": "C10CAA"}
+
+        outer = MagicMock()
+        outer.__aenter__ = AsyncMock(return_value=outer)
+        outer.__aexit__ = AsyncMock(return_value=False)
+        outer.post = AsyncMock(side_effect=[list_mock_dx, list_mock_ds])
+
+        inner = MagicMock()
+        inner.__aenter__ = AsyncMock(return_value=inner)
+        inner.__aexit__ = AsyncMock(return_value=False)
+        inner.get = AsyncMock(return_value=_detail_response(detail_elec))
+
+        with patch(_PATCH, side_effect=_factory(outer, inner)):
+            result = await SamsungCareersParser().fetch(
+                source, profile, _make_options()
+            )
+
+        assert len(result.postings) == 1
+        assert result.postings[0].company_name == "삼성전자"
+
+    async def test_samsung_elec_newcomer_type(self) -> None:
+        """신입 type_text → experience_level 신입."""
+        p = _build_posting(_CARD_NEWCOMER, _DETAIL_ELEC, "삼성전자")
+        assert p.experience_level == "신입"
+
+    async def test_samsung_elec_combined_type(self) -> None:
+        """신입·경력 → experience_level 신입/경력."""
+        p = _build_posting(_CARD_COMBINED, _DETAIL_ELEC, "삼성전자")
+        assert p.experience_level == "신입/경력"
+
+    async def test_samsung_elec_multiple_roles(self) -> None:
+        """복수 role_flags 모두 보존."""
+        p = _build_posting(_CARD_NEWCOMER, _DETAIL_ELEC, "삼성전자")
+        assert "SW개발" in p.roles
+        assert "HW개발" in p.roles
+
+
+# ── Live smoke tests (new companies) ─────────────────────────────────────────
+
+
+@pytest.mark.external
+class TestSamsungNewSourcesLive:
+    """신규 source live smoke test.
+
+    CI 제외 (@pytest.mark.external). 수동 실행:
+      poetry run pytest tests/adapters/test_samsung_careers.py \
+          -k "live_new" -v -s -m external
+    """
+
+    async def _run(self, code: str, company: str):
+        source = _make_source([code], max_discover=50, max_fetch=2)
+        profile = _make_profile(company)
+        result = await SamsungCareersParser().fetch(
+            source, profile, _make_options()
+        )
+        print(
+            f"\n[{code}] {company}: discovered="
+            f"{result.source_stats.discovered if result.source_stats else 0}"
+            f" parsed={len(result.postings)} warnings={result.warnings}"
+        )
+        for p in result.postings:
+            print(
+                f"  → {p.title} | {p.experience_level}"
+                f" | deadline={p.deadline} | roles={p.roles}"
+            )
+        return result
+
+    async def test_live_new_c90_display(self) -> None:
+        result = await self._run("C90", "삼성디스플레이")
+        # API must return HTTP 200 with valid structure (0 postings is OK)
+        assert result.source_stats is not None
+        list_fails = [
+            w for w in result.warnings if "listing" in w or "HTTP" in w
+        ]
+        assert not list_fails, f"C90 list error: {list_fails}"
+
+    async def test_live_new_c31_sdi(self) -> None:
+        result = await self._run("C31", "삼성SDI")
+        assert result.source_stats is not None
+        list_fails = [
+            w for w in result.warnings if "listing" in w or "HTTP" in w
+        ]
+        assert not list_fails, f"C31 list error: {list_fails}"
+
+    @pytest.mark.parametrize("code,company", [
+        ("E11", "삼성생명"),
+        ("E21", "삼성화재"),
+        ("E31", "삼성카드"),
+        ("E40", "삼성증권"),
+    ])
+    async def test_live_financial_valid_empty(
+        self, code: str, company: str
+    ) -> None:
+        """금융사 0건 응답 = 유효한 빈 응답 (HTTP 오류 아님)."""
+        result = await self._run(code, company)
+        assert result.source_stats is not None
+        list_fails = [
+            w for w in result.warnings if "listing" in w or "HTTP" in w
+        ]
+        assert not list_fails, f"{code} list error: {list_fails}"
