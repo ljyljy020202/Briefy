@@ -51,8 +51,7 @@ public record RecommendationCandidate(
         .thenComparing(
             c -> c.posting().getDeadline(), Comparator.nullsLast(Comparator.naturalOrder()))
         .thenComparing(
-            c -> firstSeenDate(c.posting()),
-            Comparator.nullsLast(Comparator.reverseOrder()))
+            c -> firstSeenDate(c.posting()), Comparator.nullsLast(Comparator.reverseOrder()))
         .thenComparingLong(c -> c.posting().getId() != null ? c.posting().getId() : Long.MAX_VALUE);
   }
 

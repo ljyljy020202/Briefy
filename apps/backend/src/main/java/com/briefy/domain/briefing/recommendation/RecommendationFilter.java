@@ -62,8 +62,7 @@ public final class RecommendationFilter {
     List<String> prefEmpTypes = extractList(preference, "employmentTypes");
     String postingEmpType = posting.getEmploymentType();
     if (!prefEmpTypes.isEmpty() && postingEmpType != null && !postingEmpType.isBlank()) {
-      boolean anyMatch =
-          prefEmpTypes.stream().anyMatch(e -> e.equalsIgnoreCase(postingEmpType));
+      boolean anyMatch = prefEmpTypes.stream().anyMatch(e -> e.equalsIgnoreCase(postingEmpType));
       if (!anyMatch) {
         return FilterResult.exclude(FilterReason.EMPLOYMENT_TYPE_MISMATCH);
       }
@@ -86,10 +85,7 @@ public final class RecommendationFilter {
   private static List<String> extractList(Map<String, Object> pref, String key) {
     Object val = pref.get(key);
     if (val instanceof List<?> list) {
-      return list.stream()
-          .filter(String.class::isInstance)
-          .map(String.class::cast)
-          .toList();
+      return list.stream().filter(String.class::isInstance).map(String.class::cast).toList();
     }
     return List.of();
   }

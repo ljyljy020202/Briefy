@@ -6,8 +6,8 @@ package com.briefy.domain.briefing.recommendation;
  * <p>{@code relevanceScore} = sum of the eight preference-based components. {@code adjustedScore} =
  * relevanceScore − exposurePenalty (always an exact subtraction — no other adjustments here).
  *
- * <p>Time-based or editorial signals (recency bonus, urgency bonus) are intentionally absent.
- * Those are computed downstream in the selector layer and must never be added here.
+ * <p>Time-based or editorial signals (recency bonus, urgency bonus) are intentionally absent. Those
+ * are computed downstream in the selector layer and must never be added here.
  */
 public record ScoreBreakdown(
     int roleScore,

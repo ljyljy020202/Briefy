@@ -19,8 +19,9 @@ import java.util.Map;
  *
  * <p>Only preference-based signals are included (role, company, skill, experience, industry,
  * location, employment type, company size). Time-based and editorial signals (recency, urgency
- * bonus, source type bonus) are intentionally excluded so that {@link ScoreBreakdown#relevanceScore}
- * remains a pure measure of how well the posting matches the user's stated preferences.
+ * bonus, source type bonus) are intentionally excluded so that {@link
+ * ScoreBreakdown#relevanceScore} remains a pure measure of how well the posting matches the user's
+ * stated preferences.
  *
  * <p>This class is stateless; all methods are static.
  */
@@ -39,8 +40,8 @@ public final class RelevanceScorer {
 
   // ── Exposure penalty thresholds ───────────────────────────────────────────
   static final int EXPOSURE_PENALTY_YESTERDAY = 25; // exposed within 1 day
-  static final int EXPOSURE_PENALTY_RECENT = 15;    // 2–3 days ago
-  static final int EXPOSURE_PENALTY_STALE = 10;     // 4–6 days ago
+  static final int EXPOSURE_PENALTY_RECENT = 15; // 2–3 days ago
+  static final int EXPOSURE_PENALTY_STALE = 10; // 4–6 days ago
 
   private RelevanceScorer() {}
 
@@ -119,9 +120,7 @@ public final class RelevanceScorer {
         && linkedCompany.getIndustryCodes() != null
         && !linkedCompany.getIndustryCodes().isBlank()) {
       List<String> codes =
-          Arrays.stream(linkedCompany.getIndustryCodes().split(","))
-              .map(String::trim)
-              .toList();
+          Arrays.stream(linkedCompany.getIndustryCodes().split(",")).map(String::trim).toList();
       for (String prefIndustry : prefIndustries) {
         if (codes.stream().anyMatch(c -> c.equalsIgnoreCase(prefIndustry))) {
           industryScore = SCORE_INDUSTRY;
@@ -234,10 +233,7 @@ public final class RelevanceScorer {
   static List<String> extractList(Map<String, Object> pref, String key) {
     Object val = pref.get(key);
     if (val instanceof List<?> list) {
-      return list.stream()
-          .filter(String.class::isInstance)
-          .map(String.class::cast)
-          .toList();
+      return list.stream().filter(String.class::isInstance).map(String.class::cast).toList();
     }
     return List.of();
   }
@@ -249,8 +245,6 @@ public final class RelevanceScorer {
   private static List<String> intersectRoles(
       List<String> prefRoles, String postingTitle, String postingRolesJson) {
     String text = JobRolePolicy.buildPrimaryText(postingTitle, postingRolesJson);
-    return prefRoles.stream()
-        .filter(r -> text.contains(r.toLowerCase()))
-        .toList();
+    return prefRoles.stream().filter(r -> text.contains(r.toLowerCase())).toList();
   }
 }
