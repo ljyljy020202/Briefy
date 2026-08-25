@@ -382,7 +382,7 @@ If all real-source flags are `false`, `FixtureAdapter` is used as a safe fallbac
 
 ## UserBriefingWorkflow
 
-Triggered per user by Spring (`BriefingService.generateBriefing` or `generateScheduledBriefing`). Spring loads the user's preferences and today's `job_postings` from DB, pre-scores candidates, and sends the top 30 as a `candidatePool` in the request. The Agent filters, re-ranks, selects the top 7, enriches them via LLM, and synthesizes a Markdown briefing. Both LLM nodes fall back to deterministic equivalents when `OPENAI_API_KEY` is absent or any LLM call fails — the pipeline never returns HTTP 500.
+Triggered per user by Spring (`BriefingService.generateBriefing` or `generateScheduledBriefing`). Spring runs the full candidate pipeline (hard filter → relevance scoring → exposure penalty → Top-7 selection) and sends the final ranked list to the Agent. The Agent preserves the Backend's rank order and runs an LLM workflow to generate, validate, and if necessary rewrite the briefing. If any LLM step fails, a deterministic fallback report is produced — the pipeline never returns HTTP 500.
 
 **The Agent does not call external sources and does not access the database.**
 
@@ -391,19 +391,25 @@ Triggered per user by Spring (`BriefingService.generateBriefing` or `generateSch
 | Step | Owner |
 |---|---|
 | Load user preferences from `user_briefing_preferences` | Spring |
-| Load today's active, non-expired `job_postings` from DB (7-day exposure window) | Spring |
-| Pre-score and classify candidates (CandidateType, urgency bonus, exposure penalty) | Spring (`BriefingService.scorePosting`) |
-| Quota-select top 30 (NEW≤12, URGENT≤10, EVERGREEN≤8) and set `preScoreComputed=true` | Spring |
-| Send top 30 to Agent with `preScore`, `preScoreComputed`, `candidateType` | Spring (`AgentClient`) |
-| Filter: remove past-deadline, missing title/URL, clear role mismatch, entry-level mismatch | Agent (`filter_job_postings_node`) |
-| Rank: use `preScore` directly when `preScoreComputed=true`; agent fallback otherwise | Agent (`rank_job_postings_node`) |
-| Select top 7 with quota (NEW≤3, URGENT≤2, rest by score) | Agent (`select_top_items_node`) |
-| Enrich postings — LLM batch summary + matching reason (or deterministic fallback) | Agent (`enrich_selected_node`) |
-| Synthesize Markdown report — LLM full report + summary line (or deterministic fallback) | Agent (`synthesize_report_node`) |
-| Quality check (log-only guardrail) | Agent (`quality_check_node`) |
+| Load today's active, non-expired `job_postings` from DB | Spring |
+| Hard filter: expired, role mismatch, experience mismatch, employment type mismatch | Spring (`RecommendationFilter`) |
+| relevanceScore: preference signals only — role, company, skill, experience, industry, location, employment type, company size | Spring (`RelevanceScorer`) |
+| Exposure penalty: separate from relevanceScore; applied to `adjustedScore` | Spring |
+| isNew / isUrgent: computed independently per posting | Spring |
+| Top-7 quota selection and rank assignment | Spring (`RecommendationSelector` + `BriefingService`) |
+| Send Top-7 to Agent with `rank`, `scoreBreakdown`, `matchEvidence`, `isNew`, `isUrgent` | Spring (`AgentClient`) |
+| Sort postings by `rank` (preserve Backend order — no re-ranking) | Agent (`select_top_items_node`) |
+| Enrich postings — LLM batch summary + matching reason | Agent (`enrich_selected_node`) |
+| Synthesize Markdown briefing via LLM | Agent (`synthesize_report_node`) |
+| Deterministic validation (sections, referenced IDs) | Agent (`validate_report_node`) |
+| Rewrite via LLM on validation failure (max 1 attempt) | Agent (`rewrite_node`) |
+| Deterministic fallback report on LLM error or repeat failure | Agent (`deterministic_fallback_node`) |
+| Format and return response | Agent (`format_response_node`) |
 | Save `briefing_reports` and `briefing_articles` rows | Spring |
 
 ### Agent request (Spring → Agent)
+
+Backend sends at most 7 postings — the final selected list after all filtering and ranking. **Removed fields:** `preScore`, `preScoreComputed`, `candidateType`, `position`, `contentHash`, `postedAt`.
 
 ```json
 {
@@ -423,24 +429,45 @@ Triggered per user by Spring (`BriefingService.generateBriefing` or `generateSch
     "jobPostings": [
       {
         "id": 1,
+        "rank": 1,
         "source": "원티드",
         "sourceUrl": "https://www.wanted.co.kr/wd/00001",
         "companyName": "네이버",
         "title": "네이버 백엔드 개발자",
-        "position": "백엔드 개발자",
         "employmentType": "정규직",
         "experienceLevel": "신입",
         "location": "서울",
-        "deadline": "2026-07-15",
+        "deadline": "2026-07-02",
         "skills": ["Spring Boot", "Java"],
         "roles": ["백엔드 개발자"],
         "description": "채용 공고 설명",
-        "postedAt": "2026-07-01T09:00:00",
+        "publishedAt": "2026-06-30T09:00:00",
         "collectedDate": "2026-07-01",
-        "contentHash": "a3f2...sha256hex...64chars",
-        "preScore": 75,
-        "preScoreComputed": true,
-        "candidateType": "NEW"
+        "isNew": true,
+        "isUrgent": true,
+        "scoreBreakdown": {
+          "roleScore": 30,
+          "companyScore": 25,
+          "skillScore": 10,
+          "experienceScore": 15,
+          "industryScore": 0,
+          "locationScore": 10,
+          "employmentTypeScore": 10,
+          "companySizeScore": 0,
+          "relevanceScore": 100,
+          "exposurePenalty": 15,
+          "adjustedScore": 85
+        },
+        "matchEvidence": {
+          "matchedRoles": ["백엔드 개발자"],
+          "matchedCompanies": ["네이버"],
+          "matchedSkills": ["Spring Boot", "Java"],
+          "matchedLocations": ["서울"],
+          "matchedExperienceLevels": ["신입"],
+          "matchedEmploymentTypes": ["정규직"],
+          "matchedIndustries": [],
+          "matchedCompanySizes": []
+        }
       }
     ],
     "companyIssues": [],
@@ -451,107 +478,101 @@ Triggered per user by Spring (`BriefingService.generateBriefing` or `generateSch
 
 | Field | Notes |
 |---|---|
-| `candidatePool.jobPostings` | Top 30 pre-scored candidates from `job_postings` table, selected and scored by Spring |
-| `candidatePool.jobPostings[].preScore` | Score assigned by Spring's `BriefingService.scorePosting()` based on user preferences |
+| `candidatePool.jobPostings` | Final Top-7 selected and ranked by Spring; `1 ≤ count ≤ 7` |
+| `candidatePool.jobPostings[].rank` | 1-based rank assigned by Spring (1 = highest priority) |
+| `candidatePool.jobPostings[].isNew` | `publishedAt` or `collectedDate` ≤ 3 days before `briefingDate` |
+| `candidatePool.jobPostings[].isUrgent` | `deadline` within 7 days of `briefingDate`. Independent of `isNew` — both can be true simultaneously |
+| `candidatePool.jobPostings[].scoreBreakdown` | Breakdown of `relevanceScore`, `exposurePenalty`, `adjustedScore` and each component |
+| `candidatePool.jobPostings[].matchEvidence` | Lists of matched roles, companies, skills, locations, experience levels, employment types, industries, company sizes |
 | `candidatePool.companyIssues` | Always `[]` in 1st MVP |
 | `candidatePool.industryIssues` | Always `[]` in 1st MVP |
 | `userId` | Forwarded for logging/tracing only; Agent does not persist it |
-| `tone` | Forwarded from the frontend or scheduler; not yet used in LLM prompts |
+| `tone` | Forwarded from the frontend or scheduler; used as tone hint in LLM prompts |
 
-### Pre-scoring logic (Spring side)
+### Backend selection policy summary
 
-`BriefingService.scorePosting()` scores each `job_postings` row. The score includes preference matching, urgency bonus, and exposure penalty:
+`RelevanceScorer` uses **preference signals only** — no recency or urgency bonus in `relevanceScore`:
 
-**Preference matching:**
-
-| Match | Score |
+| Signal | Score |
 |---|---|
-| Role or title matches `preference.roles` | +30 |
-| Company in `preference.companies` (targeted) | +25 |
-| Each matching skill (max +25 total) | +5 each |
-| Experience level matches | +15 |
-| Industry matches (via Company Registry) | +12 |
-| Location matches `preference.locations` | +10 |
-| Employment type matches | +10 |
-| Company size matches (via Company Registry) | +8 |
-| Collected within last 3 days (`collectedDate` or `publishedAt`) | +5 |
-
-**Urgency bonus (added on top of preference score):**
-
-| Condition | Bonus |
-|---|---|
-| Deadline ≤ 1 day | +25 (`URGENCY_BONUS_CRITICAL`) |
-| Deadline ≤ 3 days | +15 (`URGENCY_BONUS_NEAR`) |
-
-**Exposure penalty (subtracted for recently shown postings):**
-
-| Last exposure | Penalty |
-|---|---|
-| Shown yesterday or today | −40 |
-| Shown 2–3 days ago | −25 |
-| Shown 4–6 days ago | −10 |
-| Not shown in last 7 days | 0 |
-
-Spring classifies each candidate (`CandidateType`) before building the pool:
-
-| Type | Condition |
-|---|---|
-| `NEW` | `publishedAt` or `collectedDate` ≤ 3 days ago |
-| `URGENT` | Not NEW, and deadline within 7 days |
-| `EVERGREEN` | Active, un-expired, not NEW or URGENT |
-
-Spring quota-selects top 30 (NEW≤12, URGENT≤10, EVERGREEN≤8, MAX_PER_COMPANY=2, MAX_PER_TARGETED_COMPANY=3), sets `preScoreComputed=true` and `candidateType` on every DTO, and sends them as `candidatePool.jobPostings`.
-
-### Agent ranking logic
-
-When `preScoreComputed=true` (always the case for Spring-originated requests), the Agent uses `preScore` directly as the final ranking score. It does **not** add its own score on top — Backend is the authoritative personalization layer.
-
-When `preScoreComputed=false` (direct calls to Agent, bypassing Backend), the Agent falls back to its own scoring:
-
-| Match | Agent fallback score |
-|---|---|
-| Role match (title or position) | +30 |
-| Company match | +15 |
-| Each matching skill (max +25 total) | +5 each |
+| Role match | +30 |
+| Target company match | +25 |
+| Each matching skill (max 5 skills) | +5 each (max +25) |
+| Experience level match | +15 |
+| Industry match (via Company Registry) | +15 |
 | Location match | +10 |
-| Experience level match | +10 |
-| Employment type match | +5 |
-| Company size (description heuristic) | +5 |
-| Industry (description heuristic) | +5 |
-| Collected within last 3 days | +5 |
+| Employment type match | +10 |
+| Company size match (via Company Registry) | +15 |
 
-Note: Deadline urgency is intentionally omitted from the fallback score to avoid double-counting with the Backend's urgency bonus when `preScoreComputed` is later true.
+Exposure penalty (separate from relevanceScore, subtracted to produce `adjustedScore`):
 
-### Agent filter guards
-
-Before ranking, `filter_job_postings_node` removes two categories of clear mismatches (ambiguous cases always pass through):
-
-| Guard | Condition for removal |
+| Age of posting | Penalty |
 |---|---|
-| Role mismatch | Both user preferences AND posting have explicit roles, with no overlap in title/position/roles field |
-| Experience mismatch | User has `신입` as the sole experience level AND posting explicitly requires `3년 이상` or higher |
+| ≤ 1 day | 25 |
+| 2–3 days | 15 |
+| 4–6 days | 10 |
+| ≥ 7 days | 0 |
 
-### Graph structure (implemented)
+`RecommendationSelector` Top-7 policy: `MAX_RECOMMENDATIONS=7`, `MIN_NEW=2`, `MIN_URGENT=1`, `MAX_PER_COMPANY=2`. If the pool cannot meet quota minimums, remaining slots are filled by `adjustedScore` descending.
 
-```python
-filter_job_postings_node      ← remove: past-deadline, missing title/company_name/sourceUrl,
-      ↓                          clear role mismatch, entry-level mismatch
-rank_job_postings_node        ← finalScore = preScore (if preScoreComputed) else _agent_score(); sort desc
-      ↓
-select_top_items_node         ← _build_top7(): NEW≤3, URGENT≤2, fill rest by score (_TOP_N = 7)
-      ↓
-enrich_selected_node          ← LLM Call 1: batch enrichment (summary, matchingReason, matchedKeywords)
-                                  on failure / no key → enrichments = {}
-      ↓
-synthesize_report_node        ← merge enrichment + deterministic fallback per posting
-                                  if empty selected → _empty_state_report()
-                                  LLM Call 2: Markdown report + overallSummary
-                                  on failure → _build_deterministic_report()
-      ↓
-quality_check_node            ← log-only guardrail; never modifies state or raises
+### LangGraph structure (implemented)
+
+The Agent sorts postings by `rank` on entry and **never re-ranks**. The graph uses conditional edges for validation and fallback:
+
+```
+select_top_items_node     ← sort by rank (Backend order); skip postings with no title
+        │
+        ├─ empty pool ──→ format_response_node  (empty-state deterministic report)
+        │
+        ↓
+enrich_selected_node      ← LLM Call 1: batch enrichment (summary, matchingReason, matchedKeywords)
+        │                   on LLM error or no key → enrichments = {} (pipeline continues)
+        ↓
+synthesize_report_node    ← LLM Call 2: full Markdown briefing + overallSummary + referencedPostingIds
+        │                   on LLM error → llm_error_category = "synthesis_failed"
+        ↓
+validate_report_node      ← deterministic checks (no LLM):
+        │                   · 6 required sections present
+        │                   · referencedPostingIds matches selected IDs (set equality)
+        │                   · referencedPostingIds order matches input rank order
+        │
+        ├─ ValidationStatus.PASS ──────────────────────→ format_response_node
+        │
+        ├─ ValidationStatus.RETRYABLE (rewriteCount = 0)
+        │       ↓
+        │   rewrite_node  ← LLM Call 3: rewrite draft fixing listed errors
+        │       │           on LLM error → ValidationStatus.FALLBACK_REQUIRED
+        │       ↓
+        │   validate_report_node  (re-validate; rewriteCount = 1)
+        │       ├─ PASS ────────────────────────────────→ format_response_node
+        │       └─ any failure (rewriteCount ≥ 1) ──────→ deterministic_fallback_node
+        │
+        └─ ValidationStatus.FALLBACK_REQUIRED ─────────→ deterministic_fallback_node
+                │
+            deterministic_fallback_node  ← no LLM; builds report from matchEvidence
+                ↓
+            format_response_node
 ```
 
-`enrich_selected_node` and `synthesize_report_node` are async. All other nodes are synchronous and deterministic. `tokenUsage` accumulates Call 1 + Call 2 token counts; it is `{inputTokens: 0, outputTokens: 0}` when LLM is skipped or both calls fail.
+**State fields used across nodes:**
+
+| Field | Type | Description |
+|---|---|---|
+| `selected` | `list[CandidateJobPosting]` | Sorted by rank; excludes postings with no title |
+| `enrichments` | `dict[str, JobPostingEnrichment]` | Keyed by posting id (str); empty dict if enrichment fails |
+| `synthesis_result` | `BriefingSynthesisResult \| None` | LLM output from synthesize or rewrite |
+| `validation_status` | `ValidationStatus` | `pending \| pass \| retryable \| fallback_required` |
+| `validation_errors` | `list[str]` | Error codes for rewrite prompt |
+| `rewrite_count` | `int` | Max 1; fallback triggered if ≥ 1 and still failing |
+| `token_usage` | `LLMTokenUsage` | Accumulated across all LLM calls (enrich + synthesize/rewrite) |
+| `llm_error_category` | `str` | `"" \| "enrichment_failed" \| "synthesis_failed" \| "rewrite_failed"` |
+
+**What deterministic validation checks:**
+- All 6 required Markdown sections are present (`## 오늘의 핵심 요약`, `## 🏆 추천 공고 TOP n`, `## ⏰ 신규/마감 임박 공고`, `## 💡 오늘의 지원 추천 액션`, `## 🔑 오늘의 키워드`, `## ✏️ 한 줄 정리`)
+- `referencedPostingIds` set equals the set of selected posting IDs
+- `referencedPostingIds` order matches the input rank order
+
+**What validation does not check:** content quality, hallucination, factual accuracy, or language quality — these remain the responsibility of prompt engineering.
 
 ### Agent response (Agent → Spring)
 
@@ -567,7 +588,7 @@ quality_check_node            ← log-only guardrail; never modifies state or ra
       "url": "https://www.wanted.co.kr/wd/00001",
       "summary": "네이버 서버 플랫폼팀에서 Java/Spring Boot 기반 백엔드 개발자를 모집합니다.",
       "whyItMatters": "관심 기업 네이버 · 백엔드 개발자 역할 일치 · Spring Boot, Java 스킬 매칭",
-      "publishedAt": "2026-07-01T09:00:00",
+      "publishedAt": "2026-06-30T09:00:00",
       "companyName": "네이버"
     }
   ],
@@ -580,13 +601,12 @@ quality_check_node            ← log-only guardrail; never modifies state or ra
 
 | Field | Notes |
 |---|---|
-| `summary` | LLM 경로: `overallSummary` (한 문장). Fallback: `{date} 기준, {companies}에서 추천 공고 {n}건을 선별했습니다.` |
-| `content` | `# 오늘의 채용 브리핑` 헤딩으로 시작. 6개 필수 섹션 포함 Markdown (LLM 경로 또는 템플릿 fallback 모두 동일 구조) |
-| `articles[].publishedAt` | 항상 `"{briefingDate}T09:00:00"` — Spring `LocalDateTime.parse()` 호환 |
-| `articles[].companyName` | Agent 전용 필드; Spring `AgentBriefingResponse.AgentArticle`에 없으므로 Jackson이 무시 |
-| `tokenUsage` | LLM 없으면 `{inputTokens: 0, outputTokens: 0}` |
+| `summary` | LLM 경로: `overallSummary`. Fallback: `{date} 기준, {companies}에서 추천 공고 {n}건을 선별했습니다.` |
+| `content` | `# 오늘의 채용 브리핑` 헤딩으로 시작하는 Markdown. LLM 경로와 fallback 모두 6개 필수 섹션 포함 |
+| `articles` | 선택된 공고 목록. Backend rank 순서 유지. candidatePool이 비었거나 유효한 공고가 없으면 `[]` |
+| `tokenUsage` | enrichment + synthesis/rewrite 호출 토큰 합산. LLM 없으면 `{inputTokens: 0, outputTokens: 0}` |
 
-Spring saves `title`, `summary`, `content`, `tokenUsage` to `briefing_reports`, and each `articles` item to `briefing_articles`.
+**Fallback behavior:** If any LLM call fails, `deterministic_fallback_node` builds the report from `matchEvidence` without LLM. The `tokenUsage` reflects only tokens consumed before the failure. The response format is identical to the normal path — Spring cannot distinguish fallback from LLM-generated output.
 
 ---
 
@@ -599,7 +619,7 @@ Spring Scheduler / POST /api/admin/collections/daily
     ├─ Spring: aggregate seed keywords from user_briefing_preferences
     ├─ Spring: create collection_jobs row (PENDING → PROCESSING)
     ├─ Spring → Agent: POST /collections/daily (with seedKeywords)
-    ├─ Agent: return raw jobPostings (deterministic stub in 1st MVP)
+    ├─ Agent: return raw jobPostings
     ├─ Spring: upsert job_postings via CandidatePoolService
     └─ Spring: mark collection_jobs COMPLETED (or FAILED)
 
@@ -609,13 +629,14 @@ User POST /api/briefings/generate  OR  Spring BriefingScheduler
     ├─ (Scheduler path only) Filter: only process users with briefing_email_enabled = true
     ├─ Spring: load user preferences from user_briefing_preferences
     ├─ Spring: load job_postings for today's date
-    ├─ Spring: pre-score candidates; take top 30
+    ├─ Spring: RecommendationFilter (hard filter) → RelevanceScorer → exposure penalty
+    ├─ Spring: RecommendationSelector Top-7 policy → assign rank 1..N
     ├─ Spring: create briefing_jobs row (PENDING → PROCESSING)
-    ├─ Spring → Agent: POST /briefings/generate (with candidatePool)
-    ├─ Agent: filter → re-rank → select top 7 → enrich (LLM/fallback) → synthesize (LLM/fallback) → quality check
+    ├─ Spring → Agent: POST /briefings/generate (candidatePool: max 7 postings with rank/scoreBreakdown/matchEvidence)
+    ├─ Agent: sort by rank → enrich (LLM) → synthesize (LLM) → validate → [rewrite once if needed] → [fallback if needed]
     ├─ Spring: save briefing_reports + briefing_articles
     ├─ Spring: mark briefing_jobs COMPLETED (or FAILED)
-    └─ (Scheduler path, if EMAIL_AUTO_SEND_ENABLED=true) Spring: send email via EmailDeliveryService; record in delivery_logs
+    └─ (Scheduler path, if EMAIL_AUTO_SEND_ENABLED=true) Spring: send email; record in delivery_logs
 ```
 
 The Agent server is called **only by the Spring Boot backend** (`AgentClient`). The frontend never calls the Agent directly. Agent endpoints do not use the `/api` prefix.

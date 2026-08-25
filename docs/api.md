@@ -751,10 +751,10 @@ Requires that the daily candidate pool (`job_postings`) has already been collect
 1. Load authenticated user
 2. Load active user_briefing_preferences for the user
 3. Load today's job_postings candidate pool from DB
-4. Pre-score candidates against user preferences; select top 30
+4. Hard filter → relevance scoring → exposure penalty → Top-7 selection (RecommendationSelector)
 5. Create briefing_jobs row (status = PENDING, triggerType = MANUAL)
 6. Update job status → PROCESSING, set startedAt
-7. Call Agent: POST /briefings/generate with preference + candidatePool
+7. Call Agent: POST /briefings/generate with preference + candidatePool (Top-7 with rank, scoreBreakdown, matchEvidence)
 8. On success:
    a. Insert briefing_reports row
    b. Insert briefing_articles rows
@@ -931,7 +931,7 @@ POST /api/briefings/{id}/feedback
 
 **HTTP Status:** `201 Created`
 
-**Notes:** MVP stores feedback only. Future personalization (adjusting ranking weights in `UserBriefingWorkflow` based on feedback) is out of scope.
+**Notes:** MVP stores feedback only. Future use (e.g. adjusting recommendation weights based on feedback) is out of scope for 1st MVP.
 
 **Possible errors:** `UNAUTHORIZED`, `VALIDATION_ERROR`, `BRIEFING_REPORT_NOT_FOUND`, `FORBIDDEN`
 
@@ -1367,9 +1367,11 @@ POST /briefings/generate
 
 **Auth:** None (internal network only; restrict via Docker network or security group in production)
 
-**Description:** Runs `UserBriefingWorkflow`. Receives a pre-scored `candidatePool` assembled by Spring, filters past-deadline / invalid postings, re-ranks by combined score, selects the top 7, and assembles a Markdown briefing. Does **not** call external sources or the database — all input data is in the request body.
+**Description:** Runs `UserBriefingWorkflow`. Receives the final Top-7 candidate pool assembled and ranked by Spring, enriches each posting via LLM, synthesizes a Markdown briefing, validates it deterministically, and optionally rewrites once if validation fails. Falls back to a deterministic (no-LLM) report on any LLM error. Does **not** call external sources or the database — all input data is in the request body. Does **not** re-rank — the Backend's `rank` order is preserved.
 
-LLM enrichment (enrichment + synthesis via `gpt-4o-mini`) is enabled when `OPENAI_API_KEY` is set. Both LLM nodes fall back to deterministic equivalents when the key is absent or any LLM call fails — the pipeline never returns HTTP 500. `tokenUsage` reflects actual LLM token usage when enabled; it is `{inputTokens: 0, outputTokens: 0}` in fallback mode.
+`tokenUsage` accumulates all LLM calls (enrichment + synthesis + optional rewrite). It is `{inputTokens: 0, outputTokens: 0}` when LLM is skipped or all calls fail.
+
+**Removed request fields (no longer sent by Backend):** `preScore`, `preScoreComputed`, `candidateType`, `position`, `contentHash`, `postedAt`.
 
 **Request:**
 
@@ -1393,24 +1395,45 @@ LLM enrichment (enrichment + synthesis via `gpt-4o-mini`) is enabled when `OPENA
     "jobPostings": [
       {
         "id": 1,
+        "rank": 1,
         "source": "원티드",
         "sourceUrl": "https://www.wanted.co.kr/wd/00001",
         "companyName": "네이버",
         "title": "네이버 백엔드 개발자",
-        "position": "백엔드 개발자",
         "employmentType": "정규직",
         "experienceLevel": "신입",
         "location": "서울",
-        "deadline": "2026-07-15",
+        "deadline": "2026-07-02",
         "skills": ["Spring Boot", "Java"],
         "roles": ["백엔드 개발자"],
         "description": "채용 공고 설명",
-        "postedAt": "2026-07-01T09:00:00",
+        "publishedAt": "2026-06-30T09:00:00",
         "collectedDate": "2026-07-01",
-        "contentHash": "a3f2...sha256hex...64chars",
-        "preScore": 75,
-        "preScoreComputed": true,
-        "candidateType": "NEW"
+        "isNew": true,
+        "isUrgent": true,
+        "scoreBreakdown": {
+          "roleScore": 30,
+          "companyScore": 25,
+          "skillScore": 10,
+          "experienceScore": 15,
+          "industryScore": 0,
+          "locationScore": 10,
+          "employmentTypeScore": 10,
+          "companySizeScore": 0,
+          "relevanceScore": 100,
+          "exposurePenalty": 15,
+          "adjustedScore": 85
+        },
+        "matchEvidence": {
+          "matchedRoles": ["백엔드 개발자"],
+          "matchedCompanies": ["네이버"],
+          "matchedSkills": ["Spring Boot", "Java"],
+          "matchedLocations": ["서울"],
+          "matchedExperienceLevels": ["신입"],
+          "matchedEmploymentTypes": ["정규직"],
+          "matchedIndustries": [],
+          "matchedCompanySizes": []
+        }
       }
     ],
     "companyIssues": [],
@@ -1424,47 +1447,64 @@ LLM enrichment (enrichment + synthesis via `gpt-4o-mini`) is enabled when `OPENA
 | `userId` | Long | For logging and tracing only; Agent does not persist it |
 | `category` | String | Briefing category code (e.g. `JOB_POSTING`) |
 | `preference` | Object | The user's `preference_json` from `user_briefing_preferences` |
-| `briefingDate` | String | ISO-8601 date (`YYYY-MM-DD`); used for deadline filtering |
-| `tone` | String | Forwarded from the frontend or scheduler; used as tone hint in LLM prompts |
-| `candidatePool.jobPostings` | Array | Top 30 pre-scored `job_postings` rows selected by Spring; sorted by `preScore` desc |
-| `candidatePool.jobPostings[].preScore` | Integer | Score assigned by Spring's preference-matching + urgency bonus + exposure penalty logic |
-| `candidatePool.jobPostings[].preScoreComputed` | Boolean | Always `true` when Spring builds this DTO. Agent uses this flag to distinguish "Backend scored 0" from "score not provided" |
-| `candidatePool.jobPostings[].candidateType` | String | `NEW`, `URGENT`, or `EVERGREEN` — classified by Backend before sending to Agent |
+| `briefingDate` | String | ISO-8601 date (`YYYY-MM-DD`) |
+| `tone` | String | Tone hint forwarded to LLM prompts |
+| `candidatePool.jobPostings` | Array | Final Top-7 selected and ranked by Spring; `1 ≤ count ≤ 7` |
+| `candidatePool.jobPostings[].rank` | Integer | 1-based rank assigned by Spring; Agent sorts by this and preserves the order |
+| `candidatePool.jobPostings[].isNew` | Boolean | `publishedAt` or `collectedDate` ≤ 3 days before `briefingDate` |
+| `candidatePool.jobPostings[].isUrgent` | Boolean | `deadline` within 7 days of `briefingDate`. Independent — both `isNew` and `isUrgent` can be `true` simultaneously |
+| `candidatePool.jobPostings[].scoreBreakdown` | Object | `roleScore`, `companyScore`, `skillScore`, `experienceScore`, `industryScore`, `locationScore`, `employmentTypeScore`, `companySizeScore`, `relevanceScore`, `exposurePenalty`, `adjustedScore` |
+| `candidatePool.jobPostings[].matchEvidence` | Object | `matchedRoles`, `matchedCompanies`, `matchedSkills`, `matchedLocations`, `matchedExperienceLevels`, `matchedEmploymentTypes`, `matchedIndustries`, `matchedCompanySizes` |
 | `candidatePool.companyIssues` | Array | Always `[]` in 1st MVP |
 | `candidatePool.industryIssues` | Array | Always `[]` in 1st MVP |
 
-**Response:**
+**Normal response (1–7 postings selected):**
 
 ```json
 {
   "title": "오늘의 채용 브리핑 — 백엔드 개발자 (2026-07-01)",
-  "summary": "2026-07-01 기준, 네이버·카카오에서 추천 공고 2건을 선별했습니다.",
-  "content": "## 오늘의 핵심 요약\n\n...\n\n## 🏆 추천 공고 TOP 2\n\n...\n\n## 💡 오늘의 지원 추천 액션\n\n...",
+  "summary": "네이버·카카오에서 추천 공고 2건을 선별했습니다.",
+  "content": "# 오늘의 채용 브리핑\n\n## 오늘의 핵심 요약\n\n...\n\n## 🏆 추천 공고 TOP 2\n\n...\n\n## ⏰ 신규/마감 임박 공고\n\n...\n\n## 💡 오늘의 지원 추천 액션\n\n...\n\n## 🔑 오늘의 키워드\n\n...\n\n## ✏️ 한 줄 정리\n\n...",
   "articles": [
     {
       "title": "네이버 백엔드 개발자",
       "source": "원티드",
       "url": "https://www.wanted.co.kr/wd/00001",
-      "summary": "네이버 — 백엔드 개발자 채용",
-      "whyItMatters": "관심 기업(네이버) · 백엔드 개발자 포지션 매칭 · 스킬 매칭: Spring Boot, Java",
-      "publishedAt": "2026-07-01T09:00:00",
+      "summary": "네이버 서버 플랫폼팀에서 Java/Spring Boot 기반 백엔드 개발자를 모집합니다.",
+      "whyItMatters": "관심 기업 네이버 · 백엔드 개발자 역할 일치 · Spring Boot, Java 스킬 매칭",
+      "publishedAt": "2026-06-30T09:00:00",
       "companyName": "네이버"
     }
   ],
   "tokenUsage": {
-    "inputTokens": 0,
-    "outputTokens": 0
+    "inputTokens": 420,
+    "outputTokens": 950
   }
 }
 ```
 
+**Empty-state response (`candidatePool.jobPostings` is empty or all titles are blank):**
+
+```json
+{
+  "title": "오늘의 채용 브리핑 (2026-07-01)",
+  "summary": "2026-07-01 기준, 선별된 채용 공고가 없습니다.",
+  "content": "# 오늘의 채용 브리핑\n\n## 오늘의 핵심 요약\n\n오늘은 조건에 맞는 채용 공고가 없습니다...",
+  "articles": [],
+  "tokenUsage": { "inputTokens": 0, "outputTokens": 0 }
+}
+```
+
+**Fallback response (all LLM calls failed):** Same structure as the normal response. Content is built deterministically from `matchEvidence` without LLM. `tokenUsage` reflects only tokens consumed before the failure; may be `{inputTokens: 0, outputTokens: 0}` if failure occurred before any call completed.
+
 | Field | Notes |
 |---|---|
-| `content` | Full briefing in **Markdown** |
-| `articles` | Each element is one job posting selected for the report (up to 7). May be empty if `candidatePool` is empty or all postings are past-deadline. |
-| `tokenUsage` | Reflects actual LLM token usage (Call 1 enrichment + Call 2 synthesis) when `OPENAI_API_KEY` is set; `{inputTokens: 0, outputTokens: 0}` in fallback mode |
+| `content` | Starts with `# 오늘의 채용 브리핑`. Contains all 6 required sections in LLM path and fallback path alike |
+| `articles` | Backend rank order preserved. Empty list if no valid postings |
+| `articles[].whyItMatters` | Built from `matchEvidence` in deterministic path; LLM-generated matching reason in LLM path |
+| `tokenUsage` | Accumulates enrichment + synthesis + optional rewrite tokens. `{inputTokens: 0, outputTokens: 0}` in full fallback |
 
-**Error handling (backend side):** If the Agent returns a non-2xx status or is unreachable, the backend marks the job as `FAILED` with `errorMessage` and returns `AGENT_SERVER_ERROR` to the caller.
+**Error handling (backend side):** If the Agent returns a non-2xx status or is unreachable, the backend marks the `briefing_jobs` record as `FAILED` and returns `AGENT_SERVER_ERROR` to the caller.
 
 ---
 
