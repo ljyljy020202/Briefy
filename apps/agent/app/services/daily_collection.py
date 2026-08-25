@@ -21,6 +21,7 @@ import app.adapters.official.ably_careers  # noqa: F401 — triggers ABLY_CAREER
 import app.adapters.official.greenhouse  # noqa: F401 — triggers GREENHOUSE + DAANGN_CAREERS registration
 import app.adapters.official.greeting  # noqa: F401 — triggers GREETING registration
 import app.adapters.official.kakao_careers  # noqa: F401 — triggers KAKAO_CAREERS registration
+import app.adapters.official.lg_careers  # noqa: F401 — triggers LG_CAREERS registration
 import app.adapters.official.lg_cns_careers  # noqa: F401 — triggers LG_CNS_CAREERS registration
 import app.adapters.official.naver_careers  # noqa: F401 — triggers NAVER_CAREERS registration
 import app.adapters.official.samsung_careers  # noqa: F401 — triggers SAMSUNG_CAREERS registration
