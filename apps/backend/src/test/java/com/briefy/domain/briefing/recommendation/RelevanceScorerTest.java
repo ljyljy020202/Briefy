@@ -25,10 +25,8 @@ class RelevanceScorerTest {
     // collectedDate = 30 days ago
     JobPosting old = posting("개발자", "회사A", "https://e.com/o", null, null, TODAY.minusDays(30));
 
-    RelevanceScorer.ScoringResult resultRecent =
-        RelevanceScorer.score(recent, Map.of());
-    RelevanceScorer.ScoringResult resultOld =
-        RelevanceScorer.score(old, Map.of());
+    RelevanceScorer.ScoringResult resultRecent = RelevanceScorer.score(recent, Map.of());
+    RelevanceScorer.ScoringResult resultOld = RelevanceScorer.score(old, Map.of());
 
     assertThat(resultRecent.breakdown().relevanceScore())
         .isEqualTo(resultOld.breakdown().relevanceScore());
@@ -71,8 +69,7 @@ class RelevanceScorerTest {
   void adjustedScore_noPenalty_equalsRelevanceScore() {
     JobPosting p = posting("개발자", "회사A", "https://e.com/1", null, null, TODAY);
     RelevanceScorer.ScoringResult result = RelevanceScorer.score(p, Map.of());
-    assertThat(result.breakdown().adjustedScore())
-        .isEqualTo(result.breakdown().relevanceScore());
+    assertThat(result.breakdown().adjustedScore()).isEqualTo(result.breakdown().relevanceScore());
     assertThat(result.breakdown().exposurePenalty()).isEqualTo(0);
   }
 
@@ -155,9 +152,7 @@ class RelevanceScorerTest {
     JobPosting p = postingWithSkills("Java,Python,Go,Rust,Kotlin,TypeScript");
     RelevanceScorer.ScoringResult result =
         RelevanceScorer.score(
-            p,
-            Map.of(
-                "skills", List.of("Java", "Python", "Go", "Rust", "Kotlin", "TypeScript")));
+            p, Map.of("skills", List.of("Java", "Python", "Go", "Rust", "Kotlin", "TypeScript")));
     assertThat(result.breakdown().skillScore()).isEqualTo(RelevanceScorer.SCORE_SKILLS_MAX);
   }
 
@@ -166,11 +161,8 @@ class RelevanceScorerTest {
     // 2 matching skills
     JobPosting p = postingWithSkills("Java,Python");
     RelevanceScorer.ScoringResult result =
-        RelevanceScorer.score(
-            p,
-            Map.of("skills", List.of("Java", "Python", "Go")));
-    assertThat(result.breakdown().skillScore())
-        .isEqualTo(RelevanceScorer.SCORE_SKILL * 2);
+        RelevanceScorer.score(p, Map.of("skills", List.of("Java", "Python", "Go")));
+    assertThat(result.breakdown().skillScore()).isEqualTo(RelevanceScorer.SCORE_SKILL * 2);
   }
 
   @Test
@@ -222,8 +214,7 @@ class RelevanceScorerTest {
     JobPosting p = postingWithLinkedCompany("개발자", "회사A", linkedCo);
     RelevanceScorer.ScoringResult result =
         RelevanceScorer.score(p, Map.of("companySizes", List.of("대기업")));
-    assertThat(result.breakdown().companySizeScore())
-        .isEqualTo(RelevanceScorer.SCORE_COMPANY_SIZE);
+    assertThat(result.breakdown().companySizeScore()).isEqualTo(RelevanceScorer.SCORE_COMPANY_SIZE);
   }
 
   @Test
@@ -331,20 +322,56 @@ class RelevanceScorerTest {
       LocalDateTime publishedAt,
       LocalDate collectedDate) {
     return JobPosting.create(
-        title, company, "원티드", url, null, deadline, null, null, null, null, null,
-        "hash", collectedDate != null ? collectedDate : TODAY, publishedAt);
+        title,
+        company,
+        "원티드",
+        url,
+        null,
+        deadline,
+        null,
+        null,
+        null,
+        null,
+        null,
+        "hash",
+        collectedDate != null ? collectedDate : TODAY,
+        publishedAt);
   }
 
   private static JobPosting postingWithRoles(String title, String rolesJson) {
     return JobPosting.create(
-        title, "회사A", "원티드", "https://e.com/1", null, null, null,
-        rolesJson, null, null, null, "hash", TODAY, null);
+        title,
+        "회사A",
+        "원티드",
+        "https://e.com/1",
+        null,
+        null,
+        null,
+        rolesJson,
+        null,
+        null,
+        null,
+        "hash",
+        TODAY,
+        null);
   }
 
   private static JobPosting postingWithSkills(String skills) {
     return JobPosting.create(
-        "개발자", "회사A", "원티드", "https://e.com/1", null, null, null,
-        null, skills, null, null, "hash", TODAY, null);
+        "개발자",
+        "회사A",
+        "원티드",
+        "https://e.com/1",
+        null,
+        null,
+        null,
+        null,
+        skills,
+        null,
+        null,
+        "hash",
+        TODAY,
+        null);
   }
 
   private static JobPosting postingWithMetadata(
@@ -356,17 +383,40 @@ class RelevanceScorerTest {
       String skills,
       LocalDate deadline) {
     return JobPosting.create(
-        title, company, "원티드", "https://e.com/1",
-        location, deadline, null, null, skills, empType, expLevel,
-        "hash", TODAY, null);
+        title,
+        company,
+        "원티드",
+        "https://e.com/1",
+        location,
+        deadline,
+        null,
+        null,
+        skills,
+        empType,
+        expLevel,
+        "hash",
+        TODAY,
+        null);
   }
 
   private static JobPosting postingWithLinkedCompany(
       String title, String company, Company linkedCo) {
     JobPosting p =
         JobPosting.create(
-            title, company, "원티드", "https://e.com/1", null, null, null,
-            null, null, null, null, "hash", TODAY, null);
+            title,
+            company,
+            "원티드",
+            "https://e.com/1",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "hash",
+            TODAY,
+            null);
     p.linkCompany(linkedCo);
     return p;
   }

@@ -49,8 +49,20 @@ class RecommendationSelectorTest {
     LocalDateTime freshPublished = TODAY.minusDays(1).atStartOfDay();
     JobPosting p =
         JobPosting.create(
-            "개발자", "회사A", "원티드", "https://e.com/1", null, null, null, null, null, null, null,
-            "hash", TODAY.minusDays(30), freshPublished);
+            "개발자",
+            "회사A",
+            "원티드",
+            "https://e.com/1",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "hash",
+            TODAY.minusDays(30),
+            freshPublished);
     assertThat(RecommendationCandidate.computeIsNew(p, TODAY, NEW_DAYS)).isTrue();
   }
 
@@ -156,9 +168,8 @@ class RecommendationSelectorTest {
     List<RecommendationCandidate> result = RecommendationSelector.select(candidates);
 
     // The new+urgent posting appears exactly once
-    long timesId600Appears = result.stream()
-        .filter(c -> Long.valueOf(600L).equals(c.posting().getId()))
-        .count();
+    long timesId600Appears =
+        result.stream().filter(c -> Long.valueOf(600L).equals(c.posting().getId())).count();
     assertThat(timesId600Appears).isEqualTo(1);
 
     // URGENT minimum satisfied
@@ -182,9 +193,8 @@ class RecommendationSelectorTest {
     }
 
     List<RecommendationCandidate> result = RecommendationSelector.select(candidates);
-    long count800 = result.stream()
-        .filter(r -> Long.valueOf(800L).equals(r.posting().getId()))
-        .count();
+    long count800 =
+        result.stream().filter(r -> Long.valueOf(800L).equals(r.posting().getId())).count();
     assertThat(count800).isEqualTo(1);
   }
 
@@ -205,9 +215,8 @@ class RecommendationSelectorTest {
 
     List<RecommendationCandidate> result = RecommendationSelector.select(candidates);
 
-    long tossCount = result.stream()
-        .filter(c -> "토스".equalsIgnoreCase(c.posting().getCompany()))
-        .count();
+    long tossCount =
+        result.stream().filter(c -> "토스".equalsIgnoreCase(c.posting().getCompany())).count();
     assertThat(tossCount).isLessThanOrEqualTo(MAX_PER_COMPANY);
   }
 
@@ -224,9 +233,8 @@ class RecommendationSelectorTest {
     }
 
     List<RecommendationCandidate> result = RecommendationSelector.select(candidates);
-    long singleCompanyCount = result.stream()
-        .filter(c -> "단일회사".equalsIgnoreCase(c.posting().getCompany()))
-        .count();
+    long singleCompanyCount =
+        result.stream().filter(c -> "단일회사".equalsIgnoreCase(c.posting().getCompany())).count();
     assertThat(singleCompanyCount).isLessThanOrEqualTo(MAX_PER_COMPANY);
   }
 
@@ -320,7 +328,11 @@ class RecommendationSelectorTest {
    * distinguish postings in selection logic (which uses {@code getId()}).
    */
   private static JobPosting posting(
-      Long id, String company, LocalDate deadline, LocalDate collectedDate, LocalDateTime publishedAt) {
+      Long id,
+      String company,
+      LocalDate deadline,
+      LocalDate collectedDate,
+      LocalDateTime publishedAt) {
     JobPosting p =
         JobPosting.create(
             "개발자",

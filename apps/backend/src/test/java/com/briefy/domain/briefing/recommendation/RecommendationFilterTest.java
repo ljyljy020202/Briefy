@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.briefy.domain.candidatepool.entity.JobPosting;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -211,22 +210,9 @@ class RecommendationFilterTest {
     assertThat(result.reason()).isEqualTo(expected);
   }
 
-  private static JobPosting posting(
-      String title, String company, String url, LocalDate deadline) {
+  private static JobPosting posting(String title, String company, String url, LocalDate deadline) {
     return JobPosting.create(
-        title,
-        company,
-        "원티드",
-        url,
-        "서울",
-        deadline,
-        null,
-        null,
-        null,
-        null,
-        null,
-        "hash",
-        TODAY,
+        title, company, "원티드", url, "서울", deadline, null, null, null, null, null, "hash", TODAY,
         null);
   }
 
@@ -268,8 +254,7 @@ class RecommendationFilterTest {
         null);
   }
 
-  private static JobPosting postingWithEmpType(
-      String title, String empType, LocalDate deadline) {
+  private static JobPosting postingWithEmpType(String title, String empType, LocalDate deadline) {
     return JobPosting.create(
         title,
         "회사A",
