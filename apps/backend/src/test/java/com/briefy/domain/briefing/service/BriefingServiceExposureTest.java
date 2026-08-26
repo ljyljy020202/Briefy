@@ -49,6 +49,7 @@ class BriefingServiceExposureTest {
   @Mock private AgentClient agentClient;
   @Mock private CandidatePoolService candidatePoolService;
   @Mock private UserRepository userRepository;
+  @Mock private BriefingJobPersistenceService briefingJobPersistenceService;
 
   @InjectMocks private BriefingService briefingService;
 
@@ -60,7 +61,20 @@ class BriefingServiceExposureTest {
   @BeforeEach
   void setUp() {
     when(briefingArticleRepository.findRecentExposuresByUserId(any(), any())).thenReturn(List.of());
-    when(briefingJobRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+    when(briefingJobPersistenceService.findTodayReport(any(), any()))
+        .thenReturn(java.util.Optional.empty());
+    when(briefingJobPersistenceService.createOrGet(any()))
+        .thenAnswer(
+            inv ->
+                com.briefy.domain.briefing.entity.BriefingJob.createManual(
+                    1L, java.time.LocalDate.now(KST)));
+    when(briefingJobPersistenceService.claimForProcessing(any())).thenReturn(true);
+    when(briefingJobRepository.findById(any()))
+        .thenAnswer(
+            inv ->
+                java.util.Optional.of(
+                    com.briefy.domain.briefing.entity.BriefingJob.createManual(
+                        1L, java.time.LocalDate.now(KST))));
 
     mockAgentResponse =
         new AgentBriefingResponse(
@@ -297,7 +311,7 @@ class BriefingServiceExposureTest {
     com.briefy.domain.briefing.entity.BriefingReport mockReport =
         mock(com.briefy.domain.briefing.entity.BriefingReport.class);
     when(mockReport.getId()).thenReturn(1L);
-    when(briefingReportRepository.save(any())).thenReturn(mockReport);
+    when(briefingJobPersistenceService.saveReportAndComplete(any(), any())).thenReturn(mockReport);
 
     briefingService.generateBriefing(1L);
     return captor.getValue().candidatePool().jobPostings();
