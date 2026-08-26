@@ -35,4 +35,23 @@ public interface CollectionJobRepository extends JpaRepository<CollectionJob, Lo
       AND j.status = com.briefy.domain.collection.entity.CollectionJobStatus.PENDING
       """)
   int claimPending(@Param("id") Long id, @Param("now") LocalDateTime now);
+
+  // FAILED → PROCESSING 조건부 선점 (retry용)
+  @Modifying
+  @Query(
+      """
+      UPDATE CollectionJob j
+      SET j.status = com.briefy.domain.collection.entity.CollectionJobStatus.PROCESSING,
+          j.startedAt = :now,
+          j.completedAt = null,
+          j.errorMessage = null,
+          j.retryCount = j.retryCount + 1
+      WHERE j.id = :id
+      AND j.status = com.briefy.domain.collection.entity.CollectionJobStatus.FAILED
+      AND j.retryCount < :maxRetries
+      """)
+  int claimFailedForRetry(
+      @Param("id") Long id,
+      @Param("now") java.time.LocalDateTime now,
+      @Param("maxRetries") int maxRetries);
 }

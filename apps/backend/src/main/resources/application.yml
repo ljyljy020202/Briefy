@@ -61,6 +61,9 @@ briefy:
     detail-fetch-limit-per-source: ${COLLECTION_DETAIL_FETCH_LIMIT_PER_SOURCE:60}
     max-results-per-source: ${COLLECTION_MAX_RESULTS_PER_SOURCE:100}
     max-total-results: ${COLLECTION_MAX_TOTAL_RESULTS:500}
+    agent-retry-max-attempts: ${COLLECTION_AGENT_RETRY_MAX_ATTEMPTS:2}
+    agent-retry-backoff-seconds: ${COLLECTION_AGENT_RETRY_BACKOFF_SECONDS:5}
+    job-max-retry-count: ${COLLECTION_JOB_MAX_RETRY_COUNT:3}
   scheduler:
     enabled: false
     daily-collection-cron: "0 0 6 * * *"

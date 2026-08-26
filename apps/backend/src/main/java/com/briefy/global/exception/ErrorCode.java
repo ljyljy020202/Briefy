@@ -34,6 +34,8 @@ public enum ErrorCode {
   COLLECTION_JOB_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "Daily collection failed"),
   COLLECTION_JOB_ALREADY_ACTIVE(HttpStatus.CONFLICT, "이미 진행 중인 수집 작업이 있습니다."),
   COLLECTION_JOB_ALREADY_COMPLETED(HttpStatus.OK, "오늘 수집이 이미 완료되었습니다."),
+  COLLECTION_JOB_RETRY_NOT_ALLOWED(HttpStatus.CONFLICT, "FAILED 상태의 작업만 retry할 수 있습니다."),
+  COLLECTION_JOB_MAX_RETRY_EXCEEDED(HttpStatus.CONFLICT, "최대 재시도 횟수를 초과했습니다."),
 
   // Delivery
   EMAIL_ALREADY_DELIVERED(HttpStatus.OK, "이미 발송된 이메일입니다."),

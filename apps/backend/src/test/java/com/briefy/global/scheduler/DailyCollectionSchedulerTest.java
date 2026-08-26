@@ -23,12 +23,13 @@ class DailyCollectionSchedulerTest {
   @InjectMocks private DailyCollectionScheduler scheduler;
 
   private DailyCollectionResult completedResult(LocalDate date) {
-    return new DailyCollectionResult(1L, "COMPLETED", date, null, 5, 0, List.of(), null);
+    return new DailyCollectionResult(
+        1L, "COMPLETED", date, null, 5, 0, List.of(), null, "COMPLETED");
   }
 
   private DailyCollectionResult skippedResult(LocalDate date) {
     return new DailyCollectionResult(
-        null, "SKIPPED", date, null, 0, 0, List.of(), "Already active");
+        null, "SKIPPED", date, null, 0, 0, List.of(), "Already active", "SKIPPED");
   }
 
   @Test

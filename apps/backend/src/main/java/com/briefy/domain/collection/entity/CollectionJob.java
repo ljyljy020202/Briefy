@@ -104,6 +104,24 @@ public class CollectionJob extends BaseTimeEntity {
     this.status = CollectionJobStatus.FAILED;
     this.completedAt = LocalDateTime.now();
     this.errorMessage = errorMessage;
+  }
+
+  public void completePartial(
+      int collectedCount, int savedCount, int deduplicatedCount, String errorSummary) {
+    this.status = CollectionJobStatus.PARTIAL_SUCCESS;
+    this.completedAt = LocalDateTime.now();
+    this.collectedCount = collectedCount;
+    this.savedCount = savedCount;
+    this.deduplicatedCount = deduplicatedCount;
+    this.errorMessage = errorSummary;
+  }
+
+  /** FAILED → PROCESSING 조건부 선점. retry_count 증가 포함. */
+  public void resetForRetry() {
+    this.status = CollectionJobStatus.PROCESSING;
+    this.startedAt = LocalDateTime.now();
+    this.completedAt = null;
+    this.errorMessage = null;
     this.retryCount++;
   }
 

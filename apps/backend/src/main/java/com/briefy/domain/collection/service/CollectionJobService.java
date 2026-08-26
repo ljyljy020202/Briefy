@@ -53,6 +53,21 @@ public class CollectionJobService {
     return job;
   }
 
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public CollectionJob markPartialSuccess(
+      Long jobId, int collectedCount, int savedCount, int deduplicatedCount, String errorSummary) {
+    CollectionJob job = findOrThrow(jobId);
+    job.completePartial(collectedCount, savedCount, deduplicatedCount, errorSummary);
+    return job;
+  }
+
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public boolean claimForRetry(Long jobId, int maxRetries) {
+    int updated =
+        collectionJobRepository.claimFailedForRetry(jobId, LocalDateTime.now(), maxRetries);
+    return updated == 1;
+  }
+
   @Transactional(readOnly = true)
   public boolean isAlreadyActiveForDate(LocalDate date) {
     return collectionJobRepository.existsByCollectionDateAndStatusIn(
@@ -96,7 +111,7 @@ public class CollectionJobService {
     return false;
   }
 
-  private CollectionJob findOrThrow(Long jobId) {
+  public CollectionJob findOrThrow(Long jobId) {
     return collectionJobRepository
         .findById(jobId)
         .orElseThrow(() -> new BusinessException(ErrorCode.COLLECTION_JOB_NOT_FOUND));
