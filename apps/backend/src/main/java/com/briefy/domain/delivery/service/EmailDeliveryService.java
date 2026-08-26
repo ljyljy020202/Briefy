@@ -3,6 +3,7 @@ package com.briefy.domain.delivery.service;
 import com.briefy.domain.briefing.entity.BriefingReport;
 import com.briefy.domain.briefing.repository.BriefingReportRepository;
 import com.briefy.domain.delivery.entity.DeliveryLog;
+import com.briefy.domain.delivery.entity.DeliveryStatus;
 import com.briefy.domain.delivery.repository.DeliveryLogRepository;
 import com.briefy.domain.user.entity.User;
 import com.briefy.domain.user.repository.UserRepository;
@@ -71,6 +72,14 @@ public class EmailDeliveryService {
    */
   @Transactional(noRollbackFor = Exception.class)
   public DeliveryLog deliverBriefingReport(Long reportId) {
+    // 이미 SENT 상태인 로그가 있으면 중복 발송 방지
+    if (deliveryLogRepository.existsByBriefingReportIdAndStatus(reportId, DeliveryStatus.SENT)) {
+      log.info("Email already delivered for reportId={} — skipping", reportId);
+      return deliveryLogRepository
+          .findByBriefingReportId(reportId)
+          .orElseThrow(() -> new BusinessException(ErrorCode.EMAIL_ALREADY_DELIVERED));
+    }
+
     BriefingReport report =
         briefingReportRepository
             .findById(reportId)

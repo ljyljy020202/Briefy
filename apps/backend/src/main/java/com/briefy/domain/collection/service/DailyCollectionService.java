@@ -17,6 +17,8 @@ import com.briefy.domain.company.service.CompanyNameNormalizer;
 import com.briefy.domain.preference.entity.BriefingCategoryCode;
 import com.briefy.domain.preference.entity.UserBriefingPreference;
 import com.briefy.domain.preference.repository.UserBriefingPreferenceRepository;
+import com.briefy.global.exception.BusinessException;
+import com.briefy.global.exception.ErrorCode;
 import com.briefy.infra.agent.AgentClient;
 import com.briefy.infra.agent.dto.AgentCollectedJobPosting;
 import com.briefy.infra.agent.dto.AgentCollectionOptions;
@@ -89,9 +91,51 @@ public class DailyCollectionService {
     List<String> categories = resolveCategories(requestedCategories);
     String categoriesJson = buildCategoriesJson(categories);
 
+    // 1. 멱등적 생성 (UNIQUE 충돌 시 기존 job 재조회)
     CollectionJob job =
-        collectionJobService.createPending(collectDate, categoriesJson, triggerType);
-    collectionJobService.markProcessing(job.getId());
+        collectionJobService.createOrGetForDate(collectDate, categoriesJson, triggerType);
+
+    // 2. 상태에 따라 분기
+    switch (job.getStatus()) {
+      case PROCESSING -> {
+        log.info("Collection already PROCESSING for {}: jobId={}", collectDate, job.getId());
+        throw new BusinessException(ErrorCode.COLLECTION_JOB_ALREADY_ACTIVE);
+      }
+      case COMPLETED -> {
+        log.info("Collection already COMPLETED for {}: jobId={}", collectDate, job.getId());
+        return new DailyCollectionResult(
+            job.getId(),
+            CollectionJobStatus.COMPLETED.name(),
+            collectDate,
+            null,
+            job.getSavedCount(),
+            job.getDeduplicatedCount(),
+            List.of(),
+            null);
+      }
+      case FAILED -> {
+        log.info("Collection previously FAILED for {}: jobId={}", collectDate, job.getId());
+        return new DailyCollectionResult(
+            job.getId(),
+            CollectionJobStatus.FAILED.name(),
+            collectDate,
+            null,
+            0,
+            0,
+            List.of(),
+            job.getErrorMessage());
+      }
+      default -> {
+        /* PENDING: 계속 진행 */
+      }
+    }
+
+    // 3. 조건부 선점: PENDING → PROCESSING
+    boolean claimed = collectionJobService.claimForProcessing(job.getId());
+    if (!claimed) {
+      log.info("Collection job {} already claimed by another thread", job.getId());
+      throw new BusinessException(ErrorCode.COLLECTION_JOB_ALREADY_ACTIVE);
+    }
 
     try {
       AgentSeedKeywords seedKeywords = aggregateSeedKeywords(categories);
