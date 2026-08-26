@@ -2,9 +2,12 @@ package com.briefy.domain.delivery.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -12,7 +15,6 @@ import com.briefy.domain.briefing.entity.BriefingReport;
 import com.briefy.domain.briefing.repository.BriefingReportRepository;
 import com.briefy.domain.delivery.entity.DeliveryLog;
 import com.briefy.domain.delivery.entity.DeliveryStatus;
-import com.briefy.domain.delivery.repository.DeliveryLogRepository;
 import com.briefy.domain.user.entity.User;
 import com.briefy.domain.user.repository.UserRepository;
 import com.briefy.global.email.EmailSendResult;
@@ -30,7 +32,7 @@ import org.mockito.quality.Strictness;
 @MockitoSettings(strictness = Strictness.LENIENT)
 class EmailDeliveryIdempotencyTest {
 
-  @Mock private DeliveryLogRepository deliveryLogRepository;
+  @Mock private DeliveryLogPersistenceService deliveryLogPersistenceService;
   @Mock private BriefingReportRepository briefingReportRepository;
   @Mock private UserRepository userRepository;
   @Mock private EmailSender emailSender;
@@ -41,50 +43,59 @@ class EmailDeliveryIdempotencyTest {
   private User user;
 
   private static final Long REPORT_ID = 10L;
+  private static final Long USER_ID = 1L;
+  private static final Long LOG_ID = 100L;
 
   @BeforeEach
   void setUp() {
     emailDeliveryService =
         new EmailDeliveryService(
-            deliveryLogRepository, briefingReportRepository, userRepository, emailSender);
+            deliveryLogPersistenceService, briefingReportRepository, userRepository, emailSender);
 
     report = mock(BriefingReport.class);
-    when(report.getUserId()).thenReturn(1L);
+    when(report.getId()).thenReturn(REPORT_ID);
+    when(report.getUserId()).thenReturn(USER_ID);
     lenient().when(report.getTitle()).thenReturn("오늘의 채용 브리핑");
-    lenient().when(report.getContent()).thenReturn("<html>content</html>");
+    lenient().when(report.getContent()).thenReturn("## 내용");
     lenient().when(briefingReportRepository.findById(REPORT_ID)).thenReturn(Optional.of(report));
 
     user = mock(User.class);
+    lenient().when(user.getId()).thenReturn(USER_ID);
     lenient().when(user.getEmail()).thenReturn("user@example.com");
     lenient().when(user.isBriefingEmailEnabled()).thenReturn(true);
-    lenient().when(userRepository.findById(1L)).thenReturn(Optional.of(user));
-
-    // 기본: 아직 발송된 이메일 없음
-    when(deliveryLogRepository.existsByBriefingReportIdAndStatus(REPORT_ID, DeliveryStatus.SENT))
-        .thenReturn(false);
+    lenient().when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
   }
 
-  // ── 중복 발송 방지 ─────────────────────────────────────────────────────────
+  // ── SENT 중복 방지 ──────────────────────────────────────────────────────
 
   @Test
   void deliverBriefingReport_alreadySent_doesNotCallEmailSender() {
-    DeliveryLog existingLog = mock(DeliveryLog.class);
-    when(existingLog.getStatus()).thenReturn(DeliveryStatus.SENT);
-    when(deliveryLogRepository.existsByBriefingReportIdAndStatus(REPORT_ID, DeliveryStatus.SENT))
-        .thenReturn(true);
-    when(deliveryLogRepository.findByBriefingReportId(REPORT_ID))
-        .thenReturn(Optional.of(existingLog));
+    DeliveryLog sentLog = mock(DeliveryLog.class);
+    when(sentLog.getId()).thenReturn(LOG_ID);
+    when(sentLog.getStatus()).thenReturn(DeliveryStatus.SENT);
+    when(deliveryLogPersistenceService.createOrGet(anyLong(), anyLong(), anyString(), anyString()))
+        .thenReturn(sentLog);
 
     DeliveryLog result = emailDeliveryService.deliverBriefingReport(REPORT_ID);
 
     verify(emailSender, never()).send(any());
-    assertThat(result).isEqualTo(existingLog);
+    assertThat(result.getStatus()).isEqualTo(DeliveryStatus.SENT);
   }
 
   @Test
-  void deliverBriefingReport_notYetSent_callsEmailSender() {
+  void deliverBriefingReport_pendingLog_callsEmailSender() {
+    DeliveryLog pendingLog = mock(DeliveryLog.class);
+    when(pendingLog.getId()).thenReturn(LOG_ID);
+    when(pendingLog.getStatus()).thenReturn(DeliveryStatus.PENDING);
+    when(pendingLog.getToEmail()).thenReturn("user@example.com");
+    when(deliveryLogPersistenceService.createOrGet(anyLong(), anyLong(), anyString(), anyString()))
+        .thenReturn(pendingLog);
+    when(deliveryLogPersistenceService.claimForSending(LOG_ID)).thenReturn(true);
     when(emailSender.send(any())).thenReturn(EmailSendResult.ok("msg-123"));
-    when(deliveryLogRepository.save(any(DeliveryLog.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    DeliveryLog sentLog = mock(DeliveryLog.class);
+    when(sentLog.getStatus()).thenReturn(DeliveryStatus.SENT);
+    when(deliveryLogPersistenceService.findByReportId(REPORT_ID)).thenReturn(Optional.of(sentLog));
 
     DeliveryLog result = emailDeliveryService.deliverBriefingReport(REPORT_ID);
 
@@ -93,46 +104,137 @@ class EmailDeliveryIdempotencyTest {
   }
 
   @Test
-  void deliverBriefingReport_notYetSent_senderFails_marksLogFailed() {
+  void deliverBriefingReport_pendingLog_senderFails_marksLogFailed() {
+    DeliveryLog pendingLog = mock(DeliveryLog.class);
+    when(pendingLog.getId()).thenReturn(LOG_ID);
+    when(pendingLog.getStatus()).thenReturn(DeliveryStatus.PENDING);
+    when(pendingLog.getToEmail()).thenReturn("user@example.com");
+    when(deliveryLogPersistenceService.createOrGet(anyLong(), anyLong(), anyString(), anyString()))
+        .thenReturn(pendingLog);
+    when(deliveryLogPersistenceService.claimForSending(LOG_ID)).thenReturn(true);
     when(emailSender.send(any())).thenReturn(EmailSendResult.fail("Timeout"));
-    when(deliveryLogRepository.save(any(DeliveryLog.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    DeliveryLog failedLog = mock(DeliveryLog.class);
+    when(failedLog.getStatus()).thenReturn(DeliveryStatus.FAILED);
+    when(failedLog.getErrorMessage()).thenReturn("Timeout");
+    when(deliveryLogPersistenceService.findByReportId(REPORT_ID))
+        .thenReturn(Optional.of(failedLog));
 
     DeliveryLog result = emailDeliveryService.deliverBriefingReport(REPORT_ID);
 
     assertThat(result.getStatus()).isEqualTo(DeliveryStatus.FAILED);
-    assertThat(result.getErrorMessage()).isEqualTo("Timeout");
+    verify(deliveryLogPersistenceService).markFailed(LOG_ID, "Timeout");
   }
 
   @Test
-  void deliverBriefingReport_notYetSent_senderThrows_marksLogFailed() {
+  void deliverBriefingReport_pendingLog_senderThrows_marksLogFailed() {
+    DeliveryLog pendingLog = mock(DeliveryLog.class);
+    when(pendingLog.getId()).thenReturn(LOG_ID);
+    when(pendingLog.getStatus()).thenReturn(DeliveryStatus.PENDING);
+    when(pendingLog.getToEmail()).thenReturn("user@example.com");
+    when(deliveryLogPersistenceService.createOrGet(anyLong(), anyLong(), anyString(), anyString()))
+        .thenReturn(pendingLog);
+    when(deliveryLogPersistenceService.claimForSending(LOG_ID)).thenReturn(true);
     when(emailSender.send(any())).thenThrow(new RuntimeException("SES down"));
-    when(deliveryLogRepository.save(any(DeliveryLog.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    DeliveryLog failedLog = mock(DeliveryLog.class);
+    when(failedLog.getStatus()).thenReturn(DeliveryStatus.FAILED);
+    when(deliveryLogPersistenceService.findByReportId(REPORT_ID))
+        .thenReturn(Optional.of(failedLog));
 
     DeliveryLog result = emailDeliveryService.deliverBriefingReport(REPORT_ID);
 
     assertThat(result.getStatus()).isEqualTo(DeliveryStatus.FAILED);
   }
 
-  // ── idempotency: 두 번 호출 시 두 번째는 스킵 ─────────────────────────────────
+  // ── SENDING 중 동시 요청 ─────────────────────────────────────────────────
+
+  @Test
+  void deliverBriefingReport_sendingLog_skipsEmailSend() {
+    DeliveryLog sendingLog = mock(DeliveryLog.class);
+    when(sendingLog.getId()).thenReturn(LOG_ID);
+    when(sendingLog.getStatus()).thenReturn(DeliveryStatus.SENDING);
+    when(deliveryLogPersistenceService.createOrGet(anyLong(), anyLong(), anyString(), anyString()))
+        .thenReturn(sendingLog);
+
+    DeliveryLog result = emailDeliveryService.deliverBriefingReport(REPORT_ID);
+
+    verify(emailSender, never()).send(any());
+    assertThat(result.getStatus()).isEqualTo(DeliveryStatus.SENDING);
+  }
+
+  @Test
+  void deliverBriefingReport_claimFails_skipsEmailSend() {
+    DeliveryLog pendingLog = mock(DeliveryLog.class);
+    when(pendingLog.getId()).thenReturn(LOG_ID);
+    when(pendingLog.getStatus()).thenReturn(DeliveryStatus.PENDING);
+    when(pendingLog.getToEmail()).thenReturn("user@example.com");
+    when(deliveryLogPersistenceService.createOrGet(anyLong(), anyLong(), anyString(), anyString()))
+        .thenReturn(pendingLog);
+    // 다른 요청이 먼저 선점
+    when(deliveryLogPersistenceService.claimForSending(LOG_ID)).thenReturn(false);
+
+    DeliveryLog sendingLog = mock(DeliveryLog.class);
+    when(sendingLog.getStatus()).thenReturn(DeliveryStatus.SENDING);
+    when(deliveryLogPersistenceService.findByReportId(REPORT_ID))
+        .thenReturn(Optional.of(sendingLog));
+
+    DeliveryLog result = emailDeliveryService.deliverBriefingReport(REPORT_ID);
+
+    verify(emailSender, never()).send(any());
+    assertThat(result.getStatus()).isEqualTo(DeliveryStatus.SENDING);
+  }
+
+  // ── FAILED 재시도 (관리자 경로) ───────────────────────────────────────────
+
+  @Test
+  void deliverBriefingReport_failedLog_retries() {
+    DeliveryLog failedLog = mock(DeliveryLog.class);
+    when(failedLog.getId()).thenReturn(LOG_ID);
+    when(failedLog.getStatus()).thenReturn(DeliveryStatus.FAILED);
+    when(failedLog.getToEmail()).thenReturn("user@example.com");
+    when(deliveryLogPersistenceService.createOrGet(anyLong(), anyLong(), anyString(), anyString()))
+        .thenReturn(failedLog);
+    when(deliveryLogPersistenceService.claimForSending(LOG_ID)).thenReturn(true);
+    when(emailSender.send(any())).thenReturn(EmailSendResult.ok("msg-retry-ok"));
+
+    DeliveryLog sentLog = mock(DeliveryLog.class);
+    when(sentLog.getStatus()).thenReturn(DeliveryStatus.SENT);
+    when(deliveryLogPersistenceService.findByReportId(REPORT_ID)).thenReturn(Optional.of(sentLog));
+
+    DeliveryLog result = emailDeliveryService.deliverBriefingReport(REPORT_ID);
+
+    verify(emailSender).send(any());
+    assertThat(result.getStatus()).isEqualTo(DeliveryStatus.SENT);
+    verify(deliveryLogPersistenceService).markSent(LOG_ID, "msg-retry-ok");
+  }
+
+  // ── 두 번 호출 시 두 번째는 스킵 ──────────────────────────────────────────
 
   @Test
   void deliverBriefingReport_calledTwice_secondCallSkipsEmailSend() {
-    // First call: not yet sent
-    when(emailSender.send(any())).thenReturn(EmailSendResult.ok("msg-first"));
-    when(deliveryLogRepository.save(any(DeliveryLog.class))).thenAnswer(inv -> inv.getArgument(0));
+    // 첫 번째 호출: PENDING → 발송 성공
+    DeliveryLog pendingLog = mock(DeliveryLog.class);
+    when(pendingLog.getId()).thenReturn(LOG_ID);
+    when(pendingLog.getStatus()).thenReturn(DeliveryStatus.PENDING);
+    when(pendingLog.getToEmail()).thenReturn("user@example.com");
 
-    emailDeliveryService.deliverBriefingReport(REPORT_ID);
-
-    // Second call: already sent
     DeliveryLog sentLog = mock(DeliveryLog.class);
+    when(sentLog.getId()).thenReturn(LOG_ID);
     when(sentLog.getStatus()).thenReturn(DeliveryStatus.SENT);
-    when(deliveryLogRepository.existsByBriefingReportIdAndStatus(REPORT_ID, DeliveryStatus.SENT))
-        .thenReturn(true);
-    when(deliveryLogRepository.findByBriefingReportId(REPORT_ID)).thenReturn(Optional.of(sentLog));
+
+    // 첫 번째 createOrGet → PENDING, 두 번째 → SENT
+    when(deliveryLogPersistenceService.createOrGet(anyLong(), anyLong(), anyString(), anyString()))
+        .thenReturn(pendingLog)
+        .thenReturn(sentLog);
+    when(deliveryLogPersistenceService.claimForSending(LOG_ID)).thenReturn(true);
+    when(emailSender.send(any())).thenReturn(EmailSendResult.ok("msg-first"));
+    when(deliveryLogPersistenceService.findByReportId(REPORT_ID)).thenReturn(Optional.of(sentLog));
 
     emailDeliveryService.deliverBriefingReport(REPORT_ID);
+    emailDeliveryService.deliverBriefingReport(REPORT_ID);
 
-    // emailSender.send() should have been called exactly once total
-    verify(emailSender).send(any());
+    // emailSender.send()는 정확히 1회만 호출
+    verify(emailSender, times(1)).send(any());
   }
 }

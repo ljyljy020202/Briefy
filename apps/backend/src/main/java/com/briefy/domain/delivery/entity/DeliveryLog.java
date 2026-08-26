@@ -75,15 +75,27 @@ public class DeliveryLog extends BaseTimeEntity {
     return log;
   }
 
+  public void markSending() {
+    this.status = DeliveryStatus.SENDING;
+    this.lastAttemptAt = LocalDateTime.now();
+  }
+
   public void markSent(String providerMessageId) {
     this.status = DeliveryStatus.SENT;
     this.providerMessageId = providerMessageId;
     this.sentAt = LocalDateTime.now();
+    this.errorMessage = null; // 재시도 후 성공 시 이전 오류 초기화
   }
 
   public void markFailed(String errorMessage) {
     this.status = DeliveryStatus.FAILED;
-    this.errorMessage = errorMessage;
+    this.errorMessage = normalize(errorMessage);
+    this.lastAttemptAt = LocalDateTime.now();
+  }
+
+  private static String normalize(String msg) {
+    if (msg == null) return "unknown";
+    return msg.length() > 500 ? msg.substring(0, 500) : msg;
   }
 
   public Long getId() {
