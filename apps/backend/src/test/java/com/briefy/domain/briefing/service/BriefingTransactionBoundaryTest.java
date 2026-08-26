@@ -8,6 +8,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.briefy.config.BriefingProperties;
 import com.briefy.domain.briefing.entity.BriefingJob;
 import com.briefy.domain.briefing.entity.BriefingReport;
 import com.briefy.domain.briefing.repository.BriefingArticleRepository;
@@ -57,6 +58,7 @@ class BriefingTransactionBoundaryTest {
   private BriefingService briefingService;
 
   private static final Long USER_ID = 1L;
+  private static final BriefingProperties BRIEFING_PROPS = new BriefingProperties(0, 0, 3);
 
   @BeforeEach
   void setUp() {
@@ -69,7 +71,8 @@ class BriefingTransactionBoundaryTest {
             agentClient,
             candidatePoolService,
             userRepository,
-            briefingJobPersistenceService);
+            briefingJobPersistenceService,
+            BRIEFING_PROPS);
 
     when(briefingArticleRepository.findRecentExposuresByUserId(any(), any())).thenReturn(List.of());
     when(userBriefingPreferenceRepository.findAllByUserIdAndActiveTrue(USER_ID))
@@ -85,22 +88,33 @@ class BriefingTransactionBoundaryTest {
 
   @Test
   void agentCallFails_recordFailureIsInvoked() {
-    when(agentClient.generate(any())).thenThrow(new RuntimeException("Connection refused"));
+    when(agentClient.generate(any(), any(Integer.class), any(Integer.class)))
+        .thenThrow(new RuntimeException("Connection refused"));
 
     assertThatThrownBy(() -> briefingService.generateBriefing(USER_ID))
         .isInstanceOf(BusinessException.class);
 
     verify(briefingJobPersistenceService).recordFailure(any(), any());
-    verify(briefingJobPersistenceService, never()).saveReportAndComplete(any(), any());
+    verify(briefingJobPersistenceService, never())
+        .saveReportAndComplete(any(), any(BriefingReport.class), any(), any());
   }
 
   @Test
   void saveReportFails_recordFailureIsInvoked() {
     AgentBriefingResponse response =
         new AgentBriefingResponse(
-            "title", "summary", "content", List.of(), new AgentBriefingResponse.TokenUsage(0, 0));
-    when(agentClient.generate(any())).thenReturn(response);
-    when(briefingJobPersistenceService.saveReportAndComplete(any(), any(BriefingReport.class)))
+            "title",
+            "summary",
+            "content",
+            List.of(),
+            new AgentBriefingResponse.TokenUsage(0, 0),
+            null,
+            null,
+            null,
+            null);
+    when(agentClient.generate(any(), any(Integer.class), any(Integer.class))).thenReturn(response);
+    when(briefingJobPersistenceService.saveReportAndComplete(
+            any(), any(BriefingReport.class), any(), any()))
         .thenThrow(new RuntimeException("DB write failed"));
 
     assertThatThrownBy(() -> briefingService.generateBriefing(USER_ID))

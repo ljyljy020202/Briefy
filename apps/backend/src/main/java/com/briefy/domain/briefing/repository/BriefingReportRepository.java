@@ -17,4 +17,6 @@ public interface BriefingReportRepository extends JpaRepository<BriefingReport, 
   boolean existsByUserIdAndReportDate(Long userId, LocalDate reportDate);
 
   Optional<BriefingReport> findByUserIdAndReportDate(Long userId, LocalDate reportDate);
+
+  boolean existsByBriefingJobId(Long briefingJobId);
 }

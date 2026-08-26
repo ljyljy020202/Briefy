@@ -159,10 +159,29 @@ class BriefingJobIdempotencyTest {
     BriefingReport report = mockReport();
     when(briefingReportRepository.save(any())).thenReturn(report);
 
-    BriefingReport saved = persistenceService.saveReportAndComplete(10L, report);
+    BriefingReport saved = persistenceService.saveReportAndComplete(10L, report, "LLM", null);
 
     assertThat(saved).isEqualTo(report);
     assertThat(job.getStatus()).isEqualTo(BriefingJobStatus.COMPLETED);
+    assertThat(job.getGenerationMode()).isEqualTo("LLM");
+  }
+
+  @Test
+  void saveReportAndComplete_withFallbackMode_recordsGenerationMode() {
+    BriefingJob job = pendingJob();
+    job.startProcessing();
+    when(briefingJobRepository.findById(10L)).thenReturn(Optional.of(job));
+
+    BriefingReport report = mockReport();
+    when(briefingReportRepository.save(any())).thenReturn(report);
+
+    BriefingReport saved =
+        persistenceService.saveReportAndComplete(10L, report, "FALLBACK", "enrichment_failed");
+
+    assertThat(saved).isEqualTo(report);
+    assertThat(job.getStatus()).isEqualTo(BriefingJobStatus.COMPLETED);
+    assertThat(job.getGenerationMode()).isEqualTo("FALLBACK");
+    assertThat(job.getFallbackReason()).isEqualTo("enrichment_failed");
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────

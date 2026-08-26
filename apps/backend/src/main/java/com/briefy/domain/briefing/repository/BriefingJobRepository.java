@@ -25,4 +25,20 @@ public interface BriefingJobRepository extends JpaRepository<BriefingJob, Long> 
       AND j.status = com.briefy.domain.briefing.entity.BriefingJobStatus.PENDING
       """)
   int claimPending(@Param("id") Long id, @Param("now") LocalDateTime now);
+
+  @Modifying
+  @Query(
+      """
+      UPDATE BriefingJob j
+      SET j.status = com.briefy.domain.briefing.entity.BriefingJobStatus.PROCESSING,
+          j.startedAt = :now,
+          j.completedAt = null,
+          j.errorMessage = null,
+          j.retryCount = j.retryCount + 1
+      WHERE j.id = :id
+      AND j.status = com.briefy.domain.briefing.entity.BriefingJobStatus.FAILED
+      AND j.retryCount < :maxRetries
+      """)
+  int claimFailedForRetry(
+      @Param("id") Long id, @Param("now") LocalDateTime now, @Param("maxRetries") int maxRetries);
 }

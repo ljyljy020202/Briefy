@@ -1,5 +1,6 @@
 package com.briefy.domain.briefing.service;
 
+import com.briefy.config.BriefingProperties;
 import com.briefy.domain.briefing.dto.BriefingDetailResponse;
 import com.briefy.domain.briefing.dto.BriefingListItem;
 import com.briefy.domain.briefing.dto.GenerateResult;
@@ -41,6 +42,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.IntStream;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -49,6 +52,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class BriefingService {
 
+  private static final Logger log = LoggerFactory.getLogger(BriefingService.class);
   private static final ZoneId KST = ZoneId.of("Asia/Seoul");
   private static final int EXPOSURE_LOOKBACK_DAYS = 7;
 
@@ -60,6 +64,7 @@ public class BriefingService {
   private final CandidatePoolService candidatePoolService;
   private final UserRepository userRepository;
   private final BriefingJobPersistenceService briefingJobPersistenceService;
+  private final BriefingProperties briefingProperties;
 
   public BriefingService(
       BriefingJobRepository briefingJobRepository,
@@ -69,7 +74,8 @@ public class BriefingService {
       AgentClient agentClient,
       CandidatePoolService candidatePoolService,
       UserRepository userRepository,
-      BriefingJobPersistenceService briefingJobPersistenceService) {
+      BriefingJobPersistenceService briefingJobPersistenceService,
+      BriefingProperties briefingProperties) {
     this.briefingJobRepository = briefingJobRepository;
     this.briefingReportRepository = briefingReportRepository;
     this.briefingArticleRepository = briefingArticleRepository;
@@ -78,6 +84,7 @@ public class BriefingService {
     this.candidatePoolService = candidatePoolService;
     this.userRepository = userRepository;
     this.briefingJobPersistenceService = briefingJobPersistenceService;
+    this.briefingProperties = briefingProperties;
   }
 
   /**
@@ -90,6 +97,33 @@ public class BriefingService {
 
   public GenerateResult generateScheduledBriefing(Long userId) {
     return doGenerateBriefing(userId, BriefingTriggerType.SCHEDULED);
+  }
+
+  /** FAILED 상태인 브리핑 Job을 재시도한다. FAILED 상태이고 이미 Report가 없으며 최대 retry 횟수 미만일 때만 허용. */
+  public GenerateResult retryBriefingJob(Long jobId) {
+    BriefingJob job = briefingJobPersistenceService.findJobById(jobId);
+
+    if (job.getStatus() != BriefingJobStatus.FAILED) {
+      throw new BusinessException(ErrorCode.BRIEFING_JOB_RETRY_NOT_ALLOWED);
+    }
+
+    // 기존 Report가 있으면 재시도 차단
+    boolean hasReport = briefingReportRepository.existsByBriefingJobId(jobId);
+    if (hasReport) {
+      throw new BusinessException(ErrorCode.BRIEFING_JOB_HAS_EXISTING_REPORT);
+    }
+
+    boolean claimed =
+        briefingJobPersistenceService.claimForRetry(jobId, briefingProperties.jobMaxRetryCount());
+    if (!claimed) {
+      BriefingJob freshJob = briefingJobPersistenceService.findJobById(jobId);
+      if (freshJob.getRetryCount() >= briefingProperties.jobMaxRetryCount()) {
+        throw new BusinessException(ErrorCode.BRIEFING_JOB_MAX_RETRY_EXCEEDED);
+      }
+      throw new BusinessException(ErrorCode.BRIEFING_JOB_ALREADY_PROCESSING);
+    }
+
+    return executeBriefingCore(job.getUserId(), jobId, job.getBriefingDate(), job.getTriggerType());
   }
 
   private GenerateResult doGenerateBriefing(Long userId, BriefingTriggerType triggerType) {
@@ -134,8 +168,12 @@ public class BriefingService {
       throw new BusinessException(ErrorCode.BRIEFING_JOB_ALREADY_PROCESSING);
     }
 
-    Long jobId = job.getId();
+    return executeBriefingCore(userId, job.getId(), briefingDate, triggerType);
+  }
 
+  /** Agent 호출 → Report 저장 핵심 로직. doGenerateBriefing과 retryBriefingJob 양쪽에서 공유. */
+  private GenerateResult executeBriefingCore(
+      Long userId, Long jobId, LocalDate briefingDate, BriefingTriggerType triggerType) {
     try {
       // Step 5: 사용자 선호도 조회 (TX 없음)
       List<UserBriefingPreference> preferences =
@@ -151,9 +189,26 @@ public class BriefingService {
       List<AgentCandidateJobPosting> top7 = selectTop7(briefingDate, preference, userId);
       AgentCandidatePool candidatePool = new AgentCandidatePool(top7, List.of(), List.of());
 
-      // Step 7: Agent HTTP 호출 (TX 없음)
+      // Step 7: Agent HTTP 호출 with retry (TX 없음)
       AgentBriefingRequest agentRequest = buildAgentRequest(userId, preference, candidatePool);
-      AgentBriefingResponse agentResponse = agentClient.generate(agentRequest);
+      AgentBriefingResponse agentResponse =
+          agentClient.generate(
+              agentRequest,
+              briefingProperties.agentRetryMaxAttempts(),
+              briefingProperties.agentRetryBackoffSeconds());
+
+      // Agent 응답 계약 검증
+      validateAgentResponse(agentResponse);
+
+      // 구조화 로그
+      log.info(
+          "briefing generation: userId={} mode={} usedFallback={} rewriteCount={}"
+              + " fallbackReason={}",
+          userId,
+          agentResponse.generationModeOrDefault(),
+          agentResponse.isUsedFallback(),
+          agentResponse.rewriteCountOrZero(),
+          agentResponse.fallbackReason());
 
       // nickname 치환 (기존 로직 유지)
       String nickname =
@@ -171,7 +226,11 @@ public class BriefingService {
                 agentResponse.summary(),
                 updated,
                 agentResponse.articles(),
-                agentResponse.tokenUsage());
+                agentResponse.tokenUsage(),
+                agentResponse.generationMode(),
+                agentResponse.usedFallback(),
+                agentResponse.fallbackReason(),
+                agentResponse.rewriteCount());
       }
 
       // Step 8: Report 저장 + Job 완료 (짧은 REQUIRES_NEW TX)
@@ -180,7 +239,12 @@ public class BriefingService {
               .findById(jobId)
               .orElseThrow(() -> new BusinessException(ErrorCode.BRIEFING_JOB_NOT_FOUND));
       BriefingReport report = buildReport(userId, freshJob, agentResponse);
-      BriefingReport saved = briefingJobPersistenceService.saveReportAndComplete(jobId, report);
+      BriefingReport saved =
+          briefingJobPersistenceService.saveReportAndComplete(
+              jobId,
+              report,
+              agentResponse.generationModeOrDefault(),
+              agentResponse.fallbackReason());
 
       return new GenerateResult(saved.getId(), jobId, BriefingJobStatus.COMPLETED.name());
 
@@ -192,6 +256,21 @@ public class BriefingService {
       String msg = e.getMessage() != null ? e.getMessage() : "Unknown error";
       briefingJobPersistenceService.recordFailure(jobId, msg);
       throw new BusinessException(ErrorCode.BRIEFING_JOB_FAILED);
+    }
+  }
+
+  /** Agent 응답 계약 검증. EMPTY 모드는 title/content 검증 생략. FALLBACK 모드는 content 필수이나 articles는 빈 배열 허용. */
+  private void validateAgentResponse(AgentBriefingResponse response) {
+    String mode = response.generationModeOrDefault();
+    if ("EMPTY".equals(mode)) {
+      return; // empty 응답은 별도 검증 없음
+    }
+    if (response.title() == null || response.title().isBlank()) {
+      throw new BusinessException(ErrorCode.AGENT_CONTRACT_VIOLATION, "Agent returned blank title");
+    }
+    if (response.content() == null || response.content().isBlank()) {
+      throw new BusinessException(
+          ErrorCode.AGENT_CONTRACT_VIOLATION, "Agent returned blank content");
     }
   }
 

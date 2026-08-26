@@ -2,6 +2,10 @@ spring:
   application:
     name: briefy-backend
 
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: false
+
   datasource:
     url: ${MYSQL_URL:jdbc:mysql://localhost:3306/briefy}
     username: ${MYSQL_USER}
@@ -55,6 +59,10 @@ app:
   frontend-base-url: ${FRONTEND_BASE_URL:http://localhost:3000}
 
 briefy:
+  briefing:
+    agent-retry-max-attempts: ${BRIEFING_AGENT_RETRY_MAX_ATTEMPTS:2}
+    agent-retry-backoff-seconds: ${BRIEFING_AGENT_RETRY_BACKOFF_SECONDS:5}
+    job-max-retry-count: ${BRIEFING_JOB_MAX_RETRY_COUNT:3}
   collection:
     lookback-days: ${COLLECTION_LOOKBACK_DAYS:7}
     discovery-limit-per-source: ${COLLECTION_DISCOVERY_LIMIT_PER_SOURCE:300}

@@ -38,6 +38,53 @@ public class AgentClient {
   }
 
   public AgentBriefingResponse generate(AgentBriefingRequest request) {
+    return generate(request, 0, 0);
+  }
+
+  public AgentBriefingResponse generate(
+      AgentBriefingRequest request, int maxRetries, int backoffSeconds) {
+    int attempt = 0;
+    while (true) {
+      try {
+        return doGenerate(request);
+      } catch (BusinessException e) {
+        if (isNonRetryable(e)) throw e;
+        if (attempt >= maxRetries) throw e;
+        attempt++;
+        log.warn(
+            "Agent briefing call failed (attempt {}), retrying in {}s: {}",
+            attempt,
+            backoffSeconds,
+            e.getMessage());
+        try {
+          Thread.sleep(backoffSeconds * 1000L);
+        } catch (InterruptedException ie) {
+          Thread.currentThread().interrupt();
+          throw e;
+        }
+      } catch (Exception e) {
+        if (attempt >= maxRetries) {
+          log.error(
+              "Agent briefing call failed after {} attempts: {}", attempt + 1, e.getMessage());
+          throw new BusinessException(ErrorCode.AGENT_SERVER_ERROR, "Agent server error");
+        }
+        attempt++;
+        log.warn(
+            "Agent briefing call failed (attempt {}), retrying in {}s: {}",
+            attempt,
+            backoffSeconds,
+            e.getMessage());
+        try {
+          Thread.sleep(backoffSeconds * 1000L);
+        } catch (InterruptedException ie) {
+          Thread.currentThread().interrupt();
+          throw new BusinessException(ErrorCode.AGENT_SERVER_ERROR, "Agent server error");
+        }
+      }
+    }
+  }
+
+  private AgentBriefingResponse doGenerate(AgentBriefingRequest request) {
     log.info("Calling agent for briefing generation, userId={}", request.userId());
     try {
       AgentBriefingResponse response =

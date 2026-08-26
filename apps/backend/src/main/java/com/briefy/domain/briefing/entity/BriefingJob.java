@@ -99,6 +99,25 @@ public class BriefingJob extends BaseTimeEntity {
     this.completedAt = LocalDateTime.now();
   }
 
+  /**
+   * Complete the job and record the generation mode and fallback reason from the Agent response.
+   */
+  public void completeWithMode(String generationMode, String fallbackReason) {
+    this.status = BriefingJobStatus.COMPLETED;
+    this.completedAt = LocalDateTime.now();
+    this.generationMode = generationMode;
+    this.fallbackReason = fallbackReason;
+  }
+
+  /** Reset a FAILED job to PROCESSING for a retry attempt. */
+  public void resetForRetry() {
+    this.status = BriefingJobStatus.PROCESSING;
+    this.startedAt = LocalDateTime.now();
+    this.completedAt = null;
+    this.errorMessage = null;
+    this.retryCount++;
+  }
+
   public void fail(String errorMessage) {
     this.status = BriefingJobStatus.FAILED;
     this.completedAt = LocalDateTime.now();

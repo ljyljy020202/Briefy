@@ -4,6 +4,8 @@ import com.briefy.domain.briefing.entity.BriefingJob;
 import com.briefy.domain.briefing.entity.BriefingReport;
 import com.briefy.domain.briefing.repository.BriefingJobRepository;
 import com.briefy.domain.briefing.repository.BriefingReportRepository;
+import com.briefy.global.exception.BusinessException;
+import com.briefy.global.exception.ErrorCode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -52,12 +54,37 @@ public class BriefingJobPersistenceService {
     return updated == 1;
   }
 
-  /** Report 저장 및 Job 완료 처리. 하나의 짧은 트랜잭션. */
+  /**
+   * 조건부 선점: FAILED → PROCESSING (retry용).
+   *
+   * @return true if this call successfully claimed the failed job for retry
+   */
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public boolean claimForRetry(Long jobId, int maxRetries) {
+    int updated = briefingJobRepository.claimFailedForRetry(jobId, LocalDateTime.now(), maxRetries);
+    return updated == 1;
+  }
+
+  /** Report 저장 및 Job 완료 처리 (generationMode/fallbackReason 포함). 하나의 짧은 트랜잭션. */
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public BriefingReport saveReportAndComplete(
+      Long jobId, BriefingReport report, String generationMode, String fallbackReason) {
+    BriefingReport saved = briefingReportRepository.save(report);
+    briefingJobRepository
+        .findById(jobId)
+        .ifPresent(job -> job.completeWithMode(generationMode, fallbackReason));
+    return saved;
+  }
+
+  /**
+   * Report 저장 및 Job 완료 처리 (하위 호환용 — generationMode 없이 호출하는 기존 코드용).
+   *
+   * @deprecated saveReportAndComplete(Long, BriefingReport, String, String)을 사용하세요.
+   */
+  @Deprecated
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public BriefingReport saveReportAndComplete(Long jobId, BriefingReport report) {
-    BriefingReport saved = briefingReportRepository.save(report);
-    briefingJobRepository.findById(jobId).ifPresent(BriefingJob::complete);
-    return saved;
+    return saveReportAndComplete(jobId, report, "LLM", null);
   }
 
   /** 실패 상태 기록. 원래 트랜잭션 실패와 무관하게 커밋. */
@@ -71,5 +98,13 @@ public class BriefingJobPersistenceService {
   @Transactional(readOnly = true)
   public Optional<BriefingReport> findTodayReport(Long userId, LocalDate date) {
     return briefingReportRepository.findByUserIdAndReportDate(userId, date);
+  }
+
+  /** Job 단건 조회. 존재하지 않으면 BRIEFING_JOB_NOT_FOUND 예외. */
+  @Transactional(readOnly = true)
+  public BriefingJob findJobById(Long jobId) {
+    return briefingJobRepository
+        .findById(jobId)
+        .orElseThrow(() -> new BusinessException(ErrorCode.BRIEFING_JOB_NOT_FOUND));
   }
 }
