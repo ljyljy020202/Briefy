@@ -4,12 +4,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.briefy.domain.collection.entity.CollectionJob;
 import com.briefy.domain.collection.entity.CollectionJobStatus;
 import com.briefy.domain.collection.entity.CollectionTriggerType;
 import com.briefy.domain.collection.repository.CollectionJobRepository;
+import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -27,6 +30,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 class CollectionJobIdempotencyTest {
 
   @Mock private CollectionJobRepository collectionJobRepository;
+  @Mock private EntityManager entityManager;
 
   private CollectionJobService collectionJobService;
 
@@ -35,6 +39,7 @@ class CollectionJobIdempotencyTest {
   @BeforeEach
   void setUp() {
     collectionJobService = new CollectionJobService(collectionJobRepository);
+    collectionJobService.entityManager = entityManager;
   }
 
   private CollectionJob pendingJob() {
@@ -47,6 +52,8 @@ class CollectionJobIdempotencyTest {
   @Test
   void createOrGetForDate_firstCall_returnsNewPendingJob() {
     CollectionJob job = pendingJob();
+    // find-first: 첫 조회에서 없음 → save() 호출
+    when(collectionJobRepository.findByCollectionDate(TEST_DATE)).thenReturn(Optional.empty());
     when(collectionJobRepository.save(any())).thenReturn(job);
 
     CollectionJob result =
@@ -58,26 +65,49 @@ class CollectionJobIdempotencyTest {
   }
 
   @Test
-  void createOrGetForDate_uniqueConflict_returnsExistingJob() {
+  void createOrGetForDate_existingCompletedJob_returnsImmediatelyWithoutInsert() {
+    // 순차 재시도 시나리오: 첫 조회에서 COMPLETED job 발견 → save() 호출 없이 즉시 반환
+    CollectionJob completedJob = pendingJob();
+    completedJob.complete(10, 8, 2);
+    when(collectionJobRepository.findByCollectionDate(TEST_DATE))
+        .thenReturn(Optional.of(completedJob));
+
+    CollectionJob result =
+        collectionJobService.createOrGetForDate(
+            TEST_DATE, "[\"JOB_POSTING\"]", CollectionTriggerType.MANUAL);
+
+    assertThat(result.getStatus()).isEqualTo(CollectionJobStatus.COMPLETED);
+    assertThat(result.getSavedCount()).isEqualTo(8);
+    verify(collectionJobRepository, never()).save(any());
+  }
+
+  @Test
+  void createOrGetForDate_concurrentRace_returnsExistingJob() {
+    // 동시 race condition: 첫 조회에서 없음 → save() DIVE → em.clear() 후 fallback 조회
     CollectionJob existingJob = pendingJob();
+    when(collectionJobRepository.findByCollectionDate(TEST_DATE))
+        .thenReturn(Optional.empty()) // 첫 조회: 없음
+        .thenReturn(Optional.of(existingJob)); // fallback 조회: 경쟁 스레드가 만든 job 반환
     when(collectionJobRepository.save(any()))
         .thenThrow(new DataIntegrityViolationException("Duplicate entry"));
-    when(collectionJobRepository.findByCollectionDate(TEST_DATE))
-        .thenReturn(Optional.of(existingJob));
 
     CollectionJob result =
         collectionJobService.createOrGetForDate(
             TEST_DATE, "[\"JOB_POSTING\"]", CollectionTriggerType.MANUAL);
 
     assertThat(result).isEqualTo(existingJob);
+    verify(entityManager).clear();
   }
 
   @Test
-  void createOrGetForDate_uniqueConflict_findByDateAlsoFails_rethrowsOriginal() {
+  void createOrGetForDate_concurrentRace_fallbackAlsoEmpty_rethrowsOriginal() {
+    // 동시 race condition + fallback 조회도 실패 → 원래 예외 전파
     DataIntegrityViolationException original =
         new DataIntegrityViolationException("Duplicate entry");
+    when(collectionJobRepository.findByCollectionDate(TEST_DATE))
+        .thenReturn(Optional.empty()) // 첫 조회: 없음
+        .thenReturn(Optional.empty()); // fallback 조회: 여전히 없음
     when(collectionJobRepository.save(any())).thenThrow(original);
-    when(collectionJobRepository.findByCollectionDate(TEST_DATE)).thenReturn(Optional.empty());
 
     assertThatThrownBy(
             () ->
@@ -111,12 +141,9 @@ class CollectionJobIdempotencyTest {
 
   @Test
   void createOrGetForDate_processingStatus_callerShouldThrowAlreadyActive() {
-    // Simulate: existing job is PROCESSING
     CollectionJob processingJob = pendingJob();
-    // Manually set to PROCESSING by calling startProcessing
     processingJob.startProcessing();
-    when(collectionJobRepository.save(any()))
-        .thenThrow(new DataIntegrityViolationException("duplicate"));
+    // find-first: 첫 조회에서 PROCESSING job 발견 → save() 없이 반환
     when(collectionJobRepository.findByCollectionDate(TEST_DATE))
         .thenReturn(Optional.of(processingJob));
 
@@ -124,16 +151,14 @@ class CollectionJobIdempotencyTest {
         collectionJobService.createOrGetForDate(
             TEST_DATE, "[\"JOB_POSTING\"]", CollectionTriggerType.MANUAL);
 
-    // Caller (DailyCollectionService) is responsible for throwing based on status
     assertThat(result.getStatus()).isEqualTo(CollectionJobStatus.PROCESSING);
+    verify(collectionJobRepository, never()).save(any());
   }
 
   @Test
   void createOrGetForDate_completedStatus_callerShouldReturnExistingResult() {
     CollectionJob completedJob = pendingJob();
     completedJob.complete(10, 8, 2);
-    when(collectionJobRepository.save(any()))
-        .thenThrow(new DataIntegrityViolationException("duplicate"));
     when(collectionJobRepository.findByCollectionDate(TEST_DATE))
         .thenReturn(Optional.of(completedJob));
 
@@ -143,14 +168,13 @@ class CollectionJobIdempotencyTest {
 
     assertThat(result.getStatus()).isEqualTo(CollectionJobStatus.COMPLETED);
     assertThat(result.getSavedCount()).isEqualTo(8);
+    verify(collectionJobRepository, never()).save(any());
   }
 
   @Test
   void createOrGetForDate_failedStatus_callerShouldReturnFailedResult() {
     CollectionJob failedJob = pendingJob();
     failedJob.fail("Agent timeout");
-    when(collectionJobRepository.save(any()))
-        .thenThrow(new DataIntegrityViolationException("duplicate"));
     when(collectionJobRepository.findByCollectionDate(TEST_DATE))
         .thenReturn(Optional.of(failedJob));
 
@@ -160,5 +184,6 @@ class CollectionJobIdempotencyTest {
 
     assertThat(result.getStatus()).isEqualTo(CollectionJobStatus.FAILED);
     assertThat(result.getErrorMessage()).isEqualTo("Agent timeout");
+    verify(collectionJobRepository, never()).save(any());
   }
 }
