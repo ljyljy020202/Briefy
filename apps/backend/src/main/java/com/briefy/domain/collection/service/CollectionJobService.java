@@ -6,9 +6,12 @@ import com.briefy.domain.collection.entity.CollectionTriggerType;
 import com.briefy.domain.collection.repository.CollectionJobRepository;
 import com.briefy.global.exception.BusinessException;
 import com.briefy.global.exception.ErrorCode;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -23,6 +26,9 @@ public class CollectionJobService {
   private static final Logger log = LoggerFactory.getLogger(CollectionJobService.class);
 
   private final CollectionJobRepository collectionJobRepository;
+
+  @PersistenceContext
+  EntityManager entityManager;
 
   public CollectionJobService(CollectionJobRepository collectionJobRepository) {
     this.collectionJobRepository = collectionJobRepository;
@@ -77,22 +83,34 @@ public class CollectionJobService {
   /**
    * 날짜 기준 멱등적 CollectionJob 생성.
    *
-   * <ul>
-   *   <li>없으면 PENDING으로 생성
-   *   <li>UNIQUE 충돌 시 기존 job 재조회
-   * </ul>
+   * <p>find-first → create-if-absent 패턴:
+   *
+   * <ol>
+   *   <li>먼저 SELECT로 존재 여부 확인 — 이미 있으면 INSERT 없이 즉시 반환 (순차 재시도 정상 처리)
+   *   <li>없으면 save() 시도 (최초 호출)
+   *   <li>동시 race condition으로 DIVE 발생 시 entityManager.clear()로 dirty 세션 초기화 후 재조회
+   * </ol>
+   *
+   * <p>배경: GenerationType.IDENTITY는 persist() 시점에 INSERT를 즉시 실행한다. 기존 try-save/catch-DIVE
+   * 패턴에서는 INSERT 실패 후 엔티티가 L1 캐시에 dirty 상태로 남아, catch 블록의 findByCollectionDate
+   * 호출이 FlushMode.AUTO 에 의해 다시 flush를 시도해 두 번째 UNIQUE 위반이 발생했다.
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public CollectionJob createOrGetForDate(
       LocalDate date, String categoriesJson, CollectionTriggerType triggerType) {
+    // ① 먼저 조회 — 순차 재시도 시 INSERT 시도 없이 즉시 반환
+    Optional<CollectionJob> existing = collectionJobRepository.findByCollectionDate(date);
+    if (existing.isPresent()) {
+      return existing.get();
+    }
+    // ② 없으면 생성 시도
+    CollectionJob job = CollectionJob.createPending(date, categoriesJson, triggerType);
     try {
-      CollectionJob job = CollectionJob.createPending(date, categoriesJson, triggerType);
       return collectionJobRepository.save(job);
     } catch (DataIntegrityViolationException ex) {
-      // UNIQUE 충돌: 동시 INSERT 경합. 기존 job 재조회
-      return collectionJobRepository
-          .findByCollectionDate(date)
-          .orElseThrow(() -> ex); // 조회도 실패하면 원래 예외 전파
+      // ③ 동시 race condition: dirty 세션 초기화 후 재조회
+      entityManager.clear();
+      return collectionJobRepository.findByCollectionDate(date).orElseThrow(() -> ex);
     }
   }
 
