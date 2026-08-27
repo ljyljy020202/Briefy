@@ -137,6 +137,85 @@ class RecommendationFilterTest {
   }
 
   // ---------------------------------------------------------------------------
+  // Role mismatch — NON_DEV keyword coverage
+  // ---------------------------------------------------------------------------
+
+  @Test
+  void customerServiceRole_excluded_for_backend_user() {
+    // "고객 상담" is a NON_DEV keyword → MISMATCH
+    JobPosting p = postingWithRoles("고객 상담 매니저", "토스CX", null, null);
+    Map<String, Object> pref = Map.of("roles", List.of("백엔드 개발자"));
+    assertExcluded(p, pref, FilterReason.ROLE_MISMATCH);
+  }
+
+  @Test
+  void callCenterRole_excluded_for_backend_user() {
+    // "콜센터" is a NON_DEV keyword → MISMATCH
+    JobPosting p = postingWithRoles("콜센터 상담사", "회사A", null, null);
+    Map<String, Object> pref = Map.of("roles", List.of("백엔드 개발자"));
+    assertExcluded(p, pref, FilterReason.ROLE_MISMATCH);
+  }
+
+  @Test
+  void customerSuccessRole_excluded_for_backend_user() {
+    // "customer success" is a NON_DEV keyword → MISMATCH
+    JobPosting p = postingWithRoles("Customer Success Manager", "회사A", null, null);
+    Map<String, Object> pref = Map.of("roles", List.of("백엔드 개발자"));
+    assertExcluded(p, pref, FilterReason.ROLE_MISMATCH);
+  }
+
+  @Test
+  void salesRole_excluded_for_backend_user() {
+    // "세일즈" is a NON_DEV keyword → MISMATCH
+    JobPosting p = postingWithRoles("세일즈 매니저", "회사A", null, null);
+    Map<String, Object> pref = Map.of("roles", List.of("백엔드 개발자"));
+    assertExcluded(p, pref, FilterReason.ROLE_MISMATCH);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Experience — null experienceLevel with title fallback
+  // ---------------------------------------------------------------------------
+
+  @Test
+  void nullExpLevel_titleHasKyeolryeok_newGradUser_excluded() {
+    // experienceLevel=null, title contains "경력" → EXPERIENCED via title fallback → EXCLUDE
+    JobPosting p = postingWithExperience("카카오 경력 직무", null, null);
+    Map<String, Object> pref = Map.of("experienceLevels", List.of("신입"));
+    assertExcluded(p, pref, FilterReason.EXPERIENCE_EXCLUDED);
+  }
+
+  @Test
+  void nullExpLevel_titleHasMixed_newGradUser_passes() {
+    // "신입/경력" → MIXED → always passes even for 신입 user
+    JobPosting p = postingWithExperience("백엔드 개발자 (신입/경력)", null, null);
+    Map<String, Object> pref = Map.of("experienceLevels", List.of("신입"));
+    assertPasses(p, pref);
+  }
+
+  @Test
+  void nullExpLevel_titleHasEntry_newGradUser_passes() {
+    // "경력 무관" → ENTRY → always passes
+    JobPosting p = postingWithExperience("백엔드 개발자 (경력 무관)", null, null);
+    Map<String, Object> pref = Map.of("experienceLevels", List.of("신입"));
+    assertPasses(p, pref);
+  }
+
+  @Test
+  void nullExpLevel_noTitleSignal_newGradUser_passes() {
+    // No experience signal in title → UNKNOWN → PASS_PARTIAL → not excluded
+    JobPosting p = postingWithExperience("백엔드 개발자", null, null);
+    Map<String, Object> pref = Map.of("experienceLevels", List.of("신입"));
+    assertPasses(p, pref);
+  }
+
+  @Test
+  void nullExpLevel_noPreference_passes() {
+    // No experience preference → never excluded regardless of title
+    JobPosting p = postingWithExperience("카카오 경력 직무", null, null);
+    assertPasses(p, Map.of());
+  }
+
+  // ---------------------------------------------------------------------------
   // Employment type mismatch
   // ---------------------------------------------------------------------------
 
