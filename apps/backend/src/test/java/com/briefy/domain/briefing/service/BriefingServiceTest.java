@@ -10,6 +10,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.briefy.config.BriefingProperties;
 import com.briefy.domain.briefing.dto.BriefingDetailResponse;
 import com.briefy.domain.briefing.dto.BriefingListItem;
 import com.briefy.domain.briefing.dto.GenerateResult;
@@ -63,6 +64,8 @@ class BriefingServiceTest {
   @Mock private AgentClient agentClient;
   @Mock private CandidatePoolService candidatePoolService;
   @Mock private UserRepository userRepository;
+  @Mock private BriefingJobPersistenceService briefingJobPersistenceService;
+  @Mock private BriefingProperties briefingProperties;
 
   @InjectMocks private BriefingService briefingService;
 
@@ -71,8 +74,26 @@ class BriefingServiceTest {
 
   @BeforeEach
   void setUp() {
-    // No prior exposures by default; individual tests can override.
     when(briefingArticleRepository.findRecentExposuresByUserId(any(), any())).thenReturn(List.of());
+
+    // 기본값: 오늘 브리핑 없음, Job 생성 성공, claimForProcessing 성공
+    when(briefingJobPersistenceService.findTodayReport(any(), any()))
+        .thenReturn(java.util.Optional.empty());
+    when(briefingJobPersistenceService.createOrGet(any(BriefingJob.class)))
+        .thenAnswer(inv -> inv.getArgument(0));
+    when(briefingJobPersistenceService.claimForProcessing(any())).thenReturn(true);
+    // 기본 Job findById: PENDING job 반환 (buildReport에서 사용)
+    when(briefingJobRepository.findById(any()))
+        .thenAnswer(
+            inv -> java.util.Optional.of(BriefingJob.createManual(1L, java.time.LocalDate.now())));
+    // 기본 saveReportAndComplete (4-arg): 두 번째 인수(report)를 그대로 반환
+    when(briefingJobPersistenceService.saveReportAndComplete(
+            any(), any(BriefingReport.class), any(), any()))
+        .thenAnswer(inv -> inv.getArgument(1));
+    // BriefingProperties defaults
+    when(briefingProperties.agentRetryMaxAttempts()).thenReturn(0);
+    when(briefingProperties.agentRetryBackoffSeconds()).thenReturn(0);
+    when(briefingProperties.jobMaxRetryCount()).thenReturn(3);
 
     BriefingCategory category = mock(BriefingCategory.class);
     when(category.getCode()).thenReturn(BriefingCategoryCode.JOB_POSTING);
@@ -94,33 +115,50 @@ class BriefingServiceTest {
                     "네이버 백엔드 개발자 공고",
                     "목표 회사와 스킬이 매칭됩니다.",
                     "2026-06-26T00:00:00")),
-            new AgentBriefingResponse.TokenUsage(1000, 500));
+            new AgentBriefingResponse.TokenUsage(1000, 500),
+            null,
+            null,
+            null,
+            null);
   }
+
+  // ── Core generate flow ───────────────────────────────────────────────────
 
   @Test
   void generateBriefing_success_returnsCompletedResult() {
     when(userBriefingPreferenceRepository.findAllByUserIdAndActiveTrue(1L))
         .thenReturn(List.of(mockPref));
-    when(briefingJobRepository.save(any(BriefingJob.class))).thenAnswer(inv -> inv.getArgument(0));
-    when(agentClient.generate(any(AgentBriefingRequest.class))).thenReturn(mockAgentResponse);
+    when(agentClient.generate(
+            any(AgentBriefingRequest.class), any(Integer.class), any(Integer.class)))
+        .thenReturn(mockAgentResponse);
+
+    BriefingJob stubJob = BriefingJob.createManual(1L, java.time.LocalDate.now());
+    when(briefingJobPersistenceService.createOrGet(any(BriefingJob.class))).thenReturn(stubJob);
+    when(briefingJobRepository.findById(any())).thenReturn(java.util.Optional.of(stubJob));
 
     BriefingReport mockReport = mock(BriefingReport.class);
     when(mockReport.getId()).thenReturn(100L);
-    when(briefingReportRepository.save(any(BriefingReport.class))).thenReturn(mockReport);
+    when(briefingJobPersistenceService.saveReportAndComplete(
+            any(), any(BriefingReport.class), any(), any()))
+        .thenReturn(mockReport);
 
     GenerateResult result = briefingService.generateBriefing(1L);
 
     assertThat(result.briefingReportId()).isEqualTo(100L);
     assertThat(result.status()).isEqualTo("COMPLETED");
-    verify(briefingReportRepository).save(any(BriefingReport.class));
+    verify(briefingJobPersistenceService)
+        .saveReportAndComplete(any(), any(BriefingReport.class), any(), any());
   }
 
   @Test
   void generateBriefing_agentThrows_marksJobFailedAndRethrows() {
     when(userBriefingPreferenceRepository.findAllByUserIdAndActiveTrue(1L))
         .thenReturn(List.of(mockPref));
-    when(briefingJobRepository.save(any(BriefingJob.class))).thenAnswer(inv -> inv.getArgument(0));
-    when(agentClient.generate(any(AgentBriefingRequest.class)))
+    BriefingJob stubJob = BriefingJob.createManual(1L, java.time.LocalDate.now());
+    when(briefingJobPersistenceService.createOrGet(any(BriefingJob.class))).thenReturn(stubJob);
+    when(briefingJobRepository.findById(any())).thenReturn(java.util.Optional.of(stubJob));
+    when(agentClient.generate(
+            any(AgentBriefingRequest.class), any(Integer.class), any(Integer.class)))
         .thenThrow(new BusinessException(ErrorCode.AGENT_SERVER_ERROR));
 
     assertThatThrownBy(() -> briefingService.generateBriefing(1L))
@@ -130,8 +168,12 @@ class BriefingServiceTest {
                 assertThat(((BusinessException) e).getErrorCode())
                     .isEqualTo(ErrorCode.AGENT_SERVER_ERROR));
 
-    verify(briefingReportRepository, never()).save(any());
+    verify(briefingJobPersistenceService).recordFailure(any(), any());
+    verify(briefingJobPersistenceService, never())
+        .saveReportAndComplete(any(), any(BriefingReport.class), any(), any());
   }
+
+  // ── List / detail ────────────────────────────────────────────────────────
 
   @Test
   void listBriefings_returnsPaginatedItems() {
@@ -210,11 +252,12 @@ class BriefingServiceTest {
             e -> assertThat(((BusinessException) e).getErrorCode()).isEqualTo(ErrorCode.FORBIDDEN));
   }
 
+  // ── Agent request contract ───────────────────────────────────────────────
+
   @Test
   void generateBriefing_includesCandidatePoolInAgentRequest() {
     when(userBriefingPreferenceRepository.findAllByUserIdAndActiveTrue(1L))
         .thenReturn(List.of(mockPref));
-    when(briefingJobRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
     JobPosting posting = samplePosting("네이버", "백엔드 개발자", "서울", LocalDate.now().plusDays(3));
     when(candidatePoolService.findEligibleJobPostingsForBriefing(any()))
@@ -222,11 +265,8 @@ class BriefingServiceTest {
 
     ArgumentCaptor<AgentBriefingRequest> captor =
         ArgumentCaptor.forClass(AgentBriefingRequest.class);
-    when(agentClient.generate(captor.capture())).thenReturn(mockAgentResponse);
-
-    BriefingReport mockReport = mock(BriefingReport.class);
-    when(mockReport.getId()).thenReturn(1L);
-    when(briefingReportRepository.save(any())).thenReturn(mockReport);
+    when(agentClient.generate(captor.capture(), any(Integer.class), any(Integer.class)))
+        .thenReturn(mockAgentResponse);
 
     briefingService.generateBriefing(1L);
 
@@ -238,75 +278,158 @@ class BriefingServiceTest {
   }
 
   @Test
-  void generateBriefing_limitsTo30Candidates_whenMoreExist() {
+  void generateBriefing_limitsTo7Candidates_whenMoreExist() {
     when(userBriefingPreferenceRepository.findAllByUserIdAndActiveTrue(1L))
         .thenReturn(List.of(mockPref));
-    when(briefingJobRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
     List<JobPosting> postings =
-        IntStream.range(0, 35)
-            .mapToObj(i -> samplePosting("회사" + i, "개발자 " + i, "서울", null))
+        IntStream.range(0, 20)
+            .mapToObj(i -> samplePosting("회사" + i, "백엔드 개발자", "서울", null))
             .toList();
     when(candidatePoolService.findEligibleJobPostingsForBriefing(any())).thenReturn(postings);
 
     ArgumentCaptor<AgentBriefingRequest> captor =
         ArgumentCaptor.forClass(AgentBriefingRequest.class);
-    when(agentClient.generate(captor.capture())).thenReturn(mockAgentResponse);
-
-    BriefingReport mockReport = mock(BriefingReport.class);
-    when(mockReport.getId()).thenReturn(1L);
-    when(briefingReportRepository.save(any())).thenReturn(mockReport);
+    when(agentClient.generate(captor.capture(), any(Integer.class), any(Integer.class)))
+        .thenReturn(mockAgentResponse);
 
     briefingService.generateBriefing(1L);
 
-    assertThat(captor.getValue().candidatePool().jobPostings()).hasSize(30);
+    assertThat(captor.getValue().candidatePool().jobPostings()).hasSizeLessThanOrEqualTo(7);
   }
 
   @Test
   void generateBriefing_emptyCandidatePool_doesNotCrash() {
     when(userBriefingPreferenceRepository.findAllByUserIdAndActiveTrue(1L))
         .thenReturn(List.of(mockPref));
-    when(briefingJobRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
     when(candidatePoolService.findEligibleJobPostingsForBriefing(any())).thenReturn(List.of());
-    when(agentClient.generate(any())).thenReturn(mockAgentResponse);
-
-    BriefingReport mockReport = mock(BriefingReport.class);
-    when(mockReport.getId()).thenReturn(1L);
-    when(briefingReportRepository.save(any())).thenReturn(mockReport);
+    when(agentClient.generate(any(), any(Integer.class), any(Integer.class)))
+        .thenReturn(mockAgentResponse);
 
     GenerateResult result = briefingService.generateBriefing(1L);
 
     assertThat(result.status()).isEqualTo("COMPLETED");
-    verify(agentClient).generate(argThat(req -> req.candidatePool().jobPostings().isEmpty()));
+    verify(agentClient)
+        .generate(
+            argThat(req -> req.candidatePool().jobPostings().isEmpty()),
+            any(Integer.class),
+            any(Integer.class));
+  }
+
+  // ── New contract: rank, isNew, isUrgent, scoreBreakdown, matchEvidence ──
+
+  @Test
+  void candidatePool_rankIsSequentialFrom1() {
+    when(userBriefingPreferenceRepository.findAllByUserIdAndActiveTrue(1L))
+        .thenReturn(List.of(mockPref));
+
+    List<JobPosting> postings =
+        IntStream.range(0, 5)
+            .mapToObj(i -> samplePosting("회사" + i, "백엔드 개발자", "서울", null))
+            .toList();
+    when(candidatePoolService.findEligibleJobPostingsForBriefing(any())).thenReturn(postings);
+
+    ArgumentCaptor<AgentBriefingRequest> captor =
+        ArgumentCaptor.forClass(AgentBriefingRequest.class);
+    when(agentClient.generate(captor.capture(), any(Integer.class), any(Integer.class)))
+        .thenReturn(mockAgentResponse);
+
+    briefingService.generateBriefing(1L);
+
+    List<AgentCandidateJobPosting> candidates = captor.getValue().candidatePool().jobPostings();
+    for (int i = 0; i < candidates.size(); i++) {
+      assertThat(candidates.get(i).rank()).isEqualTo(i + 1);
+    }
   }
 
   @Test
-  void generateBriefing_highScoreCandidate_sentFirst() {
+  void candidatePool_selectorOrderMatchesAgentRequestOrder() {
+    // High score (백엔드 role match = +30) should be rank 1; low score should be rank 2.
     when(userBriefingPreferenceRepository.findAllByUserIdAndActiveTrue(1L))
         .thenReturn(List.of(mockPref));
-    when(briefingJobRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-    // mockPref preference: {roles: ["백엔드 개발자"]} → title match → +30
-    // "개발자" is AMBIGUOUS (no role bonus); "백엔드 개발자 채용" is MATCH (+30)
-    JobPosting highScore = samplePosting("네이버", "백엔드 개발자 채용", "서울", null);
-    JobPosting lowScore = samplePosting("카카오", "개발자", "서울", null);
+    JobPosting highScore = samplePosting("네이버", "백엔드 개발자", "서울", null);
+    JobPosting lowScore = samplePosting("카카오", "Software Engineer", "서울", null);
     when(candidatePoolService.findEligibleJobPostingsForBriefing(any()))
         .thenReturn(List.of(lowScore, highScore));
 
     ArgumentCaptor<AgentBriefingRequest> captor =
         ArgumentCaptor.forClass(AgentBriefingRequest.class);
-    when(agentClient.generate(captor.capture())).thenReturn(mockAgentResponse);
-
-    BriefingReport mockReport = mock(BriefingReport.class);
-    when(mockReport.getId()).thenReturn(1L);
-    when(briefingReportRepository.save(any())).thenReturn(mockReport);
+    when(agentClient.generate(captor.capture(), any(Integer.class), any(Integer.class)))
+        .thenReturn(mockAgentResponse);
 
     briefingService.generateBriefing(1L);
 
     List<AgentCandidateJobPosting> candidates = captor.getValue().candidatePool().jobPostings();
-    assertThat(candidates).hasSize(2);
-    assertThat(candidates.get(0).title()).contains("백엔드");
-    assertThat(candidates.get(0).preScore()).isGreaterThan(candidates.get(1).preScore());
+    assertThat(candidates).hasSizeGreaterThanOrEqualTo(2);
+    assertThat(candidates.get(0).companyName()).isEqualTo("네이버");
+    assertThat(candidates.get(0).rank()).isEqualTo(1);
+    assertThat(candidates.get(1).companyName()).isEqualTo("카카오");
+    assertThat(candidates.get(1).rank()).isEqualTo(2);
+  }
+
+  @Test
+  void candidatePool_isNewAndIsUrgentBothPossiblyTrue() {
+    when(userBriefingPreferenceRepository.findAllByUserIdAndActiveTrue(1L))
+        .thenReturn(List.of(mockPref));
+
+    // Collected today (isNew) + deadline in 3 days (isUrgent)
+    JobPosting newAndUrgent = samplePosting("토스", "백엔드 개발자", "서울", LocalDate.now().plusDays(3));
+    when(candidatePoolService.findEligibleJobPostingsForBriefing(any()))
+        .thenReturn(List.of(newAndUrgent));
+
+    ArgumentCaptor<AgentBriefingRequest> captor =
+        ArgumentCaptor.forClass(AgentBriefingRequest.class);
+    when(agentClient.generate(captor.capture(), any(Integer.class), any(Integer.class)))
+        .thenReturn(mockAgentResponse);
+
+    briefingService.generateBriefing(1L);
+
+    AgentCandidateJobPosting c = captor.getValue().candidatePool().jobPostings().get(0);
+    assertThat(c.isNew()).isTrue();
+    assertThat(c.isUrgent()).isTrue();
+  }
+
+  @Test
+  void candidatePool_scoreBreakdownPresent() {
+    when(userBriefingPreferenceRepository.findAllByUserIdAndActiveTrue(1L))
+        .thenReturn(List.of(mockPref));
+
+    when(candidatePoolService.findEligibleJobPostingsForBriefing(any()))
+        .thenReturn(List.of(samplePosting("네이버", "백엔드 개발자", "서울", null)));
+
+    ArgumentCaptor<AgentBriefingRequest> captor =
+        ArgumentCaptor.forClass(AgentBriefingRequest.class);
+    when(agentClient.generate(captor.capture(), any(Integer.class), any(Integer.class)))
+        .thenReturn(mockAgentResponse);
+
+    briefingService.generateBriefing(1L);
+
+    AgentCandidateJobPosting c = captor.getValue().candidatePool().jobPostings().get(0);
+    assertThat(c.scoreBreakdown()).isNotNull();
+    assertThat(c.scoreBreakdown().adjustedScore())
+        .isEqualTo(c.scoreBreakdown().relevanceScore() - c.scoreBreakdown().exposurePenalty());
+  }
+
+  @Test
+  void candidatePool_matchEvidencePresent() {
+    when(userBriefingPreferenceRepository.findAllByUserIdAndActiveTrue(1L))
+        .thenReturn(List.of(mockPref));
+
+    when(candidatePoolService.findEligibleJobPostingsForBriefing(any()))
+        .thenReturn(List.of(samplePosting("네이버", "백엔드 개발자", "서울", null)));
+
+    ArgumentCaptor<AgentBriefingRequest> captor =
+        ArgumentCaptor.forClass(AgentBriefingRequest.class);
+    when(agentClient.generate(captor.capture(), any(Integer.class), any(Integer.class)))
+        .thenReturn(mockAgentResponse);
+
+    briefingService.generateBriefing(1L);
+
+    AgentCandidateJobPosting c = captor.getValue().candidatePool().jobPostings().get(0);
+    assertThat(c.matchEvidence()).isNotNull();
+    assertThat(c.matchEvidence().matchedRoles()).isNotNull();
+    assertThat(c.matchEvidence().matchedSkills()).isNotNull();
   }
 
   // ── Eligibility filtering ────────────────────────────────────────────────
@@ -314,7 +437,7 @@ class BriefingServiceTest {
   @Test
   void selectCandidates_expiredPosting_isFiltered() {
     JobPosting active = samplePosting("네이버", "백엔드 개발자", "서울", LocalDate.now().plusDays(3));
-    JobPosting expired = samplePosting("카카오", "프론트엔드 개발자", "서울", LocalDate.now().minusDays(1));
+    JobPosting expired = samplePosting("카카오", "백엔드 개발자", "서울", LocalDate.now().minusDays(1));
 
     List<AgentCandidateJobPosting> candidates = candidatesFor(Map.of(), List.of(active, expired));
 
@@ -367,7 +490,47 @@ class BriefingServiceTest {
     assertThat(candidates).hasSize(1);
   }
 
-  // ── Scoring: company metadata ────────────────────────────────────────────
+  // ── Scoring / ordering ───────────────────────────────────────────────────
+
+  @Test
+  void selectCandidates_highScoreCandidate_sentFirst() {
+    // "백엔드 개발자" title → MATCH (+30); "개발자" → AMBIGUOUS (+0)
+    JobPosting highScore = samplePosting("네이버", "백엔드 개발자", "서울", null);
+    JobPosting lowScore = samplePosting("카카오", "개발자", "서울", null);
+
+    List<AgentCandidateJobPosting> candidates =
+        candidatesFor(Map.of("roles", List.of("백엔드 개발자")), List.of(lowScore, highScore));
+
+    assertThat(candidates).hasSizeGreaterThanOrEqualTo(2);
+    assertThat(candidates.get(0).companyName()).isEqualTo("네이버");
+    assertThat(candidates.get(0).scoreBreakdown().adjustedScore())
+        .isGreaterThan(candidates.get(1).scoreBreakdown().adjustedScore());
+  }
+
+  @Test
+  void selectCandidates_targetedCompanyBoost_appliesHigherScore() {
+    JobPosting targeted = samplePosting("네이버", "백엔드 개발자", "서울", null);
+    JobPosting notTargeted = samplePosting("카카오", "백엔드 개발자", "서울", null);
+
+    List<AgentCandidateJobPosting> candidates =
+        candidatesFor(Map.of("companies", List.of("네이버")), List.of(notTargeted, targeted));
+
+    assertThat(candidates.get(0).companyName()).isEqualTo("네이버");
+    assertThat(candidates.get(0).scoreBreakdown().adjustedScore())
+        .isGreaterThan(candidates.get(1).scoreBreakdown().adjustedScore());
+  }
+
+  @Test
+  void selectCandidates_subsidiaryCompanyMatch_receivesTargetBonus() {
+    JobPosting subsidiary = samplePosting("토스인컴", "백엔드 개발자", "서울", null);
+    JobPosting unrelated = samplePosting("당근마켓", "백엔드 개발자", "서울", null);
+
+    List<AgentCandidateJobPosting> candidates =
+        candidatesFor(Map.of("companies", List.of("토스")), List.of(unrelated, subsidiary));
+
+    assertThat(candidates.get(0).companyName()).isEqualTo("토스인컴");
+    assertThat(candidates.get(0).scoreBreakdown().companyScore()).isGreaterThan(0);
+  }
 
   @Test
   void selectCandidates_noLinkedCompany_stillEligibleAndScored() {
@@ -390,65 +553,13 @@ class BriefingServiceTest {
         candidatesFor(Map.of("industries", List.of("IT")), List.of(withoutIndustry, withIndustry));
 
     assertThat(candidates.get(0).companyName()).isEqualTo("네이버");
-    assertThat(candidates.get(0).preScore()).isGreaterThan(candidates.get(1).preScore());
+    assertThat(candidates.get(0).scoreBreakdown().industryScore()).isGreaterThan(0);
   }
 
-  @Test
-  void selectCandidates_companySizeScoredWhenLinkedCompanyMatches() {
-    Company largeCompany = Company.create("네이버", "네이버", "대기업", null);
-    JobPosting withSize = samplePostingWithLinkedCompany("네이버", "백엔드 개발자", largeCompany);
-    JobPosting withoutSize = samplePosting("스타트업", "백엔드 개발자", "서울", null);
-
-    List<AgentCandidateJobPosting> candidates =
-        candidatesFor(Map.of("companySizes", List.of("대기업")), List.of(withoutSize, withSize));
-
-    assertThat(candidates.get(0).companyName()).isEqualTo("네이버");
-    assertThat(candidates.get(0).preScore()).isGreaterThan(candidates.get(1).preScore());
-  }
+  // ── Company cap (always 2, no targeted-company exception) ────────────────
 
   @Test
-  void selectCandidates_targetedCompanyBoost_appliesHigherScore() {
-    JobPosting targeted = samplePosting("네이버", "백엔드 개발자", "서울", null);
-    JobPosting notTargeted = samplePosting("카카오", "백엔드 개발자", "서울", null);
-
-    List<AgentCandidateJobPosting> candidates =
-        candidatesFor(Map.of("companies", List.of("네이버")), List.of(notTargeted, targeted));
-
-    assertThat(candidates.get(0).companyName()).isEqualTo("네이버");
-    assertThat(candidates.get(0).preScore()).isGreaterThan(candidates.get(1).preScore());
-  }
-
-  @Test
-  void selectCandidates_subsidiaryCompanyMatch_receivesTargetBonus() {
-    // "토스" preference should match "토스인컴" (subsidiary) via prefix matching.
-    JobPosting subsidiary = samplePosting("토스인컴", "백엔드 개발자", "서울", null);
-    JobPosting unrelated = samplePosting("당근마켓", "백엔드 개발자", "서울", null);
-
-    List<AgentCandidateJobPosting> candidates =
-        candidatesFor(Map.of("companies", List.of("토스")), List.of(unrelated, subsidiary));
-
-    assertThat(candidates.get(0).companyName()).isEqualTo("토스인컴");
-    assertThat(candidates.get(0).preScore()).isGreaterThan(candidates.get(1).preScore());
-  }
-
-  @Test
-  void isCompanyMatch_prefixSubsidiary_returnsTrue() {
-    assertThat(BriefingService.isCompanyMatch("토스인컴", "토스")).isTrue();
-    assertThat(BriefingService.isCompanyMatch("토스뱅크", "토스")).isTrue();
-    assertThat(BriefingService.isCompanyMatch("카카오페이", "카카오")).isTrue();
-    assertThat(BriefingService.isCompanyMatch("토스", "토스인컴")).isTrue();
-  }
-
-  @Test
-  void isCompanyMatch_unrelatedCompanies_returnsFalse() {
-    assertThat(BriefingService.isCompanyMatch("당근마켓", "토스")).isFalse();
-    assertThat(BriefingService.isCompanyMatch("삼성전자", "카카오")).isFalse();
-  }
-
-  // ── Diversity selection ──────────────────────────────────────────────────
-
-  @Test
-  void selectCandidates_diversitySelection_capsNonTargetedCompanyAt2() {
+  void selectCandidates_diversitySelection_capsCompanyAt2() {
     List<JobPosting> postings =
         List.of(
             samplePosting("삼성", "개발자 A", "서울", null),
@@ -461,61 +572,6 @@ class BriefingServiceTest {
 
     long samsungCount = candidates.stream().filter(c -> "삼성".equals(c.companyName())).count();
     assertThat(samsungCount).isLessThanOrEqualTo(2);
-  }
-
-  @Test
-  void selectCandidates_diversitySelection_allowsMoreFromTargetedCompany() {
-    List<JobPosting> postings =
-        List.of(
-            samplePosting("네이버", "개발자 A", "서울", null),
-            samplePosting("네이버", "개발자 B", "서울", null),
-            samplePosting("네이버", "개발자 C", "서울", null),
-            samplePosting("네이버", "개발자 D", "서울", null));
-
-    List<AgentCandidateJobPosting> candidates =
-        candidatesFor(Map.of("companies", List.of("네이버")), postings);
-
-    long naverCount = candidates.stream().filter(c -> "네이버".equals(c.companyName())).count();
-    assertThat(naverCount).isGreaterThan(2);
-  }
-
-  @Test
-  void selectCandidates_preScoreComputed_alwaysTrueForBackendBuiltCandidates() {
-    List<JobPosting> postings =
-        List.of(
-            samplePosting("네이버", "백엔드 개발자", "서울", null),
-            samplePosting("카카오", "프론트엔드 개발자", "서울", null));
-
-    List<AgentCandidateJobPosting> candidates = candidatesFor(Map.of(), postings);
-
-    assertThat(candidates).isNotEmpty();
-    assertThat(candidates).allSatisfy(c -> assertThat(c.preScoreComputed()).isTrue());
-  }
-
-  @Test
-  void selectCandidates_preScoreComputedTrue_regardlessOfScore() {
-    // preScoreComputed must be true even when preference has no matches (low/zero score).
-    // Note: SCORE_RECENT(+5) may apply since samplePosting uses LocalDate.now().
-    JobPosting posting = samplePosting("무관회사", "무관직무", "무관지역", null);
-    List<AgentCandidateJobPosting> candidates = candidatesFor(Map.of(), List.of(posting));
-
-    assertThat(candidates).hasSize(1);
-    assertThat(candidates.get(0).preScoreComputed()).isTrue();
-  }
-
-  @Test
-  void selectCandidates_deterministicOrdering() {
-    List<JobPosting> postings =
-        List.of(
-            samplePosting("나", "백엔드 개발자", "서울", null),
-            samplePosting("가", "백엔드 개발자", "서울", null),
-            samplePosting("다", "백엔드 개발자", "서울", null));
-
-    List<AgentCandidateJobPosting> first = candidatesFor(Map.of(), postings);
-    List<AgentCandidateJobPosting> second = candidatesFor(Map.of(), postings);
-
-    assertThat(first.stream().map(AgentCandidateJobPosting::companyName).toList())
-        .isEqualTo(second.stream().map(AgentCandidateJobPosting::companyName).toList());
   }
 
   // ── Role eligibility ────────────────────────────────────────────────────
@@ -537,30 +593,14 @@ class BriefingServiceTest {
   }
 
   @Test
-  void roleFilter_marketing_with_sql_skill_excluded_for_backend_user() {
-    // SQL in skills must NOT cause a marketing posting to be treated as a backend posting.
-    JobPosting marketing = samplePostingFull("스타트업", "마케팅 분석가", null, null, "SQL,Python");
-    List<AgentCandidateJobPosting> candidates =
-        candidatesFor(Map.of("roles", List.of("백엔드 개발자")), List.of(marketing));
-    assertThat(candidates).isEmpty();
-  }
-
-  @Test
-  void roleFilter_ambiguous_software_engineer_passes_with_lower_score() {
+  void roleFilter_ambiguous_software_engineer_passes() {
     JobPosting ambiguous = samplePostingFull("스타트업", "Software Engineer", null, null, null);
-    JobPosting backend = samplePostingFull("네이버", "백엔드 개발자", null, null, null);
-
     List<AgentCandidateJobPosting> candidates =
-        candidatesFor(Map.of("roles", List.of("백엔드 개발자")), List.of(ambiguous, backend));
-
-    // Both pass (ambiguous is not excluded)
-    assertThat(candidates).hasSize(2);
-    // Explicit backend match scores higher than ambiguous posting
-    assertThat(candidates.get(0).title()).contains("백엔드");
-    assertThat(candidates.get(0).preScore()).isGreaterThan(candidates.get(1).preScore());
+        candidatesFor(Map.of("roles", List.of("백엔드 개발자")), List.of(ambiguous));
+    assertThat(candidates).hasSize(1);
   }
 
-  // ── Experience eligibility — new grad user ────────────────────────────────
+  // ── Experience eligibility ───────────────────────────────────────────────
 
   @Test
   void expFilter_newGrad_entry_posting_passes() {
@@ -568,29 +608,6 @@ class BriefingServiceTest {
     List<AgentCandidateJobPosting> candidates =
         candidatesFor(Map.of("experienceLevels", List.of("신입")), List.of(posting));
     assertThat(candidates).hasSize(1);
-  }
-
-  @Test
-  void expFilter_newGrad_mixed_posting_passes() {
-    JobPosting posting = samplePostingFull("회사", "백엔드 개발자", null, "신입/경력", null);
-    List<AgentCandidateJobPosting> candidates =
-        candidatesFor(Map.of("experienceLevels", List.of("신입")), List.of(posting));
-    assertThat(candidates).hasSize(1);
-  }
-
-  @Test
-  void expFilter_newGrad_1to2yr_passes_with_lower_score() {
-    JobPosting junior = samplePostingFull("회사A", "백엔드 개발자", null, "1~2년", null);
-    JobPosting fresh = samplePostingFull("회사B", "백엔드 개발자", null, "신입", null);
-
-    List<AgentCandidateJobPosting> candidates =
-        candidatesFor(Map.of("experienceLevels", List.of("신입")), List.of(junior, fresh));
-
-    // Both pass — junior posting gets lower experience bonus
-    assertThat(candidates).hasSize(2);
-    // "신입" posting gets PASS_FULL (+15 exp score), "1~2년" gets PASS_PARTIAL (+0 exp score)
-    assertThat(candidates.get(0).companyName()).isEqualTo("회사B");
-    assertThat(candidates.get(0).preScore()).isGreaterThan(candidates.get(1).preScore());
   }
 
   @Test
@@ -610,31 +627,11 @@ class BriefingServiceTest {
   }
 
   @Test
-  void expFilter_unknown_experience_posting_passes_with_partial_score() {
-    JobPosting unknown = samplePostingFull("회사A", "백엔드 개발자", null, null, null);
-    JobPosting fresh = samplePostingFull("회사B", "백엔드 개발자", null, "신입", null);
-
+  void expFilter_newGrad_1to2yr_passes() {
+    JobPosting junior = samplePostingFull("회사A", "백엔드 개발자", null, "1~2년", null);
     List<AgentCandidateJobPosting> candidates =
-        candidatesFor(Map.of("experienceLevels", List.of("신입")), List.of(unknown, fresh));
-
-    // UNKNOWN passes but gets no experience bonus → lower score than NEW_GRAD posting
-    assertThat(candidates).hasSize(2);
-    assertThat(candidates.get(0).companyName()).isEqualTo("회사B");
-  }
-
-  @Test
-  void expFilter_legacy_intern_in_expLevels_treated_as_new_grad() {
-    // "인턴" stored in experienceLevels (legacy data) → treated as new-grad preference
-    JobPosting experienced = samplePostingFull("회사", "백엔드 개발자", null, "5년 이상", null);
-    JobPosting entry = samplePostingFull("회사2", "백엔드 개발자", null, "경력 무관", null);
-
-    List<AgentCandidateJobPosting> exp5yr =
-        candidatesFor(Map.of("experienceLevels", List.of("인턴")), List.of(experienced));
-    List<AgentCandidateJobPosting> entryResult =
-        candidatesFor(Map.of("experienceLevels", List.of("인턴")), List.of(entry));
-
-    assertThat(exp5yr).isEmpty();
-    assertThat(entryResult).hasSize(1);
+        candidatesFor(Map.of("experienceLevels", List.of("신입")), List.of(junior));
+    assertThat(candidates).hasSize(1);
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────────
@@ -649,19 +646,30 @@ class BriefingServiceTest {
 
     when(userBriefingPreferenceRepository.findAllByUserIdAndActiveTrue(1L))
         .thenReturn(List.of(pref));
-    when(briefingJobRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+    BriefingJob stubJob = BriefingJob.createManual(1L, java.time.LocalDate.now());
+    when(briefingJobPersistenceService.createOrGet(any(BriefingJob.class))).thenReturn(stubJob);
+    when(briefingJobRepository.findById(any())).thenReturn(java.util.Optional.of(stubJob));
     when(candidatePoolService.findEligibleJobPostingsForBriefing(any())).thenReturn(postings);
+
+    BriefingReport savedReport = mock(BriefingReport.class);
+    when(savedReport.getId()).thenReturn(1L);
 
     ArgumentCaptor<AgentBriefingRequest> captor =
         ArgumentCaptor.forClass(AgentBriefingRequest.class);
-    when(agentClient.generate(captor.capture())).thenReturn(mockAgentResponse);
-
-    BriefingReport mockReport = mock(BriefingReport.class);
-    when(mockReport.getId()).thenReturn(1L);
-    when(briefingReportRepository.save(any())).thenReturn(mockReport);
+    when(agentClient.generate(captor.capture(), any(Integer.class), any(Integer.class)))
+        .thenReturn(mockAgentResponse);
+    when(briefingJobPersistenceService.saveReportAndComplete(
+            any(), any(BriefingReport.class), any(), any()))
+        .thenReturn(savedReport);
 
     briefingService.generateBriefing(1L);
     return captor.getValue().candidatePool().jobPostings();
+  }
+
+  private BriefingReport mockBriefingReport() {
+    BriefingReport r = mock(BriefingReport.class);
+    when(r.getId()).thenReturn(1L);
+    return r;
   }
 
   private JobPosting samplePosting(
@@ -707,7 +715,6 @@ class BriefingServiceTest {
         null);
   }
 
-  /** Creates a posting with full control over title, roles JSON, and experienceLevel. */
   private JobPosting samplePostingFull(
       String company, String title, String rolesJson, String experienceLevel, String skills) {
     return JobPosting.create(

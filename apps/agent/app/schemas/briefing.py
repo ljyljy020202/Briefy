@@ -1,5 +1,9 @@
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
+
+GenerationMode = Literal["LLM", "REWRITTEN", "FALLBACK", "EMPTY"]
 
 
 class JobPostingPreference(BaseModel):
@@ -15,15 +19,44 @@ class JobPostingPreference(BaseModel):
     employment_types: list[str] = []
 
 
+class ScoreBreakdown(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    role_score: int = 0
+    company_score: int = 0
+    skill_score: int = 0
+    experience_score: int = 0
+    industry_score: int = 0
+    location_score: int = 0
+    employment_type_score: int = 0
+    company_size_score: int = 0
+    relevance_score: int = 0
+    exposure_penalty: int = 0
+    adjusted_score: int = 0
+
+
+class MatchEvidence(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    matched_roles: list[str] = []
+    matched_companies: list[str] = []
+    matched_skills: list[str] = []
+    matched_industries: list[str] = []
+    matched_locations: list[str] = []
+    matched_experience_levels: list[str] = []
+    matched_employment_types: list[str] = []
+    matched_company_sizes: list[str] = []
+
+
 class CandidateJobPosting(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
     id: int | None = None
+    rank: int = 0
     source: str | None = None
     source_url: str | None = None
     company_name: str | None = None
     title: str | None = None
-    position: str | None = None
     employment_type: str | None = None
     experience_level: str | None = None
     location: str | None = None
@@ -31,17 +64,12 @@ class CandidateJobPosting(BaseModel):
     skills: list[str] = []
     roles: list[str] = []
     description: str | None = None
-    posted_at: str | None = None
+    published_at: str | None = None
     collected_date: str | None = None
-    content_hash: str | None = None
-    pre_score: int = 0
-    # True when Backend explicitly computed this score (even if the result is 0).
-    # False (default) when the field is absent, meaning Agent should treat pre_score
-    # as unset and may apply its own scoring as a fallback in a future iteration.
-    pre_score_computed: bool = False
-    # NEW | URGENT | EVERGREEN — classified by Backend before sending to Agent.
-    # None when the backend did not supply a type (forward-compat default).
-    candidate_type: str | None = None
+    is_new: bool = False
+    is_urgent: bool = False
+    score_breakdown: ScoreBreakdown = Field(default_factory=ScoreBreakdown)
+    match_evidence: MatchEvidence = Field(default_factory=MatchEvidence)
 
 
 class CandidatePool(BaseModel):
@@ -90,3 +118,7 @@ class BriefingGenerateResponse(BaseModel):
     content: str
     articles: list[JobArticle]
     token_usage: TokenUsage = Field(default_factory=TokenUsage)
+    generation_mode: GenerationMode = "LLM"
+    used_fallback: bool = False
+    fallback_reason: str | None = None
+    rewrite_count: int = 0

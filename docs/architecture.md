@@ -12,7 +12,7 @@ Briefy is a personalized AI daily briefing service composed of three independent
                   ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  Frontend (Next.js / Vercel)                                    │
-│  - Google OAuth login (redirects to backend, receives JWT)      │
+│  - Google / Kakao OAuth login (redirects to backend, JWT)       │
 │  - Briefing display & personalization UI                        │
 └─────────────────┬───────────────────────────────────────────────┘
                   │ REST API
@@ -20,17 +20,18 @@ Briefy is a personalized AI daily briefing service composed of three independent
 ┌─────────────────────────────────────────────────────────────────┐
 │  Backend (Spring Boot / AWS EC2)                                │
 │  - User & subscription management                               │
-│  - Briefing orchestration & caching                             │
-│  ├─→ MySQL: user data, preferences, briefing history           │
+│  - Candidate scoring, selection, ranking (Top 7)               │
+│  - Briefing orchestration & storage                             │
+│  ├─→ MySQL: user data, preferences, job postings, briefing history │
 │  └─→ Redis: cache, rate limiting                               │
 └─────────────────┬───────────────────────────────────────────────┘
-                  │ REST API
+                  │ REST API (Top-7 candidate pool)
                   ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  Agent (FastAPI + LangGraph / AWS EC2)                          │
 │  - DailyCollectWorkflow: collect & store job postings           │
-│  - UserBriefingWorkflow: filter, rank & generate per user       │
-│  - LangGraph for multi-step AI orchestration                    │
+│  - UserBriefingWorkflow: LLM generation → validation →          │
+│    rewrite → fallback                                           │
 └─────────────────┬───────────────────────────────────────────────┘
                   │
                   ▼
@@ -41,107 +42,165 @@ Briefy is a personalized AI daily briefing service composed of three independent
 
 ### Frontend
 - Next.js 15 (App Router) with TypeScript
-- Server & client components
-- shadcn/ui component library
+- Server & client components; shadcn/ui component library
 - Tailwind CSS styling
-- REST client for backend communication
+- REST client for backend communication only (never calls Agent directly)
 
 ### Backend
 - Spring Boot 3.4 with Java 21
-- REST API for frontend
-- JPA entities & repository pattern
-- WebClient for Agent calls (briefing generation)
-- Business logic orchestration
+- REST API for frontend; JPA entities & repository pattern
+- **Candidate selection owner:** hard filter → relevance scoring → exposure penalty → isNew/isUrgent classification → RecommendationSelector Top-7 policy
+- Sends final Top-7 list (with `rank`, `scoreBreakdown`, `matchEvidence`) to Agent
+- Saves Agent response to `briefing_reports` + `briefing_articles`
 
 ### Agent
-- FastAPI + LangGraph for workflow orchestration
-- Tool definitions for data retrieval & processing
-- Generative AI integration (OpenAI)
-- Async request handling
+- FastAPI + LangGraph for LLM workflow orchestration
+- **Stateless:** reads only what is in the request body; no DB access
+- Preserves Backend's rank order throughout — never re-ranks
+- LLM generation → deterministic validation → optional rewrite → deterministic fallback
+
+---
 
 ## Data Flow for Daily Collection
 
-Triggered once per day at **06:00 KST** by the Spring Boot scheduler (`DailyCollectionScheduler`), before per-user briefing jobs run at **08:00 KST**. The two workflows share the same `job_postings` candidate pool — collection populates it, briefing generation reads from it.
+Triggered once per day at **06:00 KST** by the Spring Boot scheduler, before per-user briefing jobs run at **08:00 KST**.
 
-1. Backend daily scheduler calls Agent: `POST /collections/daily` for today's date
-2. Agent runs `DailyCollectWorkflow` via LangGraph:
-   - Aggregate seed keywords from all active `user_briefing_preferences` across all users
-   - Fetch job postings from external sources (job boards, company career pages) using seed keywords
-   - Deduplicate by URL and content hash; skip already-stored postings
-   - Save new postings to `job_postings` table
+1. Backend scheduler calls `POST /collections/daily`
+2. Agent runs `DailyCollectWorkflow`:
+   - Aggregate seed keywords from all active `user_briefing_preferences`
+   - Fetch job postings from external sources (job boards, company career pages)
+   - Deduplicate by URL; skip already-stored postings
+   - Save new postings to `job_postings` table via response to Backend
 3. Agent returns `{ savedCounts, durationMs }` to Backend
-4. Backend logs the collection result; user briefing generation for the day reads from the stored pool
+4. Backend logs the result; user briefing generation for the day reads from the stored pool
 
-## Candidate Pool Policy
+---
 
-Before briefing generation, the Backend applies a structured candidate selection policy to the `job_postings` table:
+## Candidate Pool Policy (Backend)
 
-### CandidateType Classification
+Before briefing generation, the Backend applies a structured candidate selection pipeline entirely within Spring. **The Agent does not re-rank or re-filter.**
 
-| Type | Condition |
+### 1. Hard Filter (`RecommendationFilter`)
+
+Postings are removed if any of the following is true:
+
+| Condition | Action |
 |---|---|
-| `NEW` | `publishedAt` or `collectedDate` ≤ 3 days from today |
-| `URGENT` | Not NEW, and deadline within 7 days |
-| `EVERGREEN` | Active, un-expired, not NEW or URGENT |
+| `deadline` is in the past | Exclude |
+| `title` or `companyName` is blank | Exclude |
+| Posting has explicit roles AND user has explicit roles AND no overlap (MISMATCH) | Exclude |
+| User's only experience level is 신입 AND posting explicitly requires 3년 이상+ (EXCLUDE) | Exclude |
+| Employment type is explicitly set on both sides AND they do not match | Exclude |
 
-### Pre-scoring (Spring)
+Ambiguous cases (one side is blank/null) always pass through.
 
-Spring computes `preScore` for each candidate:
-- **Preference matching:** role (+30), target company (+25), skills (+5 each, max +25), experience (+15), industry (+12), location (+10), employment type (+10), company size (+8), recency (+5)
-- **Urgency bonus:** deadline ≤ 1 day (+25), deadline ≤ 3 days (+15)
-- **Exposure penalty:** shown yesterday/today (−40), 2–3 days ago (−25), 4–6 days ago (−10)
+### 2. Relevance Scoring (`RelevanceScorer`)
 
-### Top 30 Quota Selection (Spring)
+`relevanceScore` uses **only preference-matching signals** — no recency bonus, no urgency bonus:
 
-Spring selects at most 30 candidates from the pool with per-type quotas:
-- NEW: up to 12 (`QUOTA_NEW`)
-- URGENT: up to 10 (`QUOTA_URGENT`)
-- EVERGREEN: up to 8 (`QUOTA_EVERGREEN`)
-- Per-company cap: 2 (non-targeted), 3 (targeted)
+| Signal | Score |
+|---|---|
+| Role match | +30 |
+| Target company match | +25 |
+| Each matching skill (max 5 skills) | +5 each (max +25) |
+| Experience level match | +15 |
+| Industry match (via Company Registry) | +15 |
+| Location match | +10 |
+| Employment type match | +10 |
+| Company size match (via Company Registry) | +15 |
 
-Spring sets `preScoreComputed=true` and `candidateType` on every DTO sent to the Agent.
+### 3. Exposure Penalty (separate from `relevanceScore`)
 
-### Backend and Agent Responsibility Boundary
+Calculated from `publishedAt` relative to `briefingDate`:
+
+| Age | Penalty |
+|---|---|
+| ≤ 1 day (YESTERDAY) | 25 |
+| 2–3 days (RECENT) | 15 |
+| 4–6 days (STALE) | 10 |
+| ≥ 7 days | 0 |
+
+`adjustedScore = relevanceScore − exposurePenalty`
+
+### 4. isNew and isUrgent flags (independent)
+
+| Flag | Condition |
+|---|---|
+| `isNew` | `publishedAt` or `collectedDate` ≤ 3 days before `briefingDate` |
+| `isUrgent` | `deadline` is within 7 days of `briefingDate` |
+
+Both flags are computed independently — a posting can have both `isNew=true` and `isUrgent=true` simultaneously.
+
+### 5. Top-7 Selection (`RecommendationSelector`)
+
+Single-pass policy applied to `adjustedScore`-sorted candidates:
+
+| Policy | Value |
+|---|---|
+| `MAX_RECOMMENDATIONS` | 7 |
+| `MIN_NEW` | 2 (minimum new postings if available) |
+| `MIN_URGENT` | 1 (minimum urgent postings if available) |
+| `MAX_PER_COMPANY` | 2 (diversity cap) |
+
+If the pool has fewer than 7 valid candidates, all remaining candidates are included (no padding). If quota targets (MIN_NEW=2, MIN_URGENT=1) cannot be met due to pool shortage, the policy fills remaining slots by `adjustedScore` descending without artificial padding.
+
+Tie-break: stable sort by `adjustedScore` descending, then by `id` ascending.
+
+### 6. What Backend sends to Agent
+
+Backend assigns `rank = 1..N` (1-based, in selection order) and sends the final Top-7 list:
+
+```
+rank + scoreBreakdown + matchEvidence + isNew + isUrgent + publishedAt
+```
+
+Removed fields (no longer in the contract): `preScore`, `preScoreComputed`, `candidateType`, `position`, `contentHash`, `postedAt`.
+
+---
+
+## Backend–Agent Responsibility Boundary
 
 | Concern | Owner |
 |---|---|
 | DB access (read and write) | Spring only — Agent is stateless |
-| Pre-scoring with personalization | Spring (`BriefingService`) |
-| Urgency bonus / exposure penalty | Spring |
-| CandidateType classification | Spring |
-| Top-30 quota selection | Spring |
-| Final ranking (use preScore when `preScoreComputed=true`) | Agent |
-| Filter guards (role mismatch, experience mismatch) | Agent |
-| Top-7 quota selection (NEW≤3, URGENT≤2) | Agent |
-| LLM enrichment and synthesis | Agent |
+| Hard filter (expired, role mismatch, experience, employment type) | Spring (`RecommendationFilter`) |
+| Relevance scoring (preference signals only) | Spring (`RelevanceScorer`) |
+| Exposure penalty | Spring |
+| isNew / isUrgent classification | Spring |
+| Top-7 quota selection and rank assignment | Spring (`RecommendationSelector` + `BriefingService`) |
+| LLM briefing generation + validation + rewrite | Agent (`user_briefing_graph`) |
+| Deterministic fallback report | Agent (`deterministic_fallback_node`) |
+| Save briefing report and articles | Spring |
 
 ---
 
 ## Data Flow for Briefing Generation
 
-Triggered either by a scheduler (daily at 08:00 KST) or a user manually via `POST /api/briefings/generate`.
-Requires that the daily candidate pool has already been collected for the target date (see above).
+Triggered either by a scheduler (daily at 08:00 KST) or a user via `POST /api/briefings/generate`.
 
 1. Backend receives briefing request (scheduled or manual)
 2. Backend loads the user's active `user_briefing_preferences` from MySQL
-3. Backend loads today's active, non-expired `job_postings` (7-day exposure window)
-4. Backend pre-scores candidates and classifies by `CandidateType`; selects top 30 with quota
-5. Backend creates a `briefing_jobs` record (status: `PENDING → PROCESSING`)
-6. Backend calls Agent: `POST /briefings/generate` with `preference` + `candidatePool` (including `preScore`, `preScoreComputed=true`, `candidateType` per posting)
-7. Agent runs `UserBriefingWorkflow` via LangGraph (1st MVP — job briefing):
-   - Filter: remove past-deadline, missing title/URL, clear role mismatch, entry-level mismatch
-   - Rank: use `preScore` directly when `preScoreComputed=true` (agent fallback only for direct calls)
-   - Select: top 7 with quota (NEW≤3, URGENT≤2, rest by score)
-   - Enrich: per-posting LLM summary + matching reason (deterministic fallback when LLM unavailable)
-   - Synthesize: full Markdown briefing via LLM (deterministic fallback)
+3. Backend loads today's active, non-expired `job_postings` from MySQL
+4. Backend runs the candidate pipeline: hard filter → relevance score → exposure penalty → Top-7 selection
+5. Backend creates a `briefing_jobs` record (`PENDING → PROCESSING`)
+6. Backend calls Agent `POST /briefings/generate` with `preference` + `candidatePool` (max 7 postings, each with `rank`, `scoreBreakdown`, `matchEvidence`, `isNew`, `isUrgent`)
+7. Agent runs `UserBriefingWorkflow` via LangGraph:
+   - Sorts postings by `rank` (preserves Backend order)
+   - Enriches postings via LLM (batch: summary + matching reason)
+   - Synthesizes a Markdown briefing via LLM
+   - Validates the report (section structure, referenced posting IDs)
+   - If validation fails: rewrites once via LLM, then re-validates
+   - If still failing or any LLM error: deterministic fallback (no LLM, uses `matchEvidence`)
 8. Agent returns `{ title, summary, content, articles, tokenUsage }` to Backend
 9. Backend saves `briefing_reports` + `briefing_articles` to MySQL, marks job `COMPLETED`
-10. (Scheduler path) If `EMAIL_AUTO_SEND_ENABLED=true` and user has `briefing_email_enabled = true`, backend sends email and records result in `delivery_logs`
+10. If `EMAIL_AUTO_SEND_ENABLED=true` and user has `briefing_email_enabled=true`, backend calls `EmailDeliveryService.autoDeliverBriefingReport()`. The `DeliveryLog` record (PENDING) must already exist at this point; auto-delivery only processes PENDING logs. Email is sent outside any transaction; status is updated via REQUIRES_NEW transactions.
 11. Frontend fetches and renders the Markdown briefing report
+
+---
 
 ## Deployment Architecture
 
-- **Frontend**: Vercel (auto-deploy on push to main)
+- **Frontend**: Vercel (auto-deploy on push to `main`)
 - **Backend & Agent**: Docker containers on AWS EC2
 - **Database**: AWS RDS MySQL
 - **Cache**: AWS ElastiCache Redis

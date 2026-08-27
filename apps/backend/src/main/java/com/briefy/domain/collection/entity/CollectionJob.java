@@ -10,6 +10,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
@@ -20,6 +21,11 @@ import java.time.LocalDateTime;
       @Index(name = "idx_collection_jobs_date", columnList = "collection_date"),
       @Index(name = "idx_collection_jobs_status", columnList = "status"),
       @Index(name = "idx_collection_jobs_date_status", columnList = "collection_date, status")
+    },
+    uniqueConstraints = {
+      @UniqueConstraint(
+          name = "uq_collection_jobs_date",
+          columnNames = {"collection_date"})
     })
 public class CollectionJob extends BaseTimeEntity {
 
@@ -98,6 +104,24 @@ public class CollectionJob extends BaseTimeEntity {
     this.status = CollectionJobStatus.FAILED;
     this.completedAt = LocalDateTime.now();
     this.errorMessage = errorMessage;
+  }
+
+  public void completePartial(
+      int collectedCount, int savedCount, int deduplicatedCount, String errorSummary) {
+    this.status = CollectionJobStatus.PARTIAL_SUCCESS;
+    this.completedAt = LocalDateTime.now();
+    this.collectedCount = collectedCount;
+    this.savedCount = savedCount;
+    this.deduplicatedCount = deduplicatedCount;
+    this.errorMessage = errorSummary;
+  }
+
+  /** FAILED → PROCESSING 조건부 선점. retry_count 증가 포함. */
+  public void resetForRetry() {
+    this.status = CollectionJobStatus.PROCESSING;
+    this.startedAt = LocalDateTime.now();
+    this.completedAt = null;
+    this.errorMessage = null;
     this.retryCount++;
   }
 

@@ -8,6 +8,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.time.LocalDate;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -33,6 +34,14 @@ public class CollectionController {
     LocalDate collectDate = request.collectDate() != null ? request.collectDate() : LocalDate.now();
     DailyCollectionResult result =
         dailyCollectionService.triggerDailyCollection(collectDate, request.categories());
+    return ResponseEntity.ok(ApiResponse.success(result));
+  }
+
+  @Operation(summary = "실패한 수집 작업 재시도", description = "FAILED 상태의 CollectionJob을 재시도합니다. ADMIN 전용.")
+  @PostMapping("/collection-jobs/{jobId}/retry")
+  public ResponseEntity<ApiResponse<DailyCollectionResult>> retryCollectionJob(
+      @PathVariable Long jobId) {
+    DailyCollectionResult result = dailyCollectionService.retryCollectionJob(jobId);
     return ResponseEntity.ok(ApiResponse.success(result));
   }
 }

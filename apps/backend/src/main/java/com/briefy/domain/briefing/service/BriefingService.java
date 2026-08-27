@@ -1,23 +1,24 @@
 package com.briefy.domain.briefing.service;
 
+import com.briefy.config.BriefingProperties;
 import com.briefy.domain.briefing.dto.BriefingDetailResponse;
 import com.briefy.domain.briefing.dto.BriefingListItem;
 import com.briefy.domain.briefing.dto.GenerateResult;
 import com.briefy.domain.briefing.entity.BriefingArticle;
 import com.briefy.domain.briefing.entity.BriefingJob;
+import com.briefy.domain.briefing.entity.BriefingJobStatus;
 import com.briefy.domain.briefing.entity.BriefingReport;
 import com.briefy.domain.briefing.entity.BriefingTriggerType;
-import com.briefy.domain.briefing.policy.CandidateType;
-import com.briefy.domain.briefing.policy.ExperienceParser;
-import com.briefy.domain.briefing.policy.ExperiencePolicy;
-import com.briefy.domain.briefing.policy.JobRolePolicy;
-import com.briefy.domain.briefing.policy.ParsedExperience;
+import com.briefy.domain.briefing.recommendation.RecommendationCandidate;
+import com.briefy.domain.briefing.recommendation.RecommendationFilter;
+import com.briefy.domain.briefing.recommendation.RecommendationSelector;
+import com.briefy.domain.briefing.recommendation.RelevanceScorer;
+import com.briefy.domain.briefing.recommendation.ScoreBreakdown;
 import com.briefy.domain.briefing.repository.BriefingArticleRepository;
 import com.briefy.domain.briefing.repository.BriefingJobRepository;
 import com.briefy.domain.briefing.repository.BriefingReportRepository;
 import com.briefy.domain.candidatepool.entity.JobPosting;
 import com.briefy.domain.candidatepool.service.CandidatePoolService;
-import com.briefy.domain.company.entity.Company;
 import com.briefy.domain.preference.entity.BriefingCategoryCode;
 import com.briefy.domain.preference.entity.UserBriefingPreference;
 import com.briefy.domain.preference.repository.UserBriefingPreferenceRepository;
@@ -31,18 +32,18 @@ import com.briefy.infra.agent.dto.AgentBriefingRequest;
 import com.briefy.infra.agent.dto.AgentBriefingResponse;
 import com.briefy.infra.agent.dto.AgentCandidateJobPosting;
 import com.briefy.infra.agent.dto.AgentCandidatePool;
+import com.briefy.infra.agent.dto.AgentMatchEvidence;
+import com.briefy.infra.agent.dto.AgentScoreBreakdown;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
+import java.util.stream.IntStream;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -51,43 +52,9 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class BriefingService {
 
+  private static final Logger log = LoggerFactory.getLogger(BriefingService.class);
   private static final ZoneId KST = ZoneId.of("Asia/Seoul");
-
-  // ── Top-30 quota ──────────────────────────────────────────────────────────
-  private static final int MAX_CANDIDATE_COUNT = 30;
-  private static final int QUOTA_NEW = 8;
-  private static final int QUOTA_URGENT = 10;
-  private static final int QUOTA_EVERGREEN = 12;
-
-  // ── Per-company diversity limits ──────────────────────────────────────────
-  private static final int MAX_PER_COMPANY = 2;
-  private static final int MAX_PER_TARGETED_COMPANY = 3;
-
-  // ── Personalisation score weights ──────────────────────────────────────────
-  private static final int SCORE_ROLE_MATCH = 30;
-  private static final int SCORE_TARGET_COMPANY = 25;
-  private static final int SCORE_SKILL = 5;
-  private static final int SCORE_SKILLS_MAX = 25;
-  private static final int SCORE_EXPERIENCE = 15;
-  private static final int SCORE_INDUSTRY = 15;
-  private static final int SCORE_LOCATION = 10;
-  private static final int SCORE_EMPLOYMENT_TYPE = 10;
-  private static final int SCORE_COMPANY_SIZE = 15;
-  private static final int SCORE_RECENT = 5;
-
-  // ── Deadline urgency bonus (replaces old SCORE_DEADLINE_SOON=10) ──────────
-  private static final int URGENCY_BONUS_CRITICAL = 20; // deadline ≤ 1 day
-  private static final int URGENCY_BONUS_NEAR = 10; // deadline ≤ 3 days
-
-  // ── Exposure penalty ──────────────────────────────────────────────────────
-  private static final int EXPOSURE_PENALTY_YESTERDAY = 25; // exposed yesterday or today
-  private static final int EXPOSURE_PENALTY_RECENT = 15; // exposed 2–3 days ago
-  private static final int EXPOSURE_PENALTY_STALE = 10; // exposed 4–6 days ago
   private static final int EXPOSURE_LOOKBACK_DAYS = 7;
-
-  // ── CandidateType thresholds ──────────────────────────────────────────────
-  private static final int NEW_DAYS = 3; // published/collected within this many days → NEW
-  private static final int URGENT_DAYS = 7; // deadline within this many days → URGENT
 
   private final BriefingJobRepository briefingJobRepository;
   private final BriefingReportRepository briefingReportRepository;
@@ -96,6 +63,8 @@ public class BriefingService {
   private final AgentClient agentClient;
   private final CandidatePoolService candidatePoolService;
   private final UserRepository userRepository;
+  private final BriefingJobPersistenceService briefingJobPersistenceService;
+  private final BriefingProperties briefingProperties;
 
   public BriefingService(
       BriefingJobRepository briefingJobRepository,
@@ -104,7 +73,9 @@ public class BriefingService {
       UserBriefingPreferenceRepository userBriefingPreferenceRepository,
       AgentClient agentClient,
       CandidatePoolService candidatePoolService,
-      UserRepository userRepository) {
+      UserRepository userRepository,
+      BriefingJobPersistenceService briefingJobPersistenceService,
+      BriefingProperties briefingProperties) {
     this.briefingJobRepository = briefingJobRepository;
     this.briefingReportRepository = briefingReportRepository;
     this.briefingArticleRepository = briefingArticleRepository;
@@ -112,49 +83,134 @@ public class BriefingService {
     this.agentClient = agentClient;
     this.candidatePoolService = candidatePoolService;
     this.userRepository = userRepository;
+    this.briefingJobPersistenceService = briefingJobPersistenceService;
+    this.briefingProperties = briefingProperties;
   }
 
   /**
-   * noRollbackFor ensures the job FAILED status is committed to the DB even when an exception is
-   * re-thrown, so failure state is always visible for debugging and retries.
+   * 멱등적 브리핑 생성. 외부 Agent HTTP 호출이 있으므로 @Transactional 없음. 트랜잭션 경계는
+   * BriefingJobPersistenceService(REQUIRES_NEW)로 격리.
    */
-  @Transactional(noRollbackFor = Exception.class)
   public GenerateResult generateBriefing(Long userId) {
     return doGenerateBriefing(userId, BriefingTriggerType.MANUAL);
   }
 
-  @Transactional(noRollbackFor = Exception.class)
   public GenerateResult generateScheduledBriefing(Long userId) {
     return doGenerateBriefing(userId, BriefingTriggerType.SCHEDULED);
   }
 
+  /** FAILED 상태인 브리핑 Job을 재시도한다. FAILED 상태이고 이미 Report가 없으며 최대 retry 횟수 미만일 때만 허용. */
+  public GenerateResult retryBriefingJob(Long jobId) {
+    BriefingJob job = briefingJobPersistenceService.findJobById(jobId);
+
+    if (job.getStatus() != BriefingJobStatus.FAILED) {
+      throw new BusinessException(ErrorCode.BRIEFING_JOB_RETRY_NOT_ALLOWED);
+    }
+
+    // 기존 Report가 있으면 재시도 차단
+    boolean hasReport = briefingReportRepository.existsByBriefingJobId(jobId);
+    if (hasReport) {
+      throw new BusinessException(ErrorCode.BRIEFING_JOB_HAS_EXISTING_REPORT);
+    }
+
+    boolean claimed =
+        briefingJobPersistenceService.claimForRetry(jobId, briefingProperties.jobMaxRetryCount());
+    if (!claimed) {
+      BriefingJob freshJob = briefingJobPersistenceService.findJobById(jobId);
+      if (freshJob.getRetryCount() >= briefingProperties.jobMaxRetryCount()) {
+        throw new BusinessException(ErrorCode.BRIEFING_JOB_MAX_RETRY_EXCEEDED);
+      }
+      throw new BusinessException(ErrorCode.BRIEFING_JOB_ALREADY_PROCESSING);
+    }
+
+    return executeBriefingCore(job.getUserId(), jobId, job.getBriefingDate(), job.getTriggerType());
+  }
+
   private GenerateResult doGenerateBriefing(Long userId, BriefingTriggerType triggerType) {
-    List<UserBriefingPreference> preferences =
-        userBriefingPreferenceRepository.findAllByUserIdAndActiveTrue(userId);
+    LocalDate briefingDate = LocalDate.now(KST);
 
-    UserBriefingPreference jobPref =
-        preferences.stream()
-            .filter(p -> p.getCategory().getCode() == BriefingCategoryCode.JOB_POSTING)
-            .findFirst()
-            .orElse(null);
+    // Step 1: 오늘 이미 완료된 브리핑이 있으면 반환 (짧은 readOnly TX)
+    java.util.Optional<BriefingReport> existingReport =
+        briefingJobPersistenceService.findTodayReport(userId, briefingDate);
+    if (existingReport.isPresent()) {
+      BriefingReport r = existingReport.get();
+      return new GenerateResult(
+          r.getId(), r.getBriefingJobId(), BriefingJobStatus.COMPLETED.name());
+    }
 
-    BriefingJob job =
+    // Step 2: Job 생성 (짧은 REQUIRES_NEW TX)
+    BriefingJob newJob =
         triggerType == BriefingTriggerType.SCHEDULED
-            ? BriefingJob.createScheduled(userId)
-            : BriefingJob.createManual(userId);
-    job.startProcessing();
-    briefingJobRepository.save(job);
+            ? BriefingJob.createScheduled(userId, briefingDate)
+            : BriefingJob.createManual(userId, briefingDate);
+    BriefingJob job = briefingJobPersistenceService.createOrGet(newJob);
 
+    // Step 3: 상태 분기
+    switch (job.getStatus()) {
+      case PROCESSING -> throw new BusinessException(ErrorCode.BRIEFING_JOB_ALREADY_PROCESSING);
+      case COMPLETED -> {
+        java.util.Optional<BriefingReport> r =
+            briefingJobPersistenceService.findTodayReport(userId, briefingDate);
+        if (r.isPresent()) {
+          return new GenerateResult(
+              r.get().getId(), job.getId(), BriefingJobStatus.COMPLETED.name());
+        }
+      }
+      case FAILED -> throw new BusinessException(ErrorCode.BRIEFING_JOB_FAILED_NO_RETRY);
+      default -> {
+        /* PENDING: 계속 */
+      }
+    }
+
+    // Step 4: 조건부 선점 (REQUIRES_NEW TX)
+    boolean claimed = briefingJobPersistenceService.claimForProcessing(job.getId());
+    if (!claimed) {
+      throw new BusinessException(ErrorCode.BRIEFING_JOB_ALREADY_PROCESSING);
+    }
+
+    return executeBriefingCore(userId, job.getId(), briefingDate, triggerType);
+  }
+
+  /** Agent 호출 → Report 저장 핵심 로직. doGenerateBriefing과 retryBriefingJob 양쪽에서 공유. */
+  private GenerateResult executeBriefingCore(
+      Long userId, Long jobId, LocalDate briefingDate, BriefingTriggerType triggerType) {
     try {
+      // Step 5: 사용자 선호도 조회 (TX 없음)
+      List<UserBriefingPreference> preferences =
+          userBriefingPreferenceRepository.findAllByUserIdAndActiveTrue(userId);
+      UserBriefingPreference jobPref =
+          preferences.stream()
+              .filter(p -> p.getCategory().getCode() == BriefingCategoryCode.JOB_POSTING)
+              .findFirst()
+              .orElse(null);
       Map<String, Object> preference = jobPref != null ? jobPref.getPreference() : Map.of();
-      LocalDate briefingDate = LocalDate.now(KST);
-      List<AgentCandidateJobPosting> candidates =
-          selectCandidates(briefingDate, preference, userId);
-      AgentCandidatePool candidatePool = new AgentCandidatePool(candidates, List.of(), List.of());
 
+      // Step 6: Top 7 선정 (TX 없음)
+      List<AgentCandidateJobPosting> top7 = selectTop7(briefingDate, preference, userId);
+      AgentCandidatePool candidatePool = new AgentCandidatePool(top7, List.of(), List.of());
+
+      // Step 7: Agent HTTP 호출 with retry (TX 없음)
       AgentBriefingRequest agentRequest = buildAgentRequest(userId, preference, candidatePool);
-      AgentBriefingResponse agentResponse = agentClient.generate(agentRequest);
+      AgentBriefingResponse agentResponse =
+          agentClient.generate(
+              agentRequest,
+              briefingProperties.agentRetryMaxAttempts(),
+              briefingProperties.agentRetryBackoffSeconds());
 
+      // Agent 응답 계약 검증
+      validateAgentResponse(agentResponse);
+
+      // 구조화 로그
+      log.info(
+          "briefing generation: userId={} mode={} usedFallback={} rewriteCount={}"
+              + " fallbackReason={}",
+          userId,
+          agentResponse.generationModeOrDefault(),
+          agentResponse.isUsedFallback(),
+          agentResponse.rewriteCountOrZero(),
+          agentResponse.fallbackReason());
+
+      // nickname 치환 (기존 로직 유지)
       String nickname =
           userRepository
               .findById(userId)
@@ -170,21 +226,51 @@ public class BriefingService {
                 agentResponse.summary(),
                 updated,
                 agentResponse.articles(),
-                agentResponse.tokenUsage());
+                agentResponse.tokenUsage(),
+                agentResponse.generationMode(),
+                agentResponse.usedFallback(),
+                agentResponse.fallbackReason(),
+                agentResponse.rewriteCount());
       }
 
-      BriefingReport report = buildReport(userId, job, agentResponse);
-      BriefingReport saved = briefingReportRepository.save(report);
+      // Step 8: Report 저장 + Job 완료 (짧은 REQUIRES_NEW TX)
+      BriefingJob freshJob =
+          briefingJobRepository
+              .findById(jobId)
+              .orElseThrow(() -> new BusinessException(ErrorCode.BRIEFING_JOB_NOT_FOUND));
+      BriefingReport report = buildReport(userId, freshJob, agentResponse);
+      BriefingReport saved =
+          briefingJobPersistenceService.saveReportAndComplete(
+              jobId,
+              report,
+              agentResponse.generationModeOrDefault(),
+              agentResponse.fallbackReason());
 
-      job.complete();
-      return new GenerateResult(saved.getId(), job.getId(), job.getStatus().name());
+      return new GenerateResult(saved.getId(), jobId, BriefingJobStatus.COMPLETED.name());
 
     } catch (BusinessException e) {
-      job.fail(e.getMessage());
+      // Step 9: 실패 기록 (REQUIRES_NEW TX — 원래 TX 롤백과 무관)
+      briefingJobPersistenceService.recordFailure(jobId, e.getMessage());
       throw e;
     } catch (Exception e) {
-      job.fail(e.getMessage() != null ? e.getMessage() : "Unknown error");
+      String msg = e.getMessage() != null ? e.getMessage() : "Unknown error";
+      briefingJobPersistenceService.recordFailure(jobId, msg);
       throw new BusinessException(ErrorCode.BRIEFING_JOB_FAILED);
+    }
+  }
+
+  /** Agent 응답 계약 검증. EMPTY 모드는 title/content 검증 생략. FALLBACK 모드는 content 필수이나 articles는 빈 배열 허용. */
+  private void validateAgentResponse(AgentBriefingResponse response) {
+    String mode = response.generationModeOrDefault();
+    if ("EMPTY".equals(mode)) {
+      return; // empty 응답은 별도 검증 없음
+    }
+    if (response.title() == null || response.title().isBlank()) {
+      throw new BusinessException(ErrorCode.AGENT_CONTRACT_VIOLATION, "Agent returned blank title");
+    }
+    if (response.content() == null || response.content().isBlank()) {
+      throw new BusinessException(
+          ErrorCode.AGENT_CONTRACT_VIOLATION, "Agent returned blank content");
     }
   }
 
@@ -212,200 +298,44 @@ public class BriefingService {
   }
 
   // ---------------------------------------------------------------------------
-  // Candidate selection pipeline
+  // Recommendation pipeline: filter → score → expose-penalty → select Top 7
   // ---------------------------------------------------------------------------
 
-  private List<AgentCandidateJobPosting> selectCandidates(
+  private List<AgentCandidateJobPosting> selectTop7(
       LocalDate date, Map<String, Object> preference, Long userId) {
     Map<String, LocalDate> exposureMap = loadExposureMap(userId, date);
     List<JobPosting> postings = candidatePoolService.findEligibleJobPostingsForBriefing(date);
     if (postings == null || postings.isEmpty()) return List.of();
 
-    List<String> prefCompanies = extractStringList(preference, "companies");
-
-    List<AgentCandidateJobPosting> scored =
+    List<RecommendationCandidate> candidates =
         postings.stream()
-            .filter(p -> isEligible(p, preference, date))
+            .filter(p -> RecommendationFilter.evaluate(p, preference, date).eligible())
             .map(
                 p -> {
-                  int base = scorePosting(p, preference, date);
-                  int urgency = computeUrgencyBonus(p.getDeadline(), date);
-                  int penalty = computeExposurePenalty(p.getUrl(), exposureMap, date);
-                  int total = base + urgency - penalty;
-                  CandidateType type = classifyCandidateType(p, date);
-                  return toAgentCandidateJobPosting(p, total, type);
+                  RelevanceScorer.ScoringResult scored = RelevanceScorer.score(p, preference);
+                  int penalty =
+                      RelevanceScorer.computeExposurePenalty(p.getUrl(), exposureMap, date);
+                  ScoreBreakdown breakdown = scored.breakdown().withExposurePenalty(penalty);
+                  boolean isNew =
+                      RecommendationCandidate.computeIsNew(
+                          p, date, RecommendationSelector.NEW_DAYS);
+                  boolean isUrgent =
+                      RecommendationCandidate.computeIsUrgent(
+                          p, date, RecommendationSelector.URGENT_DAYS);
+                  return new RecommendationCandidate(
+                      p, isNew, isUrgent, breakdown, scored.evidence());
                 })
-            .sorted(
-                Comparator.comparingInt(AgentCandidateJobPosting::preScore)
-                    .reversed()
-                    .thenComparing(AgentCandidateJobPosting::companyName)
-                    .thenComparing(AgentCandidateJobPosting::title))
             .toList();
 
-    return buildTop30(scored, prefCompanies);
+    List<RecommendationCandidate> top7 = RecommendationSelector.select(candidates);
+
+    return IntStream.range(0, top7.size())
+        .mapToObj(i -> toAgentCandidateJobPosting(top7.get(i), i + 1))
+        .toList();
   }
 
   // ---------------------------------------------------------------------------
-  // Eligibility filter
-  // ---------------------------------------------------------------------------
-
-  private boolean isEligible(JobPosting posting, Map<String, Object> pref, LocalDate today) {
-    // ── 1. Expired postings ────────────────────────────────────────────────────
-    if (posting.getDeadline() != null && posting.getDeadline().isBefore(today)) {
-      return false;
-    }
-
-    // ── 2. Role eligibility (hard filter) ─────────────────────────────────────
-    List<String> prefRoles = extractStringList(pref, "roles");
-    JobRolePolicy.Verdict roleVerdict =
-        JobRolePolicy.evaluate(prefRoles, posting.getTitle(), posting.getRoles());
-    if (roleVerdict == JobRolePolicy.Verdict.MISMATCH) {
-      return false;
-    }
-
-    // ── 3. Experience eligibility (hard filter for new-grad users) ─────────────
-    List<String> prefExpLevels = extractStringList(pref, "experienceLevels");
-    ParsedExperience parsedExp = ExperienceParser.parse(posting.getExperienceLevel());
-    ExperiencePolicy.Verdict expVerdict = ExperiencePolicy.evaluate(prefExpLevels, parsedExp);
-    if (expVerdict == ExperiencePolicy.Verdict.EXCLUDE) {
-      return false;
-    }
-
-    // ── 4. Employment type (hard filter when both sides are explicit) ───────────
-    List<String> prefEmpTypes = extractStringList(pref, "employmentTypes");
-    String empType = posting.getEmploymentType();
-    if (!prefEmpTypes.isEmpty() && empType != null && !empType.isBlank()) {
-      if (prefEmpTypes.stream().noneMatch(e -> e.equalsIgnoreCase(empType))) {
-        return false;
-      }
-    }
-
-    return true;
-  }
-
-  // ---------------------------------------------------------------------------
-  // Personalisation scoring
-  // ---------------------------------------------------------------------------
-
-  private int scorePosting(JobPosting posting, Map<String, Object> pref, LocalDate today) {
-    int score = 0;
-
-    List<String> prefRoles = extractStringList(pref, "roles");
-    List<String> prefCompanies = extractStringList(pref, "companies");
-    List<String> prefSkills = extractStringList(pref, "skills");
-    List<String> prefLocations = extractStringList(pref, "locations");
-    List<String> prefExpLevels = extractStringList(pref, "experienceLevels");
-    List<String> prefEmpTypes = extractStringList(pref, "employmentTypes");
-    List<String> prefIndustries = extractStringList(pref, "industries");
-    List<String> prefCompanySizes = extractStringList(pref, "companySizes");
-
-    // role/title match: +30 on MATCH; AMBIGUOUS gets no bonus (relative penalty)
-    JobRolePolicy.Verdict roleVerdict =
-        JobRolePolicy.evaluate(prefRoles, posting.getTitle(), posting.getRoles());
-    if (roleVerdict == JobRolePolicy.Verdict.MATCH) {
-      score += SCORE_ROLE_MATCH;
-    }
-
-    // target company match: +25
-    // Uses prefix-aware matching so group subsidiaries (e.g. "토스인컴") match
-    // a parent preference entry (e.g. "토스").
-    String company = posting.getCompany() != null ? posting.getCompany() : "";
-    String companyL = company.toLowerCase();
-    for (String prefCo : prefCompanies) {
-      if (isCompanyMatch(companyL, prefCo.toLowerCase())) {
-        score += SCORE_TARGET_COMPANY;
-        break;
-      }
-    }
-
-    // each matching skill: +5, max +25
-    String skillsStr = posting.getSkills() != null ? posting.getSkills().toLowerCase() : "";
-    int skillScore = 0;
-    for (String skill : prefSkills) {
-      if (skillsStr.contains(skill.toLowerCase())) {
-        skillScore += SCORE_SKILL;
-        if (skillScore >= SCORE_SKILLS_MAX) break;
-      }
-    }
-    score += skillScore;
-
-    // experience compatibility: PASS_FULL → +15; PASS_PARTIAL → 0 (EXCLUDE already filtered)
-    ParsedExperience parsedExp = ExperienceParser.parse(posting.getExperienceLevel());
-    ExperiencePolicy.Verdict expVerdict = ExperiencePolicy.evaluate(prefExpLevels, parsedExp);
-    if (expVerdict == ExperiencePolicy.Verdict.PASS_FULL) {
-      score += SCORE_EXPERIENCE;
-    }
-
-    // industry match via linkedCompany: +12
-    Company linkedCompany = posting.getLinkedCompany();
-    if (!prefIndustries.isEmpty()
-        && linkedCompany != null
-        && linkedCompany.getIndustryCodes() != null
-        && !linkedCompany.getIndustryCodes().isBlank()) {
-      List<String> codes =
-          Arrays.stream(linkedCompany.getIndustryCodes().split(",")).map(String::trim).toList();
-      for (String prefIndustry : prefIndustries) {
-        if (codes.stream().anyMatch(c -> c.equalsIgnoreCase(prefIndustry))) {
-          score += SCORE_INDUSTRY;
-          break;
-        }
-      }
-    }
-
-    // location match: +10
-    String location = posting.getLocation() != null ? posting.getLocation() : "";
-    for (String prefLoc : prefLocations) {
-      if (location.contains(prefLoc) || prefLoc.contains(location)) {
-        score += SCORE_LOCATION;
-        break;
-      }
-    }
-
-    // employment type match: +10
-    String empType = posting.getEmploymentType() != null ? posting.getEmploymentType() : "";
-    for (String prefEmp : prefEmpTypes) {
-      if (empType.equalsIgnoreCase(prefEmp)) {
-        score += SCORE_EMPLOYMENT_TYPE;
-        break;
-      }
-    }
-
-    // company size match via linkedCompany: +8
-    if (!prefCompanySizes.isEmpty()
-        && linkedCompany != null
-        && linkedCompany.getCompanySize() != null
-        && !linkedCompany.getCompanySize().isBlank()) {
-      for (String prefSize : prefCompanySizes) {
-        if (linkedCompany.getCompanySize().equalsIgnoreCase(prefSize)) {
-          score += SCORE_COMPANY_SIZE;
-          break;
-        }
-      }
-    }
-
-    // recently collected (within 3 days): +5
-    if (posting.getCollectedDate() != null
-        && !posting.getCollectedDate().isBefore(today.minusDays(3))) {
-      score += SCORE_RECENT;
-    }
-
-    return score;
-  }
-
-  // ---------------------------------------------------------------------------
-  // Urgency bonus (replaces old flat SCORE_DEADLINE_SOON)
-  // ---------------------------------------------------------------------------
-
-  int computeUrgencyBonus(LocalDate deadline, LocalDate today) {
-    if (deadline == null) return 0;
-    long daysUntil = ChronoUnit.DAYS.between(today, deadline);
-    if (daysUntil <= 1) return URGENCY_BONUS_CRITICAL;
-    if (daysUntil <= 3) return URGENCY_BONUS_NEAR;
-    return 0;
-  }
-
-  // ---------------------------------------------------------------------------
-  // Exposure penalty
+  // Exposure map
   // ---------------------------------------------------------------------------
 
   private Map<String, LocalDate> loadExposureMap(Long userId, LocalDate today) {
@@ -419,123 +349,10 @@ public class BriefingService {
       if (row.getUrl() == null) continue;
       String canonical = UrlUtils.canonicalize(row.getUrl());
       if (canonical != null) {
-        // If the same canonical URL appears multiple times (different raw forms),
-        // keep the most recent exposure date.
         map.merge(canonical, row.getLastExposedDate(), (a, b) -> a.isAfter(b) ? a : b);
       }
     }
     return map;
-  }
-
-  int computeExposurePenalty(String url, Map<String, LocalDate> exposureMap, LocalDate today) {
-    String canonical = UrlUtils.canonicalize(url);
-    if (canonical == null) return 0;
-    LocalDate lastExposed = exposureMap.get(canonical);
-    if (lastExposed == null) return 0;
-
-    long daysSince = ChronoUnit.DAYS.between(lastExposed, today);
-    if (daysSince <= 1) return EXPOSURE_PENALTY_YESTERDAY;
-    if (daysSince <= 3) return EXPOSURE_PENALTY_RECENT;
-    if (daysSince <= 6) return EXPOSURE_PENALTY_STALE;
-    return 0;
-  }
-
-  // ---------------------------------------------------------------------------
-  // CandidateType classification
-  // ---------------------------------------------------------------------------
-
-  CandidateType classifyCandidateType(JobPosting jp, LocalDate today) {
-    LocalDate newThreshold = today.minusDays(NEW_DAYS);
-
-    // NEW: publishedAt within 3 days; if null, use collectedDate as firstSeenAt
-    boolean isNew = false;
-    if (jp.getPublishedAt() != null) {
-      isNew = !jp.getPublishedAt().toLocalDate().isBefore(newThreshold);
-    } else if (jp.getCollectedDate() != null) {
-      isNew = !jp.getCollectedDate().isBefore(newThreshold);
-    }
-    if (isNew) return CandidateType.NEW;
-
-    // URGENT: not NEW and deadline within 7 days (inclusive)
-    if (jp.getDeadline() != null) {
-      long daysUntil = ChronoUnit.DAYS.between(today, jp.getDeadline());
-      if (daysUntil >= 0 && daysUntil <= URGENT_DAYS) {
-        return CandidateType.URGENT;
-      }
-    }
-
-    return CandidateType.EVERGREEN;
-  }
-
-  // ---------------------------------------------------------------------------
-  // Top-30 quota selection with per-company diversity
-  // ---------------------------------------------------------------------------
-
-  private List<AgentCandidateJobPosting> buildTop30(
-      List<AgentCandidateJobPosting> allScored, List<String> targetedCompanies) {
-    Map<String, Integer> companyCount = new HashMap<>();
-    Set<String> selectedUrls = new HashSet<>();
-    List<AgentCandidateJobPosting> result = new ArrayList<>();
-
-    List<AgentCandidateJobPosting> newGroup =
-        allScored.stream().filter(c -> CandidateType.NEW.name().equals(c.candidateType())).toList();
-    List<AgentCandidateJobPosting> urgentGroup =
-        allScored.stream()
-            .filter(c -> CandidateType.URGENT.name().equals(c.candidateType()))
-            .toList();
-    List<AgentCandidateJobPosting> evergreenGroup =
-        allScored.stream()
-            .filter(c -> CandidateType.EVERGREEN.name().equals(c.candidateType()))
-            .toList();
-
-    result.addAll(
-        pickFromGroup(newGroup, targetedCompanies, companyCount, selectedUrls, QUOTA_NEW));
-    result.addAll(
-        pickFromGroup(urgentGroup, targetedCompanies, companyCount, selectedUrls, QUOTA_URGENT));
-    result.addAll(
-        pickFromGroup(
-            evergreenGroup, targetedCompanies, companyCount, selectedUrls, QUOTA_EVERGREEN));
-
-    // Fill remaining slots from any leftover candidates (cross-type, still respecting limits)
-    if (result.size() < MAX_CANDIDATE_COUNT) {
-      List<AgentCandidateJobPosting> leftovers =
-          allScored.stream().filter(c -> !selectedUrls.contains(c.sourceUrl())).toList();
-      result.addAll(
-          pickFromGroup(
-              leftovers,
-              targetedCompanies,
-              companyCount,
-              selectedUrls,
-              MAX_CANDIDATE_COUNT - result.size()));
-    }
-
-    return result;
-  }
-
-  private List<AgentCandidateJobPosting> pickFromGroup(
-      List<AgentCandidateJobPosting> group,
-      List<String> targetedCompanies,
-      Map<String, Integer> companyCount,
-      Set<String> selectedUrls,
-      int quota) {
-    List<AgentCandidateJobPosting> result = new ArrayList<>();
-    for (AgentCandidateJobPosting candidate : group) {
-      if (result.size() >= quota) break;
-      String companyLower =
-          candidate.companyName() != null ? candidate.companyName().toLowerCase() : "";
-      boolean isTargeted =
-          !companyLower.isEmpty()
-              && targetedCompanies.stream()
-                  .anyMatch(t -> isCompanyMatch(companyLower, t.toLowerCase()));
-      int limit = isTargeted ? MAX_PER_TARGETED_COMPANY : MAX_PER_COMPANY;
-      int current = companyCount.getOrDefault(companyLower, 0);
-      if (current < limit) {
-        result.add(candidate);
-        companyCount.put(companyLower, current + 1);
-        if (candidate.sourceUrl() != null) selectedUrls.add(candidate.sourceUrl());
-      }
-    }
-    return result;
   }
 
   // ---------------------------------------------------------------------------
@@ -543,14 +360,15 @@ public class BriefingService {
   // ---------------------------------------------------------------------------
 
   private AgentCandidateJobPosting toAgentCandidateJobPosting(
-      JobPosting p, int preScore, CandidateType candidateType) {
+      RecommendationCandidate candidate, int rank) {
+    JobPosting p = candidate.posting();
     return new AgentCandidateJobPosting(
         p.getId(),
+        rank,
         p.getSource(),
         p.getUrl(),
         p.getCompany(),
         p.getTitle(),
-        null,
         p.getEmploymentType(),
         p.getExperienceLevel(),
         p.getLocation(),
@@ -560,10 +378,10 @@ public class BriefingService {
         p.getDescription(),
         p.getPublishedAt() != null ? p.getPublishedAt().toString() : null,
         p.getCollectedDate() != null ? p.getCollectedDate().toString() : null,
-        p.getContentHash(),
-        preScore,
-        true,
-        candidateType != null ? candidateType.name() : null);
+        candidate.isNew(),
+        candidate.isUrgent(),
+        AgentScoreBreakdown.from(candidate.scoreBreakdown()),
+        AgentMatchEvidence.from(candidate.matchEvidence()));
   }
 
   // ---------------------------------------------------------------------------
@@ -606,6 +424,7 @@ public class BriefingService {
             tokenOutput,
             agentArticles.size());
 
+    // displayOrder reflects the Backend-determined rank (1-based, preserved by Agent).
     for (int i = 0; i < agentArticles.size(); i++) {
       AgentBriefingResponse.AgentArticle a = agentArticles.get(i);
       report.addArticle(
@@ -626,28 +445,6 @@ public class BriefingService {
   // ---------------------------------------------------------------------------
   // Utilities
   // ---------------------------------------------------------------------------
-
-  /**
-   * True when the posting company name matches a preference entry using prefix-aware comparison.
-   *
-   * <p>Both arguments must already be lowercase. A match occurs when either string is a prefix of
-   * the other, so a user preference of "토스" matches posting companies "토스인컴", "토스뱅크", "토스페이먼츠",
-   * etc.
-   */
-  static boolean isCompanyMatch(String postingCompanyLower, String prefCompanyLower) {
-    if (postingCompanyLower.isEmpty() || prefCompanyLower.isEmpty()) return false;
-    return postingCompanyLower.equals(prefCompanyLower)
-        || postingCompanyLower.startsWith(prefCompanyLower)
-        || prefCompanyLower.startsWith(postingCompanyLower);
-  }
-
-  private List<String> extractStringList(Map<String, Object> pref, String key) {
-    Object val = pref.get(key);
-    if (val instanceof List<?> list) {
-      return list.stream().filter(String.class::isInstance).map(String.class::cast).toList();
-    }
-    return List.of();
-  }
 
   private List<String> parseJsonArray(String json) {
     if (json == null || json.isBlank()) return List.of();

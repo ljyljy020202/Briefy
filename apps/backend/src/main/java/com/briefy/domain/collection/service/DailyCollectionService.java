@@ -3,6 +3,7 @@ package com.briefy.domain.collection.service;
 import com.briefy.config.CollectionProperties;
 import com.briefy.domain.candidatepool.dto.CandidatePoolUpsertResult;
 import com.briefy.domain.candidatepool.dto.CollectedJobPostingData;
+import com.briefy.domain.candidatepool.service.CandidatePoolPersistenceService;
 import com.briefy.domain.candidatepool.service.CandidatePoolService;
 import com.briefy.domain.collection.dto.DailyCollectionResult;
 import com.briefy.domain.collection.entity.CollectionJob;
@@ -17,6 +18,8 @@ import com.briefy.domain.company.service.CompanyNameNormalizer;
 import com.briefy.domain.preference.entity.BriefingCategoryCode;
 import com.briefy.domain.preference.entity.UserBriefingPreference;
 import com.briefy.domain.preference.repository.UserBriefingPreferenceRepository;
+import com.briefy.global.exception.BusinessException;
+import com.briefy.global.exception.ErrorCode;
 import com.briefy.infra.agent.AgentClient;
 import com.briefy.infra.agent.dto.AgentCollectedJobPosting;
 import com.briefy.infra.agent.dto.AgentCollectionOptions;
@@ -25,6 +28,7 @@ import com.briefy.infra.agent.dto.AgentCollectionResponse;
 import com.briefy.infra.agent.dto.AgentCompanyProfile;
 import com.briefy.infra.agent.dto.AgentOfficialCompanySource;
 import com.briefy.infra.agent.dto.AgentSeedKeywords;
+import com.briefy.infra.agent.dto.AgentSourceOutcome;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -48,6 +52,7 @@ public class DailyCollectionService {
   private final UserBriefingPreferenceRepository userBriefingPreferenceRepository;
   private final AgentClient agentClient;
   private final CandidatePoolService candidatePoolService;
+  private final CandidatePoolPersistenceService candidatePoolPersistenceService;
   private final CompanyRepository companyRepository;
   private final CompanyAliasRepository companyAliasRepository;
   private final CompanySourceRepository companySourceRepository;
@@ -59,6 +64,7 @@ public class DailyCollectionService {
       UserBriefingPreferenceRepository userBriefingPreferenceRepository,
       AgentClient agentClient,
       CandidatePoolService candidatePoolService,
+      CandidatePoolPersistenceService candidatePoolPersistenceService,
       CompanyRepository companyRepository,
       CompanyAliasRepository companyAliasRepository,
       CompanySourceRepository companySourceRepository,
@@ -68,6 +74,7 @@ public class DailyCollectionService {
     this.userBriefingPreferenceRepository = userBriefingPreferenceRepository;
     this.agentClient = agentClient;
     this.candidatePoolService = candidatePoolService;
+    this.candidatePoolPersistenceService = candidatePoolPersistenceService;
     this.companyRepository = companyRepository;
     this.companyAliasRepository = companyAliasRepository;
     this.companySourceRepository = companySourceRepository;
@@ -84,14 +91,104 @@ public class DailyCollectionService {
     return executeCollection(collectDate, null, CollectionTriggerType.SCHEDULED);
   }
 
+  public DailyCollectionResult retryCollectionJob(Long jobId) {
+    CollectionJob job = collectionJobService.findOrThrow(jobId);
+
+    if (job.getStatus() != CollectionJobStatus.FAILED) {
+      throw new BusinessException(
+          ErrorCode.COLLECTION_JOB_RETRY_NOT_ALLOWED,
+          "Only FAILED jobs can be retried. Current status: " + job.getStatus());
+    }
+
+    boolean claimed =
+        collectionJobService.claimForRetry(jobId, collectionProperties.jobMaxRetryCount());
+    if (!claimed) {
+      // 동시 retry 또는 최대 횟수 초과
+      CollectionJob fresh = collectionJobService.findOrThrow(jobId);
+      if (fresh.getRetryCount() >= collectionProperties.jobMaxRetryCount()) {
+        throw new BusinessException(ErrorCode.COLLECTION_JOB_MAX_RETRY_EXCEEDED);
+      }
+      throw new BusinessException(ErrorCode.COLLECTION_JOB_ALREADY_ACTIVE);
+    }
+
+    return executeCollectionCore(
+        job.getCollectionDate(), job.getId(), CollectionTriggerType.MANUAL);
+  }
+
   private DailyCollectionResult executeCollection(
       LocalDate collectDate, List<String> requestedCategories, CollectionTriggerType triggerType) {
     List<String> categories = resolveCategories(requestedCategories);
     String categoriesJson = buildCategoriesJson(categories);
 
+    // 1. 멱등적 생성 (UNIQUE 충돌 시 기존 job 재조회)
     CollectionJob job =
-        collectionJobService.createPending(collectDate, categoriesJson, triggerType);
-    collectionJobService.markProcessing(job.getId());
+        collectionJobService.createOrGetForDate(collectDate, categoriesJson, triggerType);
+
+    // 2. 상태에 따라 분기
+    switch (job.getStatus()) {
+      case PROCESSING -> {
+        log.info("Collection already PROCESSING for {}: jobId={}", collectDate, job.getId());
+        throw new BusinessException(ErrorCode.COLLECTION_JOB_ALREADY_ACTIVE);
+      }
+      case COMPLETED -> {
+        log.info("Collection already COMPLETED for {}: jobId={}", collectDate, job.getId());
+        return new DailyCollectionResult(
+            job.getId(),
+            CollectionJobStatus.COMPLETED.name(),
+            collectDate,
+            null,
+            job.getSavedCount(),
+            job.getDeduplicatedCount(),
+            List.of(),
+            null,
+            CollectionJobStatus.COMPLETED.name());
+      }
+      case PARTIAL_SUCCESS -> {
+        log.info("Collection already PARTIAL_SUCCESS for {}: jobId={}", collectDate, job.getId());
+        return new DailyCollectionResult(
+            job.getId(),
+            CollectionJobStatus.PARTIAL_SUCCESS.name(),
+            collectDate,
+            null,
+            job.getSavedCount(),
+            job.getDeduplicatedCount(),
+            List.of(),
+            job.getErrorMessage(),
+            CollectionJobStatus.PARTIAL_SUCCESS.name());
+      }
+      case FAILED -> {
+        log.info("Collection previously FAILED for {}: jobId={}", collectDate, job.getId());
+        return new DailyCollectionResult(
+            job.getId(),
+            CollectionJobStatus.FAILED.name(),
+            collectDate,
+            null,
+            0,
+            0,
+            List.of(),
+            job.getErrorMessage(),
+            CollectionJobStatus.FAILED.name());
+      }
+      default -> {
+        /* PENDING: 계속 진행 */
+      }
+    }
+
+    // 3. 조건부 선점: PENDING → PROCESSING
+    boolean claimed = collectionJobService.claimForProcessing(job.getId());
+    if (!claimed) {
+      log.info("Collection job {} already claimed by another thread", job.getId());
+      throw new BusinessException(ErrorCode.COLLECTION_JOB_ALREADY_ACTIVE);
+    }
+
+    return executeCollectionCore(collectDate, job.getId(), triggerType);
+  }
+
+  private DailyCollectionResult executeCollectionCore(
+      LocalDate collectDate, Long jobId, CollectionTriggerType triggerType) {
+    // 카테고리는 항상 JOB_POSTING (1st MVP)
+    List<String> categories =
+        List.of(com.briefy.domain.preference.entity.BriefingCategoryCode.JOB_POSTING.name());
 
     try {
       AgentSeedKeywords seedKeywords = aggregateSeedKeywords(categories);
@@ -101,7 +198,7 @@ public class DailyCollectionService {
 
       AgentCollectionRequest agentRequest =
           new AgentCollectionRequest(
-              job.getId(),
+              jobId,
               collectDate.toString(),
               categories,
               seedKeywords,
@@ -114,49 +211,130 @@ public class DailyCollectionService {
               companyProfiles,
               officialCompanySources);
 
-      AgentCollectionResponse agentResponse = agentClient.triggerDailyCollection(agentRequest);
+      AgentCollectionResponse agentResponse =
+          agentClient.triggerDailyCollection(
+              agentRequest,
+              collectionProperties.agentRetryMaxAttempts(),
+              collectionProperties.agentRetryBackoffSeconds());
+
+      CollectionJobStatus outcome = determineOutcome(agentResponse);
+
+      // 전체 소스 실패 → 저장하지 않고 FAILED 처리
+      if (outcome == CollectionJobStatus.FAILED) {
+        String errorSummary = buildSourceErrorSummary(agentResponse);
+        collectionJobService.markFailed(jobId, errorSummary);
+        log.warn(
+            "Daily collection: all sources failed, jobId={}, errorSummary={}", jobId, errorSummary);
+        return new DailyCollectionResult(
+            jobId,
+            CollectionJobStatus.FAILED.name(),
+            collectDate,
+            agentResponse.stats(),
+            0,
+            0,
+            agentResponse.warnings() != null ? agentResponse.warnings() : List.of(),
+            errorSummary,
+            CollectionJobStatus.FAILED.name());
+      }
 
       List<CollectedJobPostingData> postingData =
           mapToPostingData(agentResponse.jobPostings(), collectDate);
-      CandidatePoolUpsertResult upsertResult =
-          candidatePoolService.upsertJobPostings(postingData, collectDate);
+      CandidatePoolUpsertResult upsertResult;
+      try {
+        upsertResult = candidatePoolPersistenceService.saveAtomically(postingData, collectDate);
+      } catch (Exception e) {
+        String errorMessage = e.getMessage() != null ? e.getMessage() : "Persistence error";
+        log.error("Daily collection: persistence failed, jobId={}, error={}", jobId, errorMessage);
+        collectionJobService.markFailed(jobId, errorMessage);
+        return new DailyCollectionResult(
+            jobId,
+            CollectionJobStatus.FAILED.name(),
+            collectDate,
+            agentResponse.stats(),
+            0,
+            0,
+            agentResponse.warnings() != null ? agentResponse.warnings() : List.of(),
+            errorMessage,
+            CollectionJobStatus.FAILED.name());
+      }
 
       int agentFinalCount =
           agentResponse.stats() != null ? agentResponse.stats().finalCount() : postingData.size();
-      collectionJobService.markCompleted(
-          job.getId(), agentFinalCount, upsertResult.savedCount(), upsertResult.duplicateCount());
 
-      log.info(
-          "Daily collection completed: jobId={}, agentFinal={}, saved={}, persistenceDups={}",
-          job.getId(),
-          agentFinalCount,
-          upsertResult.savedCount(),
-          upsertResult.duplicateCount());
+      if (outcome == CollectionJobStatus.PARTIAL_SUCCESS) {
+        String errorSummary = buildSourceErrorSummary(agentResponse);
+        collectionJobService.markPartialSuccess(
+            jobId,
+            agentFinalCount,
+            upsertResult.savedCount(),
+            upsertResult.duplicateCount(),
+            errorSummary);
+        log.info(
+            "Daily collection partial success: jobId={}, agentFinal={}, saved={}, persistenceDups={}",
+            jobId,
+            agentFinalCount,
+            upsertResult.savedCount(),
+            upsertResult.duplicateCount());
+      } else {
+        collectionJobService.markCompleted(
+            jobId, agentFinalCount, upsertResult.savedCount(), upsertResult.duplicateCount());
+        log.info(
+            "Daily collection completed: jobId={}, agentFinal={}, saved={}, persistenceDups={}",
+            jobId,
+            agentFinalCount,
+            upsertResult.savedCount(),
+            upsertResult.duplicateCount());
+      }
 
       return new DailyCollectionResult(
-          job.getId(),
-          CollectionJobStatus.COMPLETED.name(),
+          jobId,
+          outcome.name(),
           collectDate,
           agentResponse.stats(),
           upsertResult.savedCount(),
           upsertResult.duplicateCount(),
           agentResponse.warnings() != null ? agentResponse.warnings() : List.of(),
-          null);
+          null,
+          outcome.name());
 
     } catch (Exception e) {
       String errorMessage = e.getMessage() != null ? e.getMessage() : "Unknown error";
-      log.error("Daily collection failed: jobId={}, error={}", job.getId(), errorMessage);
-      collectionJobService.markFailed(job.getId(), errorMessage);
+      log.error("Daily collection failed: jobId={}, error={}", jobId, errorMessage);
+      collectionJobService.markFailed(jobId, errorMessage);
       return new DailyCollectionResult(
-          job.getId(),
+          jobId,
           CollectionJobStatus.FAILED.name(),
           collectDate,
           null,
           0,
           0,
           List.of(),
-          errorMessage);
+          errorMessage,
+          CollectionJobStatus.FAILED.name());
     }
+  }
+
+  private CollectionJobStatus determineOutcome(AgentCollectionResponse response) {
+    List<AgentSourceOutcome> outcomes = response.sourceOutcomes();
+    if (outcomes == null || outcomes.isEmpty()) {
+      // 소스 정보 없으면 공고 수로 판단 (후방 호환)
+      return CollectionJobStatus.COMPLETED;
+    }
+    long successCount = outcomes.stream().filter(AgentSourceOutcome::success).count();
+    long failureCount = outcomes.stream().filter(o -> !o.success()).count();
+    if (failureCount == 0) return CollectionJobStatus.COMPLETED;
+    if (successCount == 0) return CollectionJobStatus.FAILED;
+    return CollectionJobStatus.PARTIAL_SUCCESS;
+  }
+
+  private String buildSourceErrorSummary(AgentCollectionResponse response) {
+    if (response.sourceOutcomes() == null || response.sourceOutcomes().isEmpty()) {
+      return null;
+    }
+    return response.sourceOutcomes().stream()
+        .filter(o -> !o.success())
+        .map(o -> o.sourceName() + ":" + (o.errorSummary() != null ? o.errorSummary() : "error"))
+        .collect(java.util.stream.Collectors.joining(", "));
   }
 
   private AgentSeedKeywords aggregateSeedKeywords(List<String> categories) {

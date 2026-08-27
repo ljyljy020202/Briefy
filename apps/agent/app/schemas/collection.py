@@ -107,6 +107,15 @@ class CollectionStats(BaseModel):
     final_count: int = 0        # postings in jobPostings array
 
 
+class SourceOutcome(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    source_name: str
+    success: bool
+    posting_count: int = 0
+    error_summary: str | None = None  # 민감 정보 제외, 간단한 분류만
+
+
 class DailyCollectResponse(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
@@ -116,4 +125,5 @@ class DailyCollectResponse(BaseModel):
     company_issues: list = []
     industry_issues: list = []
     stats: CollectionStats = Field(default_factory=CollectionStats)
+    source_outcomes: list[SourceOutcome] = []
     warnings: list[str] = []

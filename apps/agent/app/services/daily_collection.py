@@ -1,7 +1,7 @@
 """DailyCollectionService — Pipeline V2 orchestrator.
 
 Pipeline stages (all deterministic except Collect):
-  1  Collect          — fetch raw postings from adapters
+  1  Collect          — fetch raw postings from adapters (with per-adapter retry)
   2  Normalize        — compute identities, clean fields
   3  Validate         — postings that failed normalize are already dropped
   4  Source-level Dedup  — merge exact same source records
@@ -10,11 +10,12 @@ Pipeline stages (all deterministic except Collect):
   7+8 Cross-source Dedup + Cluster Merge
   9  Collection Relevance Scoring
   10 Diversity/Budget Selection
-  →  Response
+  →  Response (includes source_outcomes per adapter)
 
 Company and industry collection are not yet implemented (1.5 / 2nd MVP).
 """
 
+import asyncio
 import logging
 
 import app.adapters.official.ably_careers  # noqa: F401 — triggers ABLY_CAREERS registration
@@ -28,7 +29,7 @@ import app.adapters.official.samsung_careers  # noqa: F401 — triggers SAMSUNG_
 import app.adapters.official.toss_careers  # noqa: F401 — triggers TOSS_CAREERS registration
 from app.adapters.aggregators.jasoseol import JasoseolAdapter
 from app.adapters.aggregators.saramin import SaraminAdapter
-from app.adapters.base import JobBoardAdapter, RawJobPosting
+from app.adapters.base import AdapterResult, JobBoardAdapter, RawJobPosting
 from app.adapters.fixture import FixtureAdapter
 from app.adapters.official_company import OfficialCompanyAdapter
 from app.core.config import settings
@@ -39,6 +40,7 @@ from app.schemas.collection import (
     DailyCollectRequest,
     DailyCollectResponse,
     SeedKeywords,
+    SourceOutcome,
 )
 from app.services.company_canon import apply_company_canonicalization
 from app.services.deduplication import (
@@ -51,6 +53,97 @@ from app.services.normalization import normalize_many
 log = logging.getLogger(__name__)
 
 _JOB_POSTING_CATEGORY = "JOB_POSTING"
+
+# ---------------------------------------------------------------------------
+# Per-adapter retry helpers
+# ---------------------------------------------------------------------------
+
+_RETRY_MAX_ATTEMPTS = 2   # total tries = 1 initial + 1 retry
+_RETRY_SLEEP_SECONDS = 2
+
+
+def _classify_error(exc: Exception) -> str:
+    """Return a brief, non-sensitive error category string.
+
+    Used in SourceOutcome.error_summary — no sensitive data.
+    """
+    name = type(exc).__name__
+    msg = str(exc)
+    if isinstance(exc, asyncio.TimeoutError):
+        return "timeout"
+    # aiohttp connection errors — check by class hierarchy name to avoid hard dependency
+    if "ClientConnectionError" in name or "ClientConnectorError" in name:
+        return "connection_error"
+    # HTTP status codes embedded in the exception message (e.g. "429", "503")
+    for code in ("429", "503", "502", "500", "504"):
+        if code in msg:
+            return f"http_{code}"
+    if any(c in msg for c in ("5xx", "500", "502", "503", "504")):
+        return "http_5xx"
+    return f"error:{name}"
+
+
+def _is_retryable(exc: Exception) -> bool:
+    """Return True when the exception warrants an automatic retry.
+
+    Retryable:  asyncio.TimeoutError, aiohttp ClientConnectionError family,
+                HTTP 429 / 5xx responses.
+    Non-retryable: parsing errors, clear 4xx (400/401/403/404/422).
+    """
+    if isinstance(exc, asyncio.TimeoutError):
+        return True
+    name = type(exc).__name__
+    if "ClientConnectionError" in name or "ClientConnectorError" in name:
+        return True
+    msg = str(exc)
+    for non_retry_code in ("400", "401", "403", "404", "422"):
+        if non_retry_code in msg:
+            return False
+    for retry_code in ("429", "500", "502", "503", "504"):
+        if retry_code in msg:
+            return True
+    return False
+
+
+async def _fetch_with_retry(
+    adapter: JobBoardAdapter,
+    seed_keywords: SeedKeywords,
+    options: CollectionOptions,
+    collect_date: object,
+) -> AdapterResult | None:
+    """Fetch from *adapter* with up to one retry for transient errors.
+
+    Returns an AdapterResult on success, or None on final failure.
+    Non-retryable errors (4xx, parse errors) are not retried.
+    """
+    last_exc: Exception | None = None
+    for attempt in range(_RETRY_MAX_ATTEMPTS):
+        try:
+            return await adapter.fetch(
+                seed_keywords=seed_keywords,
+                options=options,
+                collect_date=collect_date,
+            )
+        except Exception as exc:
+            last_exc = exc
+            if not _is_retryable(exc) or attempt + 1 >= _RETRY_MAX_ATTEMPTS:
+                break
+            log.warning(
+                "daily_collection: %s attempt %d failed (%s), retrying in %ds",
+                adapter.source_name,
+                attempt + 1,
+                _classify_error(exc),
+                _RETRY_SLEEP_SECONDS,
+            )
+            await asyncio.sleep(_RETRY_SLEEP_SECONDS)
+
+    log.warning(
+        "daily_collection: %s final failure after %d attempt(s): %s",
+        adapter.source_name,
+        min(_RETRY_MAX_ATTEMPTS, 1 + (1 if last_exc is not None else 0)),
+        _classify_error(last_exc) if last_exc else "unknown",
+    )
+    return None
 
 
 def _build_adapters(request: DailyCollectRequest) -> list[JobBoardAdapter]:
@@ -180,6 +273,7 @@ class DailyCollectionService:
         adapters = _build_adapters(request)
         raw_postings: list[RawJobPosting] = []
         warnings: list[str] = []
+        source_outcomes: list[SourceOutcome] = []
 
         # Aggregate per-adapter stats before service-level processing
         total_discovered = 0
@@ -187,41 +281,59 @@ class DailyCollectionService:
         total_parsed = 0
 
         for adapter in adapters:
-            try:
-                result = await adapter.fetch(
-                    seed_keywords=request.seed_keywords,
-                    options=request.options,
-                    collect_date=request.collect_date,
+            result = await _fetch_with_retry(
+                adapter,
+                seed_keywords=request.seed_keywords,
+                options=request.options,
+                collect_date=request.collect_date,
+            )
+            if result is None:
+                # Final failure — record outcome but preserve other adapters' results
+                source_outcomes.append(
+                    SourceOutcome(
+                        source_name=adapter.source_name,
+                        success=False,
+                        posting_count=0,
+                        error_summary="fetch_failed",
+                    )
                 )
-                raw_postings.extend(result.postings)
-                warnings.extend(result.warnings)
-                if result.source_stats:
-                    total_discovered += result.source_stats.discovered
-                    total_fetched += result.source_stats.fetched
-                    total_parsed += result.source_stats.parsed
-                    log.info(
-                        "daily_collection: %s discovered=%d fetched=%d "
-                        "parsed=%d selected=%d",
-                        adapter.source_name,
-                        result.source_stats.discovered,
-                        result.source_stats.fetched,
-                        result.source_stats.parsed,
-                        result.source_stats.selected,
-                    )
-                else:
-                    n = len(result.postings)
-                    total_discovered += n
-                    total_fetched += n
-                    total_parsed += n
-                    log.info(
-                        "daily_collection: %s returned %d postings (no source_stats)",
-                        adapter.source_name,
-                        n,
-                    )
-            except Exception as exc:
-                msg = f"adapter {adapter.source_name} raised unexpectedly: {exc}"
-                log.warning(msg)
-                warnings.append(msg)
+                warnings.append(f"adapter {adapter.source_name} failed after retries")
+                continue
+
+            raw_postings.extend(result.postings)
+            warnings.extend(result.warnings)
+            if result.source_stats:
+                posting_count = result.source_stats.parsed
+                total_discovered += result.source_stats.discovered
+                total_fetched += result.source_stats.fetched
+                total_parsed += result.source_stats.parsed
+                log.info(
+                    "daily_collection: %s discovered=%d fetched=%d "
+                    "parsed=%d selected=%d",
+                    adapter.source_name,
+                    result.source_stats.discovered,
+                    result.source_stats.fetched,
+                    result.source_stats.parsed,
+                    result.source_stats.selected,
+                )
+            else:
+                posting_count = len(result.postings)
+                total_discovered += posting_count
+                total_fetched += posting_count
+                total_parsed += posting_count
+                log.info(
+                    "daily_collection: %s returned %d postings (no source_stats)",
+                    adapter.source_name,
+                    posting_count,
+                )
+            source_outcomes.append(
+                SourceOutcome(
+                    source_name=adapter.source_name,
+                    success=True,
+                    posting_count=posting_count,
+                    error_summary=None,
+                )
+            )
 
         # Stage 2+3: Normalize (validation happens implicitly — invalid raws
         # are skipped because normalize raises, and we don't catch normalize
@@ -272,5 +384,6 @@ class DailyCollectionService:
                 truncated_count=truncated,
                 final_count=len(selected),
             ),
+            source_outcomes=source_outcomes,
             warnings=warnings,
         )

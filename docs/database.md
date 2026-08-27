@@ -142,6 +142,9 @@ erDiagram
         bigint user_id "logical FK to users"
         varchar status
         varchar trigger_type
+        varchar generation_mode "LLM / REWRITTEN / FALLBACK / EMPTY"
+        varchar fallback_reason
+        date briefing_date "UNIQUE with user_id — idempotency key"
         datetime scheduled_at
         datetime started_at
         datetime completed_at
@@ -183,13 +186,15 @@ erDiagram
     delivery_logs {
         bigint id PK
         bigint user_id "logical FK to users (denormalized)"
-        bigint briefing_report_id FK
-        varchar status
+        bigint briefing_report_id "UNIQUE — 1:1 with briefing_reports"
+        varchar status "PENDING / SENDING / SENT / FAILED"
         varchar to_email
         varchar subject
         varchar provider_message_id
         varchar error_message
         datetime sent_at
+        int retry_count
+        datetime last_attempt_at
         datetime created_at
         datetime updated_at
     }
@@ -636,6 +641,9 @@ Tracks the lifecycle of a briefing generation request. One job produces at most 
 | `user_id` | BIGINT | FK `users.id` NOT NULL | |
 | `status` | VARCHAR(30) | NOT NULL | See `BriefingJobStatus` |
 | `trigger_type` | VARCHAR(30) | NOT NULL | See `BriefingTriggerType` |
+| `briefing_date` | DATE | NOT NULL | Date the briefing covers; UNIQUE with `user_id` — idempotency key (V21) |
+| `generation_mode` | VARCHAR(30) | | How the briefing was generated; see `GenerationMode` |
+| `fallback_reason` | VARCHAR(255) | | Populated when `generation_mode = FALLBACK` |
 | `scheduled_at` | DATETIME | | When the job was intended to run |
 | `started_at` | DATETIME | | When processing began |
 | `completed_at` | DATETIME | | When job finished (success or failure) |
@@ -650,21 +658,25 @@ Tracks the lifecycle of a briefing generation request. One job produces at most 
 |---|---|
 | `BriefingJobStatus` | `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED` |
 | `BriefingTriggerType` | `SCHEDULED`, `MANUAL` |
+| `GenerationMode` | `LLM` (normal path), `REWRITTEN` (LLM rewrite), `FALLBACK` (deterministic), `EMPTY` (no candidates) |
 
 **State machine**
 
 ```
 PENDING → PROCESSING → COMPLETED
-                    ↘ FAILED (→ retry → PENDING)
+                    ↘ FAILED (→ admin retry → PROCESSING again)
 ```
+
+**Idempotency**: `UNIQUE(user_id, briefing_date)` (added by V21) prevents duplicate jobs for the same user on the same day. `BriefingJobPersistenceService.createOrGet()` handles the race condition by catching `DataIntegrityViolationException` and re-querying.
 
 **Indexes**
 
 ```sql
-INDEX idx_briefing_jobs_user            (user_id)
-INDEX idx_briefing_jobs_status          (status)
-INDEX idx_briefing_jobs_scheduled_at    (scheduled_at)
-INDEX idx_briefing_jobs_user_scheduled  (user_id, scheduled_at)
+UNIQUE INDEX uq_briefing_jobs_user_date    (user_id, briefing_date)
+INDEX        idx_briefing_jobs_user         (user_id)
+INDEX        idx_briefing_jobs_status       (status)
+INDEX        idx_briefing_jobs_scheduled_at (scheduled_at)
+INDEX        idx_briefing_jobs_user_date    (user_id, briefing_date)
 ```
 
 **Relationships**
@@ -755,33 +767,55 @@ INDEX idx_briefing_articles_url    (url)
 
 ### `delivery_logs`
 
-Records every email delivery attempt and its outcome. One report may have multiple log entries (e.g. initial attempt + retry). **Implemented** as `DeliveryLog.java`.
+Records the email delivery lifecycle for each briefing report. One row per report (enforced by `UNIQUE(briefing_report_id)`). **Implemented** as `DeliveryLog.java`.
 
 | Column | Type | Constraints | Notes |
 |---|---|---|---|
 | `id` | BIGINT | PK, AUTO_INCREMENT | |
 | `user_id` | BIGINT | NOT NULL | Logical FK to `users`; denormalized for query convenience (no DB-level constraint) |
-| `briefing_report_id` | BIGINT | FK `briefing_reports.id` NOT NULL | |
+| `briefing_report_id` | BIGINT | FK `briefing_reports.id` NOT NULL, UNIQUE | One log per report; UNIQUE enforces idempotency (V22) |
 | `status` | VARCHAR(20) | NOT NULL | See `DeliveryStatus` |
 | `to_email` | VARCHAR(255) | NOT NULL | Recipient email address |
 | `subject` | VARCHAR(255) | | Email subject line |
-| `provider_message_id` | VARCHAR(255) | | Message ID returned by the email provider on success |
-| `error_message` | VARCHAR(1000) | | Populated on `FAILED` status |
+| `provider_message_id` | VARCHAR(255) | | Message ID returned by SES on success |
+| `error_message` | VARCHAR(500) | | Populated on `FAILED` status; truncated to 500 chars |
 | `sent_at` | DATETIME | | Populated when `markSent()` is called |
+| `retry_count` | INT | NOT NULL DEFAULT 0 | Number of retry attempts (added by V22) |
+| `last_attempt_at` | DATETIME | | Timestamp of the most recent send attempt (added by V22) |
 | `created_at` | DATETIME | | |
 | `updated_at` | DATETIME | | |
 
 **Enums**
 
-| Enum | Values |
-|---|---|
-| `DeliveryStatus` | `PENDING`, `SENT`, `FAILED` |
+| Enum | Values | Notes |
+|---|---|---|
+| `DeliveryStatus` | `PENDING` | Log created; not yet sent |
+| | `SENDING` | Send in progress (selected by this process); reset to FAILED on restart |
+| | `SENT` | Successfully delivered |
+| | `FAILED` | Delivery failed; eligible for admin retry |
+
+**State machine**
+
+```
+PENDING ──claimForSending──▶ SENDING ──send()──▶ SENT
+FAILED  ──claimForSending──▶ SENDING              (admin retry)
+SENDING ─(process restart)──▶ FAILED              (DeliveryLogStartupResetter)
+```
+
+**Idempotency**:
+- `UNIQUE(briefing_report_id)` prevents duplicate log rows; `DeliveryLogPersistenceService.createOrGet()` handles the race condition (catches `DataIntegrityViolationException`, re-queries).
+- `claimForSending()` uses a conditional JPQL UPDATE (`WHERE status IN (PENDING, FAILED)`) so only one concurrent request can claim a log.
+
+**Retry policy**: On transient errors (`EmailSendResult.retryable=true`), up to 2 additional attempts (3 total), with 3-second backoff.
+
+**SES ambiguity window**: If the process terminates after SES accepts the request but before DB `SENT` is written, the log stays in `SENDING`. On restart, `DeliveryLogStartupResetter` resets it to `FAILED`, allowing retry. This may result in duplicate delivery. exactly-once is not guaranteed.
 
 **Indexes**
 
 ```sql
-INDEX idx_delivery_logs_user   (user_id)
-INDEX idx_delivery_logs_report (briefing_report_id)
+UNIQUE INDEX uq_delivery_logs_report (briefing_report_id)
+INDEX        idx_delivery_logs_user   (user_id)
+INDEX        idx_delivery_logs_report (briefing_report_id)
 ```
 
 **Relationships**

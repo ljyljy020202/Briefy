@@ -109,6 +109,10 @@ public class BriefingReport extends BaseTimeEntity {
     return briefingJob;
   }
 
+  public Long getBriefingJobId() {
+    return briefingJob != null ? briefingJob.getId() : null;
+  }
+
   public String getTitle() {
     return title;
   }

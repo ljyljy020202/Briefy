@@ -41,7 +41,15 @@ class CollectionControllerTest {
     AgentCollectionStats agentStats = new AgentCollectionStats(10, 10, 10, 0, 0, 0, 3);
     DailyCollectionResult result =
         new DailyCollectionResult(
-            1L, "COMPLETED", LocalDate.of(2026, 6, 30), agentStats, 3, 0, List.of(), null);
+            1L,
+            "COMPLETED",
+            LocalDate.of(2026, 6, 30),
+            agentStats,
+            3,
+            0,
+            List.of(),
+            null,
+            "COMPLETED");
     when(dailyCollectionService.triggerDailyCollection(any(), any())).thenReturn(result);
 
     mockMvc
@@ -69,7 +77,8 @@ class CollectionControllerTest {
             0,
             0,
             List.of(),
-            null);
+            null,
+            "COMPLETED");
     when(dailyCollectionService.triggerDailyCollection(any(), any())).thenReturn(result);
 
     mockMvc
@@ -85,7 +94,15 @@ class CollectionControllerTest {
   void triggerDailyCollection_failedStatus_returns200WithErrorMessage() throws Exception {
     DailyCollectionResult result =
         new DailyCollectionResult(
-            3L, "FAILED", LocalDate.of(2026, 6, 30), null, 0, 0, List.of(), "Agent server error");
+            3L,
+            "FAILED",
+            LocalDate.of(2026, 6, 30),
+            null,
+            0,
+            0,
+            List.of(),
+            "Agent server error",
+            "FAILED");
     when(dailyCollectionService.triggerDailyCollection(any(), any())).thenReturn(result);
 
     mockMvc

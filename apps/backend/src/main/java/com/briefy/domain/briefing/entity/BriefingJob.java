@@ -10,6 +10,8 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
@@ -17,7 +19,13 @@ import java.time.LocalDateTime;
     name = "briefing_jobs",
     indexes = {
       @Index(name = "idx_briefing_jobs_user", columnList = "user_id"),
-      @Index(name = "idx_briefing_jobs_status", columnList = "status")
+      @Index(name = "idx_briefing_jobs_status", columnList = "status"),
+      @Index(name = "idx_briefing_jobs_user_date", columnList = "user_id, briefing_date")
+    },
+    uniqueConstraints = {
+      @UniqueConstraint(
+          name = "uq_briefing_jobs_user_date",
+          columnNames = {"user_id", "briefing_date"})
     })
 public class BriefingJob extends BaseTimeEntity {
 
@@ -51,6 +59,15 @@ public class BriefingJob extends BaseTimeEntity {
   @Column(name = "retry_count", nullable = false)
   private int retryCount = 0;
 
+  @Column(name = "briefing_date", nullable = false)
+  private LocalDate briefingDate;
+
+  @Column(name = "generation_mode", length = 30)
+  private String generationMode;
+
+  @Column(name = "fallback_reason", length = 255)
+  private String fallbackReason;
+
   protected BriefingJob() {}
 
   private BriefingJob(Long userId, BriefingTriggerType triggerType) {
@@ -60,12 +77,16 @@ public class BriefingJob extends BaseTimeEntity {
     this.retryCount = 0;
   }
 
-  public static BriefingJob createManual(Long userId) {
-    return new BriefingJob(userId, BriefingTriggerType.MANUAL);
+  public static BriefingJob createManual(Long userId, LocalDate briefingDate) {
+    BriefingJob job = new BriefingJob(userId, BriefingTriggerType.MANUAL);
+    job.briefingDate = briefingDate;
+    return job;
   }
 
-  public static BriefingJob createScheduled(Long userId) {
-    return new BriefingJob(userId, BriefingTriggerType.SCHEDULED);
+  public static BriefingJob createScheduled(Long userId, LocalDate briefingDate) {
+    BriefingJob job = new BriefingJob(userId, BriefingTriggerType.SCHEDULED);
+    job.briefingDate = briefingDate;
+    return job;
   }
 
   public void startProcessing() {
@@ -78,10 +99,34 @@ public class BriefingJob extends BaseTimeEntity {
     this.completedAt = LocalDateTime.now();
   }
 
+  /**
+   * Complete the job and record the generation mode and fallback reason from the Agent response.
+   */
+  public void completeWithMode(String generationMode, String fallbackReason) {
+    this.status = BriefingJobStatus.COMPLETED;
+    this.completedAt = LocalDateTime.now();
+    this.generationMode = generationMode;
+    this.fallbackReason = fallbackReason;
+  }
+
+  /** Reset a FAILED job to PROCESSING for a retry attempt. */
+  public void resetForRetry() {
+    this.status = BriefingJobStatus.PROCESSING;
+    this.startedAt = LocalDateTime.now();
+    this.completedAt = null;
+    this.errorMessage = null;
+    this.retryCount++;
+  }
+
   public void fail(String errorMessage) {
     this.status = BriefingJobStatus.FAILED;
     this.completedAt = LocalDateTime.now();
     this.errorMessage = errorMessage;
+  }
+
+  public void recordFallback(String reason) {
+    this.generationMode = "FALLBACK";
+    this.fallbackReason = reason;
   }
 
   public Long getId() {
@@ -118,5 +163,17 @@ public class BriefingJob extends BaseTimeEntity {
 
   public int getRetryCount() {
     return retryCount;
+  }
+
+  public LocalDate getBriefingDate() {
+    return briefingDate;
+  }
+
+  public String getGenerationMode() {
+    return generationMode;
+  }
+
+  public String getFallbackReason() {
+    return fallbackReason;
   }
 }

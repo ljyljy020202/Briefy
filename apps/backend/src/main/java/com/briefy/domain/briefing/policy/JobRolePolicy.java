@@ -76,7 +76,7 @@ public final class JobRolePolicy {
   }
 
   /** Combines title and the roles JSON array into a single lowercase string for matching. */
-  static String buildPrimaryText(String title, String rolesJson) {
+  public static String buildPrimaryText(String title, String rolesJson) {
     StringBuilder sb = new StringBuilder();
     if (title != null) sb.append(title.toLowerCase()).append(' ');
     if (rolesJson != null && !rolesJson.isBlank()) {

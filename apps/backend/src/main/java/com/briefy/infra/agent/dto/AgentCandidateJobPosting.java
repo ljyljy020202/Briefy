@@ -2,13 +2,20 @@ package com.briefy.infra.agent.dto;
 
 import java.util.List;
 
+/**
+ * Represents one of the Backend-selected Top-7 job postings sent to the Agent.
+ *
+ * <p>The Agent must preserve the Backend's {@code rank} order and must not re-filter, re-score, or
+ * re-select postings. {@code scoreBreakdown} and {@code matchEvidence} are provided so the LLM can
+ * generate matching reasons grounded in Backend signals.
+ */
 public record AgentCandidateJobPosting(
     Long id,
+    int rank,
     String source,
     String sourceUrl,
     String companyName,
     String title,
-    String position,
     String employmentType,
     String experienceLevel,
     String location,
@@ -16,12 +23,9 @@ public record AgentCandidateJobPosting(
     List<String> skills,
     List<String> roles,
     String description,
-    String postedAt,
+    String publishedAt,
     String collectedDate,
-    String contentHash,
-    int preScore,
-    // Always true when Backend builds this DTO — even if preScore is 0.
-    // Agent uses this flag to distinguish "Backend scored 0" from "score not provided".
-    boolean preScoreComputed,
-    // NEW | URGENT | EVERGREEN — classified by Backend before sending to Agent.
-    String candidateType) {}
+    boolean isNew,
+    boolean isUrgent,
+    AgentScoreBreakdown scoreBreakdown,
+    AgentMatchEvidence matchEvidence) {}

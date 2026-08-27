@@ -75,7 +75,7 @@ class CollectionJobServiceTest {
   }
 
   @Test
-  void markFailed_transitionsStatusAndIncrementsRetryCount() {
+  void markFailed_transitionsStatusAndRecordsError() {
     CollectionJob job =
         CollectionJob.createPending(TEST_DATE, TEST_CATEGORIES, CollectionTriggerType.MANUAL);
     when(collectionJobRepository.findById(1L)).thenReturn(Optional.of(job));
@@ -85,7 +85,9 @@ class CollectionJobServiceTest {
     assertThat(result.getStatus()).isEqualTo(CollectionJobStatus.FAILED);
     assertThat(result.getCompletedAt()).isNotNull();
     assertThat(result.getErrorMessage()).isEqualTo("agent timeout");
-    assertThat(result.getRetryCount()).isEqualTo(1);
+    // retryCount is only incremented in resetForRetry() / claimFailedForRetry(),
+    // not on the initial failure.
+    assertThat(result.getRetryCount()).isEqualTo(0);
   }
 
   @Test

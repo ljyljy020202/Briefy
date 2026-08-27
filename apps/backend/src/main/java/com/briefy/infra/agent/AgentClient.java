@@ -38,6 +38,53 @@ public class AgentClient {
   }
 
   public AgentBriefingResponse generate(AgentBriefingRequest request) {
+    return generate(request, 0, 0);
+  }
+
+  public AgentBriefingResponse generate(
+      AgentBriefingRequest request, int maxRetries, int backoffSeconds) {
+    int attempt = 0;
+    while (true) {
+      try {
+        return doGenerate(request);
+      } catch (BusinessException e) {
+        if (isNonRetryable(e)) throw e;
+        if (attempt >= maxRetries) throw e;
+        attempt++;
+        log.warn(
+            "Agent briefing call failed (attempt {}), retrying in {}s: {}",
+            attempt,
+            backoffSeconds,
+            e.getMessage());
+        try {
+          Thread.sleep(backoffSeconds * 1000L);
+        } catch (InterruptedException ie) {
+          Thread.currentThread().interrupt();
+          throw e;
+        }
+      } catch (Exception e) {
+        if (attempt >= maxRetries) {
+          log.error(
+              "Agent briefing call failed after {} attempts: {}", attempt + 1, e.getMessage());
+          throw new BusinessException(ErrorCode.AGENT_SERVER_ERROR, "Agent server error");
+        }
+        attempt++;
+        log.warn(
+            "Agent briefing call failed (attempt {}), retrying in {}s: {}",
+            attempt,
+            backoffSeconds,
+            e.getMessage());
+        try {
+          Thread.sleep(backoffSeconds * 1000L);
+        } catch (InterruptedException ie) {
+          Thread.currentThread().interrupt();
+          throw new BusinessException(ErrorCode.AGENT_SERVER_ERROR, "Agent server error");
+        }
+      }
+    }
+  }
+
+  private AgentBriefingResponse doGenerate(AgentBriefingRequest request) {
     log.info("Calling agent for briefing generation, userId={}", request.userId());
     try {
       AgentBriefingResponse response =
@@ -109,7 +156,50 @@ public class AgentClient {
     }
   }
 
-  public AgentCollectionResponse triggerDailyCollection(AgentCollectionRequest request) {
+  public AgentCollectionResponse triggerDailyCollection(
+      AgentCollectionRequest request, int maxRetries, int backoffSeconds) {
+    int attempt = 0;
+    while (true) {
+      try {
+        return doTriggerDailyCollection(request);
+      } catch (BusinessException e) {
+        if (isNonRetryable(e)) throw e;
+        if (attempt >= maxRetries) throw e;
+        attempt++;
+        log.warn(
+            "Agent collection call failed (attempt {}), retrying in {}s: {}",
+            attempt,
+            backoffSeconds,
+            e.getMessage());
+        try {
+          Thread.sleep(backoffSeconds * 1000L);
+        } catch (InterruptedException ie) {
+          Thread.currentThread().interrupt();
+          throw e;
+        }
+      } catch (Exception e) {
+        if (attempt >= maxRetries) {
+          log.error(
+              "Agent collection call failed after {} attempts: {}", attempt + 1, e.getMessage());
+          throw new BusinessException(ErrorCode.AGENT_SERVER_ERROR, "Agent server error");
+        }
+        attempt++;
+        log.warn(
+            "Agent collection call failed (attempt {}), retrying in {}s: {}",
+            attempt,
+            backoffSeconds,
+            e.getMessage());
+        try {
+          Thread.sleep(backoffSeconds * 1000L);
+        } catch (InterruptedException ie) {
+          Thread.currentThread().interrupt();
+          throw new BusinessException(ErrorCode.AGENT_SERVER_ERROR, "Agent server error");
+        }
+      }
+    }
+  }
+
+  private AgentCollectionResponse doTriggerDailyCollection(AgentCollectionRequest request) {
     log.info("Calling agent for daily collection, date={}", request.collectDate());
     try {
       AgentCollectionResponse response =
@@ -140,5 +230,15 @@ public class AgentClient {
       log.error("Agent collection call failed: {}", e.getMessage());
       throw new BusinessException(ErrorCode.AGENT_SERVER_ERROR, "Agent server error");
     }
+  }
+
+  private boolean isNonRetryable(BusinessException e) {
+    String msg = e.getMessage();
+    if (msg == null) return false;
+    return msg.contains(": 400")
+        || msg.contains(": 401")
+        || msg.contains(": 403")
+        || msg.contains(": 404")
+        || msg.contains(": 422");
   }
 }
