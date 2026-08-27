@@ -51,8 +51,14 @@ public final class RecommendationFilter {
     }
 
     // 4. Experience excluded
+    // When the structured field is absent, fall back to title scanning so that postings
+    // that explicitly say "경력" in the title are still excluded for new-grad users.
     List<String> prefExpLevels = extractList(preference, "experienceLevels");
-    ParsedExperience parsedExp = ExperienceParser.parse(posting.getExperienceLevel());
+    String rawExpLevel = posting.getExperienceLevel();
+    ParsedExperience parsedExp =
+        (rawExpLevel == null || rawExpLevel.isBlank())
+            ? ExperienceParser.parseFromTitle(posting.getTitle())
+            : ExperienceParser.parse(rawExpLevel);
     ExperiencePolicy.Verdict expVerdict = ExperiencePolicy.evaluate(prefExpLevels, parsedExp);
     if (expVerdict == ExperiencePolicy.Verdict.EXCLUDE) {
       return FilterResult.exclude(FilterReason.EXPERIENCE_EXCLUDED);

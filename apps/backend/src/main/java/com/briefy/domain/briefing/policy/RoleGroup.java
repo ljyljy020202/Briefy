@@ -52,22 +52,38 @@ public enum RoleGroup {
           "reliability engineer")),
   NON_DEV(
       List.of(
+          // 마케팅
           "마케팅",
           "marketing",
+          // 영업
           "영업 담당",
           "영업 사원",
           "영업직",
           "영업직무",
+          "세일즈",
+          "영업 대표",
+          // 고객 서비스 / CX
+          "고객 상담",
+          "상담사",
+          "고객 서비스",
+          "고객센터",
+          "콜센터",
+          "customer service",
+          "customer support",
+          "customer success",
+          // 인사
           "인사 담당",
           "인사팀",
           "hr manager",
           "human resource",
+          // 재무 / 회계
           "재무 담당",
           "재무팀",
           "finance manager",
           "회계 담당",
           "회계사",
           "accounting",
+          // 기획 / 콘텐츠 / 법무
           "product manager",
           "서비스 기획",
           "콘텐츠 에디터",
@@ -76,6 +92,7 @@ public enum RoleGroup {
           "법무 담당",
           "법무팀",
           "legal counsel",
+          // 디자인
           "graphic designer",
           "ui designer",
           "ux designer"));

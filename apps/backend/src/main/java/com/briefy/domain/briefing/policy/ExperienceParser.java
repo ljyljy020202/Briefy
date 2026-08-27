@@ -77,6 +77,41 @@ public final class ExperienceParser {
     return ParsedExperience.unknown();
   }
 
+  /**
+   * Title-based fallback parser for when the structured {@code experienceLevel} field is null or
+   * blank. Scans free-form title text for explicit 경력/신입 signals only.
+   *
+   * <p>Decision table:
+   *
+   * <ul>
+   *   <li>"경력 무관" / "경력 불문" → ENTRY (open to all)
+   *   <li>"신입" + "경력" both present (e.g. "신입/경력") → MIXED
+   *   <li>"경력" alone → EXPERIENCED (lower confidence: 0.7)
+   *   <li>No signal → UNKNOWN (caller treats as PASS_PARTIAL)
+   * </ul>
+   */
+  public static ParsedExperience parseFromTitle(String title) {
+    if (title == null || title.isBlank()) return ParsedExperience.unknown();
+    String s = title.trim().toLowerCase().replace(" ", "");
+
+    // ENTRY signals — check before EXPERIENCED to avoid false positive on "경력"
+    if (s.contains("경력무관") || s.contains("경력불문") || s.contains("경력무방")) {
+      return new ParsedExperience(ExperienceCategory.ENTRY, 0, -1, false, 1.0);
+    }
+
+    // MIXED: both 신입 and 경력 present (e.g. "신입/경력", "신입·경력", "경력·신입")
+    if (s.contains("신입") && s.contains("경력")) {
+      return new ParsedExperience(ExperienceCategory.MIXED, 0, -1, false, 1.0);
+    }
+
+    // EXPERIENCED: explicit "경력" without 신입 — lower confidence because it's a title scan
+    if (s.contains("경력")) {
+      return new ParsedExperience(ExperienceCategory.EXPERIENCED, -1, -1, false, 0.7);
+    }
+
+    return ParsedExperience.unknown();
+  }
+
   private static ParsedExperience buildFromRange(int min, int max) {
     if (min == 0) {
       // 0~N년 → ENTRY

@@ -125,6 +125,38 @@ class JobRolePolicyTest {
         .isEqualTo(JobRolePolicy.Verdict.AMBIGUOUS);
   }
 
+  // ── NON_DEV keyword coverage ─────────────────────────────────────────────
+
+  @Test
+  void customer_service_posting_mismatches_backend_user() {
+    assertThat(evaluate(List.of("백엔드 개발자"), "고객 상담 매니저", null))
+        .isEqualTo(JobRolePolicy.Verdict.MISMATCH);
+  }
+
+  @Test
+  void call_center_posting_mismatches_backend_user() {
+    assertThat(evaluate(List.of("백엔드 개발자"), "콜센터 상담사", null))
+        .isEqualTo(JobRolePolicy.Verdict.MISMATCH);
+  }
+
+  @Test
+  void customer_success_posting_mismatches_backend_user() {
+    assertThat(evaluate(List.of("백엔드 개발자"), "Customer Success Manager", null))
+        .isEqualTo(JobRolePolicy.Verdict.MISMATCH);
+  }
+
+  @Test
+  void customer_support_posting_mismatches_backend_user() {
+    assertThat(evaluate(List.of("백엔드 개발자"), "Customer Support 담당", null))
+        .isEqualTo(JobRolePolicy.Verdict.MISMATCH);
+  }
+
+  @Test
+  void sales_posting_mismatches_backend_user() {
+    assertThat(evaluate(List.of("백엔드 개발자"), "세일즈 매니저", null))
+        .isEqualTo(JobRolePolicy.Verdict.MISMATCH);
+  }
+
   // ── Helpers ──────────────────────────────────────────────────────────────
 
   private JobRolePolicy.Verdict evaluate(List<String> userRoles, String title, String rolesJson) {
