@@ -42,6 +42,7 @@ from app.schemas.briefing import (
     BriefingGenerateRequest,
     BriefingGenerateResponse,
     CandidateJobPosting,
+    GenerationMode,
     JobArticle,
     JobPostingPreference,
     TokenUsage,
@@ -677,6 +678,48 @@ async def run(request: BriefingGenerateRequest) -> BriefingGenerateResponse:
 
     result = await _graph.ainvoke(initial_state)
 
+    selected = result.get("selected", [])
+    used_fallback = result.get("used_fallback", False)
+    rewrite_count = result.get("rewrite_count", 0)
+    raw_fallback_reason: str = result.get("fallback_reason") or ""
+
+    # Determine generation mode
+    if not selected:
+        generation_mode: GenerationMode = "EMPTY"
+    elif used_fallback:
+        generation_mode = "FALLBACK"
+    elif not llm_client.enabled:
+        # LLM disabled → synthesize_report built deterministic path (no LLM used)
+        generation_mode = "FALLBACK"
+    elif rewrite_count > 0:
+        generation_mode = "REWRITTEN"
+    else:
+        generation_mode = "LLM"
+
+    # Normalize fallback_reason: map internal details to canonical categories
+    fallback_reason: str | None = None
+    if generation_mode in ("FALLBACK", "EMPTY"):
+        if not llm_client.enabled and not raw_fallback_reason:
+            fallback_reason = "llm_disabled"
+        elif raw_fallback_reason:
+            if "enrichment" in raw_fallback_reason:
+                fallback_reason = "enrichment_failed"
+            elif "synthesis" in raw_fallback_reason:
+                fallback_reason = "synthesis_failed"
+            elif "rewrite" in raw_fallback_reason:
+                fallback_reason = "rewrite_failed"
+            elif (
+                "validation_status" in raw_fallback_reason
+                or "FALLBACK_REQUIRED" in raw_fallback_reason
+            ):
+                fallback_reason = "validation_fallback_required"
+            elif raw_fallback_reason in ("", "unknown", "deterministic_fallback"):
+                fallback_reason = "validation_retry_exhausted"
+            else:
+                fallback_reason = raw_fallback_reason.split(":")[0].strip()[:60]
+        else:
+            fallback_reason = "validation_retry_exhausted"
+
     token = result.get("token_usage", TokenUsage())
     return BriefingGenerateResponse(
         title=result.get("title", ""),
@@ -687,6 +730,10 @@ async def run(request: BriefingGenerateRequest) -> BriefingGenerateResponse:
             input_tokens=token.input_tokens,
             output_tokens=token.output_tokens,
         ),
+        generation_mode=generation_mode,
+        used_fallback=(generation_mode in ("FALLBACK", "EMPTY")),
+        fallback_reason=fallback_reason,
+        rewrite_count=rewrite_count,
     )
 
 

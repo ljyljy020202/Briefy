@@ -193,7 +193,7 @@ Triggered either by a scheduler (daily at 08:00 KST) or a user via `POST /api/br
    - If still failing or any LLM error: deterministic fallback (no LLM, uses `matchEvidence`)
 8. Agent returns `{ title, summary, content, articles, tokenUsage }` to Backend
 9. Backend saves `briefing_reports` + `briefing_articles` to MySQL, marks job `COMPLETED`
-10. If `EMAIL_AUTO_SEND_ENABLED=true` and user has `briefing_email_enabled=true`, backend sends email and records in `delivery_logs`
+10. If `EMAIL_AUTO_SEND_ENABLED=true` and user has `briefing_email_enabled=true`, backend calls `EmailDeliveryService.autoDeliverBriefingReport()`. The `DeliveryLog` record (PENDING) must already exist at this point; auto-delivery only processes PENDING logs. Email is sent outside any transaction; status is updated via REQUIRES_NEW transactions.
 11. Frontend fetches and renders the Markdown briefing report
 
 ---

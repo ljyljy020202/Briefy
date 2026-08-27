@@ -10,6 +10,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import java.time.LocalDateTime;
 
 @Entity
@@ -18,6 +19,11 @@ import java.time.LocalDateTime;
     indexes = {
       @Index(name = "idx_delivery_logs_user", columnList = "user_id"),
       @Index(name = "idx_delivery_logs_report", columnList = "briefing_report_id")
+    },
+    uniqueConstraints = {
+      @UniqueConstraint(
+          name = "uq_delivery_logs_report",
+          columnNames = {"briefing_report_id"})
     })
 public class DeliveryLog extends BaseTimeEntity {
 
@@ -50,6 +56,12 @@ public class DeliveryLog extends BaseTimeEntity {
   @Column(name = "sent_at")
   private LocalDateTime sentAt;
 
+  @Column(name = "retry_count", nullable = false)
+  private int retryCount = 0;
+
+  @Column(name = "last_attempt_at")
+  private LocalDateTime lastAttemptAt;
+
   protected DeliveryLog() {}
 
   public static DeliveryLog createPending(
@@ -63,15 +75,27 @@ public class DeliveryLog extends BaseTimeEntity {
     return log;
   }
 
+  public void markSending() {
+    this.status = DeliveryStatus.SENDING;
+    this.lastAttemptAt = LocalDateTime.now();
+  }
+
   public void markSent(String providerMessageId) {
     this.status = DeliveryStatus.SENT;
     this.providerMessageId = providerMessageId;
     this.sentAt = LocalDateTime.now();
+    this.errorMessage = null; // 재시도 후 성공 시 이전 오류 초기화
   }
 
   public void markFailed(String errorMessage) {
     this.status = DeliveryStatus.FAILED;
-    this.errorMessage = errorMessage;
+    this.errorMessage = normalize(errorMessage);
+    this.lastAttemptAt = LocalDateTime.now();
+  }
+
+  private static String normalize(String msg) {
+    if (msg == null) return "unknown";
+    return msg.length() > 500 ? msg.substring(0, 500) : msg;
   }
 
   public Long getId() {
@@ -108,5 +132,18 @@ public class DeliveryLog extends BaseTimeEntity {
 
   public LocalDateTime getSentAt() {
     return sentAt;
+  }
+
+  public void incrementRetry() {
+    this.retryCount++;
+    this.lastAttemptAt = LocalDateTime.now();
+  }
+
+  public int getRetryCount() {
+    return retryCount;
+  }
+
+  public LocalDateTime getLastAttemptAt() {
+    return lastAttemptAt;
   }
 }

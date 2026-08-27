@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 import com.briefy.config.CollectionProperties;
 import com.briefy.domain.candidatepool.dto.CandidatePoolUpsertResult;
 import com.briefy.domain.candidatepool.dto.CollectedJobPostingData;
+import com.briefy.domain.candidatepool.service.CandidatePoolPersistenceService;
 import com.briefy.domain.candidatepool.service.CandidatePoolService;
 import com.briefy.domain.collection.dto.DailyCollectionResult;
 import com.briefy.domain.collection.entity.CollectionJob;
@@ -54,12 +55,13 @@ class DailyCollectionServiceTest {
   @Mock private UserBriefingPreferenceRepository userBriefingPreferenceRepository;
   @Mock private AgentClient agentClient;
   @Mock private CandidatePoolService candidatePoolService;
+  @Mock private CandidatePoolPersistenceService candidatePoolPersistenceService;
   @Mock private CompanyRepository companyRepository;
   @Mock private CompanyAliasRepository companyAliasRepository;
   @Mock private CompanySourceRepository companySourceRepository;
 
   private static final CollectionProperties DEFAULT_COLLECTION_PROPS =
-      new CollectionProperties(7, 300, 100, 100, 500);
+      new CollectionProperties(7, 300, 100, 100, 500, 2, 5, 3);
 
   private final CompanyNameNormalizer normalizer = new CompanyNameNormalizer();
 
@@ -75,6 +77,7 @@ class DailyCollectionServiceTest {
             userBriefingPreferenceRepository,
             agentClient,
             candidatePoolService,
+            candidatePoolPersistenceService,
             companyRepository,
             companyAliasRepository,
             companySourceRepository,
@@ -83,6 +86,8 @@ class DailyCollectionServiceTest {
     when(companyRepository.findActiveByNormalizedNames(any())).thenReturn(List.of());
     when(companyAliasRepository.findAllByNormalizedAliasIn(any())).thenReturn(List.of());
     when(companySourceRepository.findActiveByCompanyIds(any(), any())).thenReturn(List.of());
+    // 기본값: claimForProcessing 항상 성공 (PENDING → PROCESSING)
+    when(collectionJobService.claimForProcessing(any())).thenReturn(true);
   }
 
   private CollectionJob pendingJob() {
@@ -120,6 +125,7 @@ class DailyCollectionServiceTest {
         List.of(),
         List.of(),
         new AgentCollectionStats(count, count, count, 0, 0, 0, count),
+        List.of(),
         List.of());
   }
 
@@ -147,13 +153,13 @@ class DailyCollectionServiceTest {
   @Test
   void triggerDailyCollection_success_returnsCompletedResult() {
     CollectionJob job = pendingJob();
-    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+    when(collectionJobService.createOrGetForDate(any(), any(), any())).thenReturn(job);
     when(userBriefingPreferenceRepository.findAllByCategoryCodeAndActiveTrue(
             BriefingCategoryCode.JOB_POSTING))
         .thenReturn(List.of());
-    when(agentClient.triggerDailyCollection(any()))
+    when(agentClient.triggerDailyCollection(any(), anyInt(), anyInt()))
         .thenReturn(agentResponse(List.of(samplePosting())));
-    when(candidatePoolService.upsertJobPostings(any(), any()))
+    when(candidatePoolPersistenceService.saveAtomically(any(), any()))
         .thenReturn(new CandidatePoolUpsertResult(1, 1, 0));
 
     DailyCollectionResult result =
@@ -171,11 +177,11 @@ class DailyCollectionServiceTest {
   @Test
   void triggerDailyCollection_agentThrows_returnsFailedResultAndMarksFailed() {
     CollectionJob job = pendingJob();
-    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+    when(collectionJobService.createOrGetForDate(any(), any(), any())).thenReturn(job);
     when(userBriefingPreferenceRepository.findAllByCategoryCodeAndActiveTrue(
             BriefingCategoryCode.JOB_POSTING))
         .thenReturn(List.of());
-    when(agentClient.triggerDailyCollection(any()))
+    when(agentClient.triggerDailyCollection(any(), anyInt(), anyInt()))
         .thenThrow(new BusinessException(ErrorCode.AGENT_SERVER_ERROR));
 
     DailyCollectionResult result =
@@ -186,13 +192,13 @@ class DailyCollectionServiceTest {
     assertThat(result.agentStats()).isNull();
     assertThat(result.savedCount()).isEqualTo(0);
     verify(collectionJobService).markFailed(any(), any());
-    verify(candidatePoolService, never()).upsertJobPostings(any(), any());
+    verify(candidatePoolPersistenceService, never()).saveAtomically(any(), any());
   }
 
   @Test
   void triggerDailyCollection_aggregatesSeedKeywordsFromActivePreferences() {
     CollectionJob job = pendingJob();
-    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+    when(collectionJobService.createOrGetForDate(any(), any(), any())).thenReturn(job);
 
     UserBriefingPreference mockPref = mock(UserBriefingPreference.class);
     when(mockPref.getPreference())
@@ -207,8 +213,9 @@ class DailyCollectionServiceTest {
 
     ArgumentCaptor<AgentCollectionRequest> captor =
         ArgumentCaptor.forClass(AgentCollectionRequest.class);
-    when(agentClient.triggerDailyCollection(captor.capture())).thenReturn(agentResponse(List.of()));
-    when(candidatePoolService.upsertJobPostings(any(), any()))
+    when(agentClient.triggerDailyCollection(captor.capture(), anyInt(), anyInt()))
+        .thenReturn(agentResponse(List.of()));
+    when(candidatePoolPersistenceService.saveAtomically(any(), any()))
         .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
 
     dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
@@ -222,16 +229,17 @@ class DailyCollectionServiceTest {
   @Test
   void triggerDailyCollection_callsCandidatePoolServiceWithMappedPostings() {
     CollectionJob job = pendingJob();
-    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+    when(collectionJobService.createOrGetForDate(any(), any(), any())).thenReturn(job);
     when(userBriefingPreferenceRepository.findAllByCategoryCodeAndActiveTrue(any()))
         .thenReturn(List.of());
 
     AgentCollectedJobPosting posting = samplePosting();
-    when(agentClient.triggerDailyCollection(any())).thenReturn(agentResponse(List.of(posting)));
+    when(agentClient.triggerDailyCollection(any(), anyInt(), anyInt()))
+        .thenReturn(agentResponse(List.of(posting)));
 
     ArgumentCaptor<List<CollectedJobPostingData>> postingCaptor =
         ArgumentCaptor.forClass(List.class);
-    when(candidatePoolService.upsertJobPostings(postingCaptor.capture(), eq(TEST_DATE)))
+    when(candidatePoolPersistenceService.saveAtomically(postingCaptor.capture(), eq(TEST_DATE)))
         .thenReturn(new CandidatePoolUpsertResult(1, 1, 0));
 
     dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
@@ -246,15 +254,16 @@ class DailyCollectionServiceTest {
   @Test
   void triggerDailyCollection_nullCategories_defaultsToJobPosting() {
     CollectionJob job = pendingJob();
-    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+    when(collectionJobService.createOrGetForDate(any(), any(), any())).thenReturn(job);
     when(userBriefingPreferenceRepository.findAllByCategoryCodeAndActiveTrue(
             BriefingCategoryCode.JOB_POSTING))
         .thenReturn(List.of());
 
     ArgumentCaptor<AgentCollectionRequest> captor =
         ArgumentCaptor.forClass(AgentCollectionRequest.class);
-    when(agentClient.triggerDailyCollection(captor.capture())).thenReturn(agentResponse(List.of()));
-    when(candidatePoolService.upsertJobPostings(any(), any()))
+    when(agentClient.triggerDailyCollection(captor.capture(), anyInt(), anyInt()))
+        .thenReturn(agentResponse(List.of()));
+    when(candidatePoolPersistenceService.saveAtomically(any(), any()))
         .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
 
     dailyCollectionService.triggerDailyCollection(TEST_DATE, null);
@@ -265,12 +274,13 @@ class DailyCollectionServiceTest {
   @Test
   void triggerScheduledDailyCollection_alwaysExecutes() {
     CollectionJob job = pendingJob();
-    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+    when(collectionJobService.createOrGetForDate(any(), any(), any())).thenReturn(job);
     when(userBriefingPreferenceRepository.findAllByCategoryCodeAndActiveTrue(
             BriefingCategoryCode.JOB_POSTING))
         .thenReturn(List.of());
-    when(agentClient.triggerDailyCollection(any())).thenReturn(agentResponse(List.of()));
-    when(candidatePoolService.upsertJobPostings(any(), any()))
+    when(agentClient.triggerDailyCollection(any(), anyInt(), anyInt()))
+        .thenReturn(agentResponse(List.of()));
+    when(candidatePoolPersistenceService.saveAtomically(any(), any()))
         .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
 
     DailyCollectionResult result =
@@ -278,13 +288,13 @@ class DailyCollectionServiceTest {
 
     assertThat(result.status()).isEqualTo("COMPLETED");
     verify(collectionJobService)
-        .createPending(eq(TEST_DATE), any(), eq(CollectionTriggerType.SCHEDULED));
+        .createOrGetForDate(eq(TEST_DATE), any(), eq(CollectionTriggerType.SCHEDULED));
   }
 
   @Test
   void aggregateSeedKeywords_oldSixFieldPreference_newFieldsDefaultToEmpty() {
     CollectionJob job = pendingJob();
-    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+    when(collectionJobService.createOrGetForDate(any(), any(), any())).thenReturn(job);
 
     UserBriefingPreference mockPref = mock(UserBriefingPreference.class);
     when(mockPref.getPreference())
@@ -302,8 +312,9 @@ class DailyCollectionServiceTest {
 
     ArgumentCaptor<AgentCollectionRequest> captor =
         ArgumentCaptor.forClass(AgentCollectionRequest.class);
-    when(agentClient.triggerDailyCollection(captor.capture())).thenReturn(agentResponse(List.of()));
-    when(candidatePoolService.upsertJobPostings(any(), any()))
+    when(agentClient.triggerDailyCollection(captor.capture(), anyInt(), anyInt()))
+        .thenReturn(agentResponse(List.of()));
+    when(candidatePoolPersistenceService.saveAtomically(any(), any()))
         .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
 
     dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
@@ -317,7 +328,7 @@ class DailyCollectionServiceTest {
   @Test
   void aggregateSeedKeywords_newEightFieldPreference_companySizesAndIndustriesAggregated() {
     CollectionJob job = pendingJob();
-    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+    when(collectionJobService.createOrGetForDate(any(), any(), any())).thenReturn(job);
 
     UserBriefingPreference mockPref = mock(UserBriefingPreference.class);
     when(mockPref.getPreference())
@@ -337,8 +348,9 @@ class DailyCollectionServiceTest {
 
     ArgumentCaptor<AgentCollectionRequest> captor =
         ArgumentCaptor.forClass(AgentCollectionRequest.class);
-    when(agentClient.triggerDailyCollection(captor.capture())).thenReturn(agentResponse(List.of()));
-    when(candidatePoolService.upsertJobPostings(any(), any()))
+    when(agentClient.triggerDailyCollection(captor.capture(), anyInt(), anyInt()))
+        .thenReturn(agentResponse(List.of()));
+    when(candidatePoolPersistenceService.saveAtomically(any(), any()))
         .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
 
     dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
@@ -351,7 +363,7 @@ class DailyCollectionServiceTest {
   @Test
   void aggregateSeedKeywords_deduplicatesCompanySizesAndIndustriesAcrossPreferences() {
     CollectionJob job = pendingJob();
-    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+    when(collectionJobService.createOrGetForDate(any(), any(), any())).thenReturn(job);
 
     UserBriefingPreference pref1 = mock(UserBriefingPreference.class);
     when(pref1.getPreference())
@@ -373,8 +385,9 @@ class DailyCollectionServiceTest {
 
     ArgumentCaptor<AgentCollectionRequest> captor =
         ArgumentCaptor.forClass(AgentCollectionRequest.class);
-    when(agentClient.triggerDailyCollection(captor.capture())).thenReturn(agentResponse(List.of()));
-    when(candidatePoolService.upsertJobPostings(any(), any()))
+    when(agentClient.triggerDailyCollection(captor.capture(), anyInt(), anyInt()))
+        .thenReturn(agentResponse(List.of()));
+    when(candidatePoolPersistenceService.saveAtomically(any(), any()))
         .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
 
     dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
@@ -387,11 +400,12 @@ class DailyCollectionServiceTest {
   @Test
   void triggerDailyCollection_emptyJobPostingsResponse_returnsZeroCounts() {
     CollectionJob job = pendingJob();
-    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+    when(collectionJobService.createOrGetForDate(any(), any(), any())).thenReturn(job);
     when(userBriefingPreferenceRepository.findAllByCategoryCodeAndActiveTrue(any()))
         .thenReturn(List.of());
-    when(agentClient.triggerDailyCollection(any())).thenReturn(agentResponse(List.of()));
-    when(candidatePoolService.upsertJobPostings(any(), any()))
+    when(agentClient.triggerDailyCollection(any(), anyInt(), anyInt()))
+        .thenReturn(agentResponse(List.of()));
+    when(candidatePoolPersistenceService.saveAtomically(any(), any()))
         .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
 
     DailyCollectionResult result =
@@ -408,7 +422,7 @@ class DailyCollectionServiceTest {
   @Test
   void resolveCompanyProfiles_matchesCompanyByNormalizedName() {
     CollectionJob job = pendingJob();
-    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+    when(collectionJobService.createOrGetForDate(any(), any(), any())).thenReturn(job);
 
     UserBriefingPreference pref = mock(UserBriefingPreference.class);
     when(pref.getPreference()).thenReturn(Map.of("companies", List.of("네이버", "카카오")));
@@ -421,8 +435,9 @@ class DailyCollectionServiceTest {
 
     ArgumentCaptor<AgentCollectionRequest> captor =
         ArgumentCaptor.forClass(AgentCollectionRequest.class);
-    when(agentClient.triggerDailyCollection(captor.capture())).thenReturn(agentResponse(List.of()));
-    when(candidatePoolService.upsertJobPostings(any(), any()))
+    when(agentClient.triggerDailyCollection(captor.capture(), anyInt(), anyInt()))
+        .thenReturn(agentResponse(List.of()));
+    when(candidatePoolPersistenceService.saveAtomically(any(), any()))
         .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
 
     dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
@@ -439,7 +454,7 @@ class DailyCollectionServiceTest {
   @Test
   void resolveCompanyProfiles_uppercaseInput_normalizesBeforeDirectLookup() {
     CollectionJob job = pendingJob();
-    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+    when(collectionJobService.createOrGetForDate(any(), any(), any())).thenReturn(job);
 
     UserBriefingPreference pref = mock(UserBriefingPreference.class);
     // user entered "KAKAO" — normalizer converts to "kakao"
@@ -454,8 +469,9 @@ class DailyCollectionServiceTest {
 
     ArgumentCaptor<AgentCollectionRequest> captor =
         ArgumentCaptor.forClass(AgentCollectionRequest.class);
-    when(agentClient.triggerDailyCollection(captor.capture())).thenReturn(agentResponse(List.of()));
-    when(candidatePoolService.upsertJobPostings(any(), any()))
+    when(agentClient.triggerDailyCollection(captor.capture(), anyInt(), anyInt()))
+        .thenReturn(agentResponse(List.of()));
+    when(candidatePoolPersistenceService.saveAtomically(any(), any()))
         .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
 
     dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
@@ -467,7 +483,7 @@ class DailyCollectionServiceTest {
   @Test
   void resolveCompanyProfiles_leadingTrailingSpaces_normalizesBeforeDirectLookup() {
     CollectionJob job = pendingJob();
-    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+    when(collectionJobService.createOrGetForDate(any(), any(), any())).thenReturn(job);
 
     UserBriefingPreference pref = mock(UserBriefingPreference.class);
     when(pref.getPreference()).thenReturn(Map.of("companies", List.of("  토스  ")));
@@ -480,8 +496,9 @@ class DailyCollectionServiceTest {
 
     ArgumentCaptor<AgentCollectionRequest> captor =
         ArgumentCaptor.forClass(AgentCollectionRequest.class);
-    when(agentClient.triggerDailyCollection(captor.capture())).thenReturn(agentResponse(List.of()));
-    when(candidatePoolService.upsertJobPostings(any(), any()))
+    when(agentClient.triggerDailyCollection(captor.capture(), anyInt(), anyInt()))
+        .thenReturn(agentResponse(List.of()));
+    when(candidatePoolPersistenceService.saveAtomically(any(), any()))
         .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
 
     dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
@@ -495,7 +512,7 @@ class DailyCollectionServiceTest {
   @Test
   void resolveCompanyProfiles_aliasMatch_returnsCompanyWhenDirectMatchMisses() {
     CollectionJob job = pendingJob();
-    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+    when(collectionJobService.createOrGetForDate(any(), any(), any())).thenReturn(job);
 
     UserBriefingPreference pref = mock(UserBriefingPreference.class);
     // user entered Korean alias — direct match will miss, alias match should succeed
@@ -514,8 +531,9 @@ class DailyCollectionServiceTest {
 
     ArgumentCaptor<AgentCollectionRequest> captor =
         ArgumentCaptor.forClass(AgentCollectionRequest.class);
-    when(agentClient.triggerDailyCollection(captor.capture())).thenReturn(agentResponse(List.of()));
-    when(candidatePoolService.upsertJobPostings(any(), any()))
+    when(agentClient.triggerDailyCollection(captor.capture(), anyInt(), anyInt()))
+        .thenReturn(agentResponse(List.of()));
+    when(candidatePoolPersistenceService.saveAtomically(any(), any()))
         .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
 
     dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
@@ -528,7 +546,7 @@ class DailyCollectionServiceTest {
   @Test
   void resolveCompanyProfiles_aliasMatchUppercase_normalizesBeforeAliasLookup() {
     CollectionJob job = pendingJob();
-    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+    when(collectionJobService.createOrGetForDate(any(), any(), any())).thenReturn(job);
 
     UserBriefingPreference pref = mock(UserBriefingPreference.class);
     // user entered uppercase alias "TOSS"; normalized → "toss" → alias lookup
@@ -546,8 +564,9 @@ class DailyCollectionServiceTest {
 
     ArgumentCaptor<AgentCollectionRequest> captor =
         ArgumentCaptor.forClass(AgentCollectionRequest.class);
-    when(agentClient.triggerDailyCollection(captor.capture())).thenReturn(agentResponse(List.of()));
-    when(candidatePoolService.upsertJobPostings(any(), any()))
+    when(agentClient.triggerDailyCollection(captor.capture(), anyInt(), anyInt()))
+        .thenReturn(agentResponse(List.of()));
+    when(candidatePoolPersistenceService.saveAtomically(any(), any()))
         .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
 
     dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
@@ -561,7 +580,7 @@ class DailyCollectionServiceTest {
   @Test
   void resolveCompanyProfiles_directAndAliasSameCompany_deduplicatedById() {
     CollectionJob job = pendingJob();
-    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+    when(collectionJobService.createOrGetForDate(any(), any(), any())).thenReturn(job);
 
     UserBriefingPreference pref = mock(UserBriefingPreference.class);
     // user entered canonical name AND alias for the same company
@@ -580,8 +599,9 @@ class DailyCollectionServiceTest {
 
     ArgumentCaptor<AgentCollectionRequest> captor =
         ArgumentCaptor.forClass(AgentCollectionRequest.class);
-    when(agentClient.triggerDailyCollection(captor.capture())).thenReturn(agentResponse(List.of()));
-    when(candidatePoolService.upsertJobPostings(any(), any()))
+    when(agentClient.triggerDailyCollection(captor.capture(), anyInt(), anyInt()))
+        .thenReturn(agentResponse(List.of()));
+    when(candidatePoolPersistenceService.saveAtomically(any(), any()))
         .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
 
     dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
@@ -594,7 +614,7 @@ class DailyCollectionServiceTest {
   @Test
   void resolveCompanyProfiles_multipleAliasesSameCompany_deduplicatedById() {
     CollectionJob job = pendingJob();
-    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+    when(collectionJobService.createOrGetForDate(any(), any(), any())).thenReturn(job);
 
     UserBriefingPreference pref = mock(UserBriefingPreference.class);
     when(pref.getPreference()).thenReturn(Map.of("companies", List.of("TOSS", "비바리퍼블리카")));
@@ -612,8 +632,9 @@ class DailyCollectionServiceTest {
 
     ArgumentCaptor<AgentCollectionRequest> captor =
         ArgumentCaptor.forClass(AgentCollectionRequest.class);
-    when(agentClient.triggerDailyCollection(captor.capture())).thenReturn(agentResponse(List.of()));
-    when(candidatePoolService.upsertJobPostings(any(), any()))
+    when(agentClient.triggerDailyCollection(captor.capture(), anyInt(), anyInt()))
+        .thenReturn(agentResponse(List.of()));
+    when(candidatePoolPersistenceService.saveAtomically(any(), any()))
         .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
 
     dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
@@ -627,7 +648,7 @@ class DailyCollectionServiceTest {
   @Test
   void resolveCompanyProfiles_unregisteredCompany_omittedFromProfiles() {
     CollectionJob job = pendingJob();
-    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+    when(collectionJobService.createOrGetForDate(any(), any(), any())).thenReturn(job);
 
     UserBriefingPreference pref = mock(UserBriefingPreference.class);
     when(pref.getPreference()).thenReturn(Map.of("companies", List.of("없는회사")));
@@ -640,8 +661,9 @@ class DailyCollectionServiceTest {
 
     ArgumentCaptor<AgentCollectionRequest> captor =
         ArgumentCaptor.forClass(AgentCollectionRequest.class);
-    when(agentClient.triggerDailyCollection(captor.capture())).thenReturn(agentResponse(List.of()));
-    when(candidatePoolService.upsertJobPostings(any(), any()))
+    when(agentClient.triggerDailyCollection(captor.capture(), anyInt(), anyInt()))
+        .thenReturn(agentResponse(List.of()));
+    when(candidatePoolPersistenceService.saveAtomically(any(), any()))
         .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
 
     dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
@@ -655,11 +677,12 @@ class DailyCollectionServiceTest {
   @Test
   void resolveCompanyProfiles_emptyCompanies_skipsAllDbQueries() {
     CollectionJob job = pendingJob();
-    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+    when(collectionJobService.createOrGetForDate(any(), any(), any())).thenReturn(job);
     when(userBriefingPreferenceRepository.findAllByCategoryCodeAndActiveTrue(any()))
         .thenReturn(List.of());
-    when(agentClient.triggerDailyCollection(any())).thenReturn(agentResponse(List.of()));
-    when(candidatePoolService.upsertJobPostings(any(), any()))
+    when(agentClient.triggerDailyCollection(any(), anyInt(), anyInt()))
+        .thenReturn(agentResponse(List.of()));
+    when(candidatePoolPersistenceService.saveAtomically(any(), any()))
         .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
 
     dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
@@ -674,7 +697,7 @@ class DailyCollectionServiceTest {
   @Test
   void resolveCompanyProfiles_populatesIndustryCodes() {
     CollectionJob job = pendingJob();
-    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+    when(collectionJobService.createOrGetForDate(any(), any(), any())).thenReturn(job);
 
     UserBriefingPreference pref = mock(UserBriefingPreference.class);
     when(pref.getPreference()).thenReturn(Map.of("companies", List.of("카카오")));
@@ -692,8 +715,9 @@ class DailyCollectionServiceTest {
 
     ArgumentCaptor<AgentCollectionRequest> captor =
         ArgumentCaptor.forClass(AgentCollectionRequest.class);
-    when(agentClient.triggerDailyCollection(captor.capture())).thenReturn(agentResponse(List.of()));
-    when(candidatePoolService.upsertJobPostings(any(), any()))
+    when(agentClient.triggerDailyCollection(captor.capture(), anyInt(), anyInt()))
+        .thenReturn(agentResponse(List.of()));
+    when(candidatePoolPersistenceService.saveAtomically(any(), any()))
         .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
 
     dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
@@ -708,7 +732,7 @@ class DailyCollectionServiceTest {
   @Test
   void resolveCompanyProfiles_seedAlias_NAVER_resolvesToNaver() {
     CollectionJob job = pendingJob();
-    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+    when(collectionJobService.createOrGetForDate(any(), any(), any())).thenReturn(job);
 
     UserBriefingPreference pref = mock(UserBriefingPreference.class);
     // "NAVER" typed by user → normalized 'naver' → alias match → 네이버
@@ -731,8 +755,9 @@ class DailyCollectionServiceTest {
 
     ArgumentCaptor<AgentCollectionRequest> captor =
         ArgumentCaptor.forClass(AgentCollectionRequest.class);
-    when(agentClient.triggerDailyCollection(captor.capture())).thenReturn(agentResponse(List.of()));
-    when(candidatePoolService.upsertJobPostings(any(), any()))
+    when(agentClient.triggerDailyCollection(captor.capture(), anyInt(), anyInt()))
+        .thenReturn(agentResponse(List.of()));
+    when(candidatePoolPersistenceService.saveAtomically(any(), any()))
         .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
 
     dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
@@ -748,7 +773,7 @@ class DailyCollectionServiceTest {
   @Test
   void resolveCompanyProfiles_seedAlias_배달의민족_resolvesToUahanBrothers() {
     CollectionJob job = pendingJob();
-    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+    when(collectionJobService.createOrGetForDate(any(), any(), any())).thenReturn(job);
 
     UserBriefingPreference pref = mock(UserBriefingPreference.class);
     // "배달의민족" typed by user → alias match → 우아한형제들
@@ -766,8 +791,9 @@ class DailyCollectionServiceTest {
 
     ArgumentCaptor<AgentCollectionRequest> captor =
         ArgumentCaptor.forClass(AgentCollectionRequest.class);
-    when(agentClient.triggerDailyCollection(captor.capture())).thenReturn(agentResponse(List.of()));
-    when(candidatePoolService.upsertJobPostings(any(), any()))
+    when(agentClient.triggerDailyCollection(captor.capture(), anyInt(), anyInt()))
+        .thenReturn(agentResponse(List.of()));
+    when(candidatePoolPersistenceService.saveAtomically(any(), any()))
         .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
 
     dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
@@ -780,7 +806,7 @@ class DailyCollectionServiceTest {
   @Test
   void resolveCompanyProfiles_seedCompanySize_propagatesToProfile() {
     CollectionJob job = pendingJob();
-    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+    when(collectionJobService.createOrGetForDate(any(), any(), any())).thenReturn(job);
 
     UserBriefingPreference pref = mock(UserBriefingPreference.class);
     when(pref.getPreference()).thenReturn(Map.of("companies", List.of("삼성전자")));
@@ -799,8 +825,9 @@ class DailyCollectionServiceTest {
 
     ArgumentCaptor<AgentCollectionRequest> captor =
         ArgumentCaptor.forClass(AgentCollectionRequest.class);
-    when(agentClient.triggerDailyCollection(captor.capture())).thenReturn(agentResponse(List.of()));
-    when(candidatePoolService.upsertJobPostings(any(), any()))
+    when(agentClient.triggerDailyCollection(captor.capture(), anyInt(), anyInt()))
+        .thenReturn(agentResponse(List.of()));
+    when(candidatePoolPersistenceService.saveAtomically(any(), any()))
         .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
 
     dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
@@ -816,7 +843,7 @@ class DailyCollectionServiceTest {
   @Test
   void resolveOfficialSources_loadsActiveSourcesForMatchedCompanies() {
     CollectionJob job = pendingJob();
-    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+    when(collectionJobService.createOrGetForDate(any(), any(), any())).thenReturn(job);
 
     UserBriefingPreference pref = mock(UserBriefingPreference.class);
     when(pref.getPreference()).thenReturn(Map.of("companies", List.of("카카오")));
@@ -838,8 +865,9 @@ class DailyCollectionServiceTest {
 
     ArgumentCaptor<AgentCollectionRequest> captor =
         ArgumentCaptor.forClass(AgentCollectionRequest.class);
-    when(agentClient.triggerDailyCollection(captor.capture())).thenReturn(agentResponse(List.of()));
-    when(candidatePoolService.upsertJobPostings(any(), any()))
+    when(agentClient.triggerDailyCollection(captor.capture(), anyInt(), anyInt()))
+        .thenReturn(agentResponse(List.of()));
+    when(candidatePoolPersistenceService.saveAtomically(any(), any()))
         .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
 
     dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
@@ -855,11 +883,12 @@ class DailyCollectionServiceTest {
   @Test
   void resolveOfficialSources_emptyCompanyList_skipsDbQuery() {
     CollectionJob job = pendingJob();
-    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+    when(collectionJobService.createOrGetForDate(any(), any(), any())).thenReturn(job);
     when(userBriefingPreferenceRepository.findAllByCategoryCodeAndActiveTrue(any()))
         .thenReturn(List.of());
-    when(agentClient.triggerDailyCollection(any())).thenReturn(agentResponse(List.of()));
-    when(candidatePoolService.upsertJobPostings(any(), any()))
+    when(agentClient.triggerDailyCollection(any(), anyInt(), anyInt()))
+        .thenReturn(agentResponse(List.of()));
+    when(candidatePoolPersistenceService.saveAtomically(any(), any()))
         .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
 
     dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
@@ -871,13 +900,14 @@ class DailyCollectionServiceTest {
 
   @Test
   void triggerDailyCollection_sendsAllFiveOptionFields() {
-    CollectionProperties props = new CollectionProperties(5, 200, 80, 80, 400);
+    CollectionProperties props = new CollectionProperties(5, 200, 80, 80, 400, 2, 5, 3);
     DailyCollectionService svc =
         new DailyCollectionService(
             collectionJobService,
             userBriefingPreferenceRepository,
             agentClient,
             candidatePoolService,
+            candidatePoolPersistenceService,
             companyRepository,
             companyAliasRepository,
             companySourceRepository,
@@ -885,14 +915,15 @@ class DailyCollectionServiceTest {
             props);
 
     CollectionJob job = pendingJob();
-    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+    when(collectionJobService.createOrGetForDate(any(), any(), any())).thenReturn(job);
     when(userBriefingPreferenceRepository.findAllByCategoryCodeAndActiveTrue(any()))
         .thenReturn(List.of());
 
     ArgumentCaptor<AgentCollectionRequest> captor =
         ArgumentCaptor.forClass(AgentCollectionRequest.class);
-    when(agentClient.triggerDailyCollection(captor.capture())).thenReturn(agentResponse(List.of()));
-    when(candidatePoolService.upsertJobPostings(any(), any()))
+    when(agentClient.triggerDailyCollection(captor.capture(), anyInt(), anyInt()))
+        .thenReturn(agentResponse(List.of()));
+    when(candidatePoolPersistenceService.saveAtomically(any(), any()))
         .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
 
     svc.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
@@ -908,16 +939,23 @@ class DailyCollectionServiceTest {
   @Test
   void triggerDailyCollection_agentStats_populatedInResult() {
     CollectionJob job = pendingJob();
-    when(collectionJobService.createPending(any(), any(), any())).thenReturn(job);
+    when(collectionJobService.createOrGetForDate(any(), any(), any())).thenReturn(job);
     when(userBriefingPreferenceRepository.findAllByCategoryCodeAndActiveTrue(any()))
         .thenReturn(List.of());
 
     AgentCollectionStats stats = new AgentCollectionStats(100, 50, 45, 5, 2, 10, 28);
     AgentCollectionResponse resp =
         new AgentCollectionResponse(
-            null, TEST_DATE.toString(), List.of(), List.of(), List.of(), stats, List.of("warn1"));
-    when(agentClient.triggerDailyCollection(any())).thenReturn(resp);
-    when(candidatePoolService.upsertJobPostings(any(), any()))
+            null,
+            TEST_DATE.toString(),
+            List.of(),
+            List.of(),
+            List.of(),
+            stats,
+            List.of(),
+            List.of("warn1"));
+    when(agentClient.triggerDailyCollection(any(), anyInt(), anyInt())).thenReturn(resp);
+    when(candidatePoolPersistenceService.saveAtomically(any(), any()))
         .thenReturn(new CandidatePoolUpsertResult(20, 20, 8));
 
     DailyCollectionResult result =

@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.briefy.config.BriefingProperties;
 import com.briefy.domain.briefing.repository.BriefingArticleRepository;
 import com.briefy.domain.briefing.repository.BriefingJobRepository;
 import com.briefy.domain.briefing.repository.BriefingReportRepository;
@@ -49,6 +50,8 @@ class BriefingServiceExposureTest {
   @Mock private AgentClient agentClient;
   @Mock private CandidatePoolService candidatePoolService;
   @Mock private UserRepository userRepository;
+  @Mock private BriefingJobPersistenceService briefingJobPersistenceService;
+  @Mock private BriefingProperties briefingProperties;
 
   @InjectMocks private BriefingService briefingService;
 
@@ -60,7 +63,24 @@ class BriefingServiceExposureTest {
   @BeforeEach
   void setUp() {
     when(briefingArticleRepository.findRecentExposuresByUserId(any(), any())).thenReturn(List.of());
-    when(briefingJobRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+    when(briefingJobPersistenceService.findTodayReport(any(), any()))
+        .thenReturn(java.util.Optional.empty());
+    when(briefingJobPersistenceService.createOrGet(any()))
+        .thenAnswer(
+            inv ->
+                com.briefy.domain.briefing.entity.BriefingJob.createManual(
+                    1L, java.time.LocalDate.now(KST)));
+    when(briefingJobPersistenceService.claimForProcessing(any())).thenReturn(true);
+    when(briefingJobRepository.findById(any()))
+        .thenAnswer(
+            inv ->
+                java.util.Optional.of(
+                    com.briefy.domain.briefing.entity.BriefingJob.createManual(
+                        1L, java.time.LocalDate.now(KST))));
+
+    when(briefingProperties.agentRetryMaxAttempts()).thenReturn(0);
+    when(briefingProperties.agentRetryBackoffSeconds()).thenReturn(0);
+    when(briefingProperties.jobMaxRetryCount()).thenReturn(3);
 
     mockAgentResponse =
         new AgentBriefingResponse(
@@ -70,7 +90,11 @@ class BriefingServiceExposureTest {
             List.of(
                 new AgentBriefingResponse.AgentArticle(
                     "테스트", "원티드", "https://example.com/1", "요약", "이유", null)),
-            new AgentBriefingResponse.TokenUsage(100, 50));
+            new AgentBriefingResponse.TokenUsage(100, 50),
+            null,
+            null,
+            null,
+            null);
   }
 
   // ── Exposure penalty integration ─────────────────────────────────────────
@@ -292,12 +316,14 @@ class BriefingServiceExposureTest {
 
     ArgumentCaptor<AgentBriefingRequest> captor =
         ArgumentCaptor.forClass(AgentBriefingRequest.class);
-    when(agentClient.generate(captor.capture())).thenReturn(mockAgentResponse);
+    when(agentClient.generate(captor.capture(), any(Integer.class), any(Integer.class)))
+        .thenReturn(mockAgentResponse);
 
     com.briefy.domain.briefing.entity.BriefingReport mockReport =
         mock(com.briefy.domain.briefing.entity.BriefingReport.class);
     when(mockReport.getId()).thenReturn(1L);
-    when(briefingReportRepository.save(any())).thenReturn(mockReport);
+    when(briefingJobPersistenceService.saveReportAndComplete(any(), any(), any(), any()))
+        .thenReturn(mockReport);
 
     briefingService.generateBriefing(1L);
     return captor.getValue().candidatePool().jobPostings();

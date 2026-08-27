@@ -10,6 +10,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.briefy.config.BriefingProperties;
 import com.briefy.domain.briefing.dto.BriefingDetailResponse;
 import com.briefy.domain.briefing.dto.BriefingListItem;
 import com.briefy.domain.briefing.dto.GenerateResult;
@@ -63,6 +64,8 @@ class BriefingServiceTest {
   @Mock private AgentClient agentClient;
   @Mock private CandidatePoolService candidatePoolService;
   @Mock private UserRepository userRepository;
+  @Mock private BriefingJobPersistenceService briefingJobPersistenceService;
+  @Mock private BriefingProperties briefingProperties;
 
   @InjectMocks private BriefingService briefingService;
 
@@ -72,6 +75,25 @@ class BriefingServiceTest {
   @BeforeEach
   void setUp() {
     when(briefingArticleRepository.findRecentExposuresByUserId(any(), any())).thenReturn(List.of());
+
+    // 기본값: 오늘 브리핑 없음, Job 생성 성공, claimForProcessing 성공
+    when(briefingJobPersistenceService.findTodayReport(any(), any()))
+        .thenReturn(java.util.Optional.empty());
+    when(briefingJobPersistenceService.createOrGet(any(BriefingJob.class)))
+        .thenAnswer(inv -> inv.getArgument(0));
+    when(briefingJobPersistenceService.claimForProcessing(any())).thenReturn(true);
+    // 기본 Job findById: PENDING job 반환 (buildReport에서 사용)
+    when(briefingJobRepository.findById(any()))
+        .thenAnswer(
+            inv -> java.util.Optional.of(BriefingJob.createManual(1L, java.time.LocalDate.now())));
+    // 기본 saveReportAndComplete (4-arg): 두 번째 인수(report)를 그대로 반환
+    when(briefingJobPersistenceService.saveReportAndComplete(
+            any(), any(BriefingReport.class), any(), any()))
+        .thenAnswer(inv -> inv.getArgument(1));
+    // BriefingProperties defaults
+    when(briefingProperties.agentRetryMaxAttempts()).thenReturn(0);
+    when(briefingProperties.agentRetryBackoffSeconds()).thenReturn(0);
+    when(briefingProperties.jobMaxRetryCount()).thenReturn(3);
 
     BriefingCategory category = mock(BriefingCategory.class);
     when(category.getCode()).thenReturn(BriefingCategoryCode.JOB_POSTING);
@@ -93,7 +115,11 @@ class BriefingServiceTest {
                     "네이버 백엔드 개발자 공고",
                     "목표 회사와 스킬이 매칭됩니다.",
                     "2026-06-26T00:00:00")),
-            new AgentBriefingResponse.TokenUsage(1000, 500));
+            new AgentBriefingResponse.TokenUsage(1000, 500),
+            null,
+            null,
+            null,
+            null);
   }
 
   // ── Core generate flow ───────────────────────────────────────────────────
@@ -102,26 +128,37 @@ class BriefingServiceTest {
   void generateBriefing_success_returnsCompletedResult() {
     when(userBriefingPreferenceRepository.findAllByUserIdAndActiveTrue(1L))
         .thenReturn(List.of(mockPref));
-    when(briefingJobRepository.save(any(BriefingJob.class))).thenAnswer(inv -> inv.getArgument(0));
-    when(agentClient.generate(any(AgentBriefingRequest.class))).thenReturn(mockAgentResponse);
+    when(agentClient.generate(
+            any(AgentBriefingRequest.class), any(Integer.class), any(Integer.class)))
+        .thenReturn(mockAgentResponse);
+
+    BriefingJob stubJob = BriefingJob.createManual(1L, java.time.LocalDate.now());
+    when(briefingJobPersistenceService.createOrGet(any(BriefingJob.class))).thenReturn(stubJob);
+    when(briefingJobRepository.findById(any())).thenReturn(java.util.Optional.of(stubJob));
 
     BriefingReport mockReport = mock(BriefingReport.class);
     when(mockReport.getId()).thenReturn(100L);
-    when(briefingReportRepository.save(any(BriefingReport.class))).thenReturn(mockReport);
+    when(briefingJobPersistenceService.saveReportAndComplete(
+            any(), any(BriefingReport.class), any(), any()))
+        .thenReturn(mockReport);
 
     GenerateResult result = briefingService.generateBriefing(1L);
 
     assertThat(result.briefingReportId()).isEqualTo(100L);
     assertThat(result.status()).isEqualTo("COMPLETED");
-    verify(briefingReportRepository).save(any(BriefingReport.class));
+    verify(briefingJobPersistenceService)
+        .saveReportAndComplete(any(), any(BriefingReport.class), any(), any());
   }
 
   @Test
   void generateBriefing_agentThrows_marksJobFailedAndRethrows() {
     when(userBriefingPreferenceRepository.findAllByUserIdAndActiveTrue(1L))
         .thenReturn(List.of(mockPref));
-    when(briefingJobRepository.save(any(BriefingJob.class))).thenAnswer(inv -> inv.getArgument(0));
-    when(agentClient.generate(any(AgentBriefingRequest.class)))
+    BriefingJob stubJob = BriefingJob.createManual(1L, java.time.LocalDate.now());
+    when(briefingJobPersistenceService.createOrGet(any(BriefingJob.class))).thenReturn(stubJob);
+    when(briefingJobRepository.findById(any())).thenReturn(java.util.Optional.of(stubJob));
+    when(agentClient.generate(
+            any(AgentBriefingRequest.class), any(Integer.class), any(Integer.class)))
         .thenThrow(new BusinessException(ErrorCode.AGENT_SERVER_ERROR));
 
     assertThatThrownBy(() -> briefingService.generateBriefing(1L))
@@ -131,7 +168,9 @@ class BriefingServiceTest {
                 assertThat(((BusinessException) e).getErrorCode())
                     .isEqualTo(ErrorCode.AGENT_SERVER_ERROR));
 
-    verify(briefingReportRepository, never()).save(any());
+    verify(briefingJobPersistenceService).recordFailure(any(), any());
+    verify(briefingJobPersistenceService, never())
+        .saveReportAndComplete(any(), any(BriefingReport.class), any(), any());
   }
 
   // ── List / detail ────────────────────────────────────────────────────────
@@ -219,7 +258,6 @@ class BriefingServiceTest {
   void generateBriefing_includesCandidatePoolInAgentRequest() {
     when(userBriefingPreferenceRepository.findAllByUserIdAndActiveTrue(1L))
         .thenReturn(List.of(mockPref));
-    when(briefingJobRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
     JobPosting posting = samplePosting("네이버", "백엔드 개발자", "서울", LocalDate.now().plusDays(3));
     when(candidatePoolService.findEligibleJobPostingsForBriefing(any()))
@@ -227,11 +265,8 @@ class BriefingServiceTest {
 
     ArgumentCaptor<AgentBriefingRequest> captor =
         ArgumentCaptor.forClass(AgentBriefingRequest.class);
-    when(agentClient.generate(captor.capture())).thenReturn(mockAgentResponse);
-
-    BriefingReport mockReport = mock(BriefingReport.class);
-    when(mockReport.getId()).thenReturn(1L);
-    when(briefingReportRepository.save(any())).thenReturn(mockReport);
+    when(agentClient.generate(captor.capture(), any(Integer.class), any(Integer.class)))
+        .thenReturn(mockAgentResponse);
 
     briefingService.generateBriefing(1L);
 
@@ -246,7 +281,6 @@ class BriefingServiceTest {
   void generateBriefing_limitsTo7Candidates_whenMoreExist() {
     when(userBriefingPreferenceRepository.findAllByUserIdAndActiveTrue(1L))
         .thenReturn(List.of(mockPref));
-    when(briefingJobRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
     List<JobPosting> postings =
         IntStream.range(0, 20)
@@ -256,11 +290,8 @@ class BriefingServiceTest {
 
     ArgumentCaptor<AgentBriefingRequest> captor =
         ArgumentCaptor.forClass(AgentBriefingRequest.class);
-    when(agentClient.generate(captor.capture())).thenReturn(mockAgentResponse);
-
-    BriefingReport mockReport = mock(BriefingReport.class);
-    when(mockReport.getId()).thenReturn(1L);
-    when(briefingReportRepository.save(any())).thenReturn(mockReport);
+    when(agentClient.generate(captor.capture(), any(Integer.class), any(Integer.class)))
+        .thenReturn(mockAgentResponse);
 
     briefingService.generateBriefing(1L);
 
@@ -271,18 +302,18 @@ class BriefingServiceTest {
   void generateBriefing_emptyCandidatePool_doesNotCrash() {
     when(userBriefingPreferenceRepository.findAllByUserIdAndActiveTrue(1L))
         .thenReturn(List.of(mockPref));
-    when(briefingJobRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
     when(candidatePoolService.findEligibleJobPostingsForBriefing(any())).thenReturn(List.of());
-    when(agentClient.generate(any())).thenReturn(mockAgentResponse);
-
-    BriefingReport mockReport = mock(BriefingReport.class);
-    when(mockReport.getId()).thenReturn(1L);
-    when(briefingReportRepository.save(any())).thenReturn(mockReport);
+    when(agentClient.generate(any(), any(Integer.class), any(Integer.class)))
+        .thenReturn(mockAgentResponse);
 
     GenerateResult result = briefingService.generateBriefing(1L);
 
     assertThat(result.status()).isEqualTo("COMPLETED");
-    verify(agentClient).generate(argThat(req -> req.candidatePool().jobPostings().isEmpty()));
+    verify(agentClient)
+        .generate(
+            argThat(req -> req.candidatePool().jobPostings().isEmpty()),
+            any(Integer.class),
+            any(Integer.class));
   }
 
   // ── New contract: rank, isNew, isUrgent, scoreBreakdown, matchEvidence ──
@@ -291,7 +322,6 @@ class BriefingServiceTest {
   void candidatePool_rankIsSequentialFrom1() {
     when(userBriefingPreferenceRepository.findAllByUserIdAndActiveTrue(1L))
         .thenReturn(List.of(mockPref));
-    when(briefingJobRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
     List<JobPosting> postings =
         IntStream.range(0, 5)
@@ -299,11 +329,10 @@ class BriefingServiceTest {
             .toList();
     when(candidatePoolService.findEligibleJobPostingsForBriefing(any())).thenReturn(postings);
 
-    BriefingReport savedReport1 = mockBriefingReport();
     ArgumentCaptor<AgentBriefingRequest> captor =
         ArgumentCaptor.forClass(AgentBriefingRequest.class);
-    when(agentClient.generate(captor.capture())).thenReturn(mockAgentResponse);
-    when(briefingReportRepository.save(any())).thenReturn(savedReport1);
+    when(agentClient.generate(captor.capture(), any(Integer.class), any(Integer.class)))
+        .thenReturn(mockAgentResponse);
 
     briefingService.generateBriefing(1L);
 
@@ -318,18 +347,16 @@ class BriefingServiceTest {
     // High score (백엔드 role match = +30) should be rank 1; low score should be rank 2.
     when(userBriefingPreferenceRepository.findAllByUserIdAndActiveTrue(1L))
         .thenReturn(List.of(mockPref));
-    when(briefingJobRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
     JobPosting highScore = samplePosting("네이버", "백엔드 개발자", "서울", null);
     JobPosting lowScore = samplePosting("카카오", "Software Engineer", "서울", null);
     when(candidatePoolService.findEligibleJobPostingsForBriefing(any()))
         .thenReturn(List.of(lowScore, highScore));
 
-    BriefingReport savedReport2 = mockBriefingReport();
     ArgumentCaptor<AgentBriefingRequest> captor =
         ArgumentCaptor.forClass(AgentBriefingRequest.class);
-    when(agentClient.generate(captor.capture())).thenReturn(mockAgentResponse);
-    when(briefingReportRepository.save(any())).thenReturn(savedReport2);
+    when(agentClient.generate(captor.capture(), any(Integer.class), any(Integer.class)))
+        .thenReturn(mockAgentResponse);
 
     briefingService.generateBriefing(1L);
 
@@ -345,18 +372,16 @@ class BriefingServiceTest {
   void candidatePool_isNewAndIsUrgentBothPossiblyTrue() {
     when(userBriefingPreferenceRepository.findAllByUserIdAndActiveTrue(1L))
         .thenReturn(List.of(mockPref));
-    when(briefingJobRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
     // Collected today (isNew) + deadline in 3 days (isUrgent)
     JobPosting newAndUrgent = samplePosting("토스", "백엔드 개발자", "서울", LocalDate.now().plusDays(3));
     when(candidatePoolService.findEligibleJobPostingsForBriefing(any()))
         .thenReturn(List.of(newAndUrgent));
 
-    BriefingReport savedReport3 = mockBriefingReport();
     ArgumentCaptor<AgentBriefingRequest> captor =
         ArgumentCaptor.forClass(AgentBriefingRequest.class);
-    when(agentClient.generate(captor.capture())).thenReturn(mockAgentResponse);
-    when(briefingReportRepository.save(any())).thenReturn(savedReport3);
+    when(agentClient.generate(captor.capture(), any(Integer.class), any(Integer.class)))
+        .thenReturn(mockAgentResponse);
 
     briefingService.generateBriefing(1L);
 
@@ -369,16 +394,14 @@ class BriefingServiceTest {
   void candidatePool_scoreBreakdownPresent() {
     when(userBriefingPreferenceRepository.findAllByUserIdAndActiveTrue(1L))
         .thenReturn(List.of(mockPref));
-    when(briefingJobRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
     when(candidatePoolService.findEligibleJobPostingsForBriefing(any()))
         .thenReturn(List.of(samplePosting("네이버", "백엔드 개발자", "서울", null)));
 
-    BriefingReport savedReport4 = mockBriefingReport();
     ArgumentCaptor<AgentBriefingRequest> captor =
         ArgumentCaptor.forClass(AgentBriefingRequest.class);
-    when(agentClient.generate(captor.capture())).thenReturn(mockAgentResponse);
-    when(briefingReportRepository.save(any())).thenReturn(savedReport4);
+    when(agentClient.generate(captor.capture(), any(Integer.class), any(Integer.class)))
+        .thenReturn(mockAgentResponse);
 
     briefingService.generateBriefing(1L);
 
@@ -392,16 +415,14 @@ class BriefingServiceTest {
   void candidatePool_matchEvidencePresent() {
     when(userBriefingPreferenceRepository.findAllByUserIdAndActiveTrue(1L))
         .thenReturn(List.of(mockPref));
-    when(briefingJobRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
     when(candidatePoolService.findEligibleJobPostingsForBriefing(any()))
         .thenReturn(List.of(samplePosting("네이버", "백엔드 개발자", "서울", null)));
 
-    BriefingReport savedReport5 = mockBriefingReport();
     ArgumentCaptor<AgentBriefingRequest> captor =
         ArgumentCaptor.forClass(AgentBriefingRequest.class);
-    when(agentClient.generate(captor.capture())).thenReturn(mockAgentResponse);
-    when(briefingReportRepository.save(any())).thenReturn(savedReport5);
+    when(agentClient.generate(captor.capture(), any(Integer.class), any(Integer.class)))
+        .thenReturn(mockAgentResponse);
 
     briefingService.generateBriefing(1L);
 
@@ -625,7 +646,9 @@ class BriefingServiceTest {
 
     when(userBriefingPreferenceRepository.findAllByUserIdAndActiveTrue(1L))
         .thenReturn(List.of(pref));
-    when(briefingJobRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+    BriefingJob stubJob = BriefingJob.createManual(1L, java.time.LocalDate.now());
+    when(briefingJobPersistenceService.createOrGet(any(BriefingJob.class))).thenReturn(stubJob);
+    when(briefingJobRepository.findById(any())).thenReturn(java.util.Optional.of(stubJob));
     when(candidatePoolService.findEligibleJobPostingsForBriefing(any())).thenReturn(postings);
 
     BriefingReport savedReport = mock(BriefingReport.class);
@@ -633,8 +656,11 @@ class BriefingServiceTest {
 
     ArgumentCaptor<AgentBriefingRequest> captor =
         ArgumentCaptor.forClass(AgentBriefingRequest.class);
-    when(agentClient.generate(captor.capture())).thenReturn(mockAgentResponse);
-    when(briefingReportRepository.save(any())).thenReturn(savedReport);
+    when(agentClient.generate(captor.capture(), any(Integer.class), any(Integer.class)))
+        .thenReturn(mockAgentResponse);
+    when(briefingJobPersistenceService.saveReportAndComplete(
+            any(), any(BriefingReport.class), any(), any()))
+        .thenReturn(savedReport);
 
     briefingService.generateBriefing(1L);
     return captor.getValue().candidatePool().jobPostings();

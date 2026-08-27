@@ -9,4 +9,5 @@ public record AgentCollectionResponse(
     List<Object> companyIssues,
     List<Object> industryIssues,
     AgentCollectionStats stats,
+    List<AgentSourceOutcome> sourceOutcomes,
     List<String> warnings) {}

@@ -1,5 +1,9 @@
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
+
+GenerationMode = Literal["LLM", "REWRITTEN", "FALLBACK", "EMPTY"]
 
 
 class JobPostingPreference(BaseModel):
@@ -114,3 +118,7 @@ class BriefingGenerateResponse(BaseModel):
     content: str
     articles: list[JobArticle]
     token_usage: TokenUsage = Field(default_factory=TokenUsage)
+    generation_mode: GenerationMode = "LLM"
+    used_fallback: bool = False
+    fallback_reason: str | None = None
+    rewrite_count: int = 0

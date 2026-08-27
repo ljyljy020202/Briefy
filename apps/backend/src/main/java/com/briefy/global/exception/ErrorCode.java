@@ -23,11 +23,26 @@ public enum ErrorCode {
 
   // Briefing
   BRIEFING_REPORT_NOT_FOUND(HttpStatus.NOT_FOUND, "Briefing report not found"),
+  BRIEFING_JOB_NOT_FOUND(HttpStatus.NOT_FOUND, "Briefing job not found"),
   BRIEFING_JOB_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "Briefing generation failed"),
+  BRIEFING_JOB_ALREADY_PROCESSING(HttpStatus.CONFLICT, "이미 진행 중인 브리핑 생성 작업이 있습니다."),
+  BRIEFING_JOB_ALREADY_COMPLETED(HttpStatus.OK, "오늘 브리핑이 이미 생성되었습니다."),
+  BRIEFING_JOB_FAILED_NO_RETRY(HttpStatus.CONFLICT, "실패한 브리핑 작업은 retry API로만 재시도할 수 있습니다."),
+  BRIEFING_JOB_RETRY_NOT_ALLOWED(HttpStatus.CONFLICT, "FAILED 상태의 브리핑 작업만 retry할 수 있습니다."),
+  BRIEFING_JOB_MAX_RETRY_EXCEEDED(HttpStatus.CONFLICT, "최대 재시도 횟수를 초과했습니다."),
+  BRIEFING_JOB_HAS_EXISTING_REPORT(HttpStatus.CONFLICT, "이미 Report가 존재하는 작업은 retry할 수 없습니다."),
+  AGENT_CONTRACT_VIOLATION(HttpStatus.UNPROCESSABLE_ENTITY, "Agent 응답이 계약을 위반했습니다."),
 
   // Collection
   COLLECTION_JOB_NOT_FOUND(HttpStatus.NOT_FOUND, "Collection job not found"),
   COLLECTION_JOB_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "Daily collection failed"),
+  COLLECTION_JOB_ALREADY_ACTIVE(HttpStatus.CONFLICT, "이미 진행 중인 수집 작업이 있습니다."),
+  COLLECTION_JOB_ALREADY_COMPLETED(HttpStatus.OK, "오늘 수집이 이미 완료되었습니다."),
+  COLLECTION_JOB_RETRY_NOT_ALLOWED(HttpStatus.CONFLICT, "FAILED 상태의 작업만 retry할 수 있습니다."),
+  COLLECTION_JOB_MAX_RETRY_EXCEEDED(HttpStatus.CONFLICT, "최대 재시도 횟수를 초과했습니다."),
+
+  // Delivery
+  EMAIL_ALREADY_DELIVERED(HttpStatus.OK, "이미 발송된 이메일입니다."),
 
   // Company
   COMPANY_NOT_FOUND(HttpStatus.NOT_FOUND, "Company not found"),

@@ -608,6 +608,15 @@ validate_report_node      ← deterministic checks (no LLM):
 
 **Fallback behavior:** If any LLM call fails, `deterministic_fallback_node` builds the report from `matchEvidence` without LLM. The `tokenUsage` reflects only tokens consumed before the failure. The response format is identical to the normal path — Spring cannot distinguish fallback from LLM-generated output.
 
+**`generationMode` stored in `briefing_jobs`:** Spring records how the report was generated based on the Agent response path:
+
+| Value | Condition |
+|---|---|
+| `LLM` | Normal path: synthesis succeeded and passed validation on first attempt |
+| `REWRITTEN` | Synthesis failed validation; rewrite succeeded |
+| `FALLBACK` | LLM error or repeated validation failure; deterministic fallback used |
+| `EMPTY` | No valid candidates; empty report generated without LLM |
+
 ---
 
 ## Request/Response Flow Summary
@@ -634,9 +643,14 @@ User POST /api/briefings/generate  OR  Spring BriefingScheduler
     ├─ Spring: create briefing_jobs row (PENDING → PROCESSING)
     ├─ Spring → Agent: POST /briefings/generate (candidatePool: max 7 postings with rank/scoreBreakdown/matchEvidence)
     ├─ Agent: sort by rank → enrich (LLM) → synthesize (LLM) → validate → [rewrite once if needed] → [fallback if needed]
-    ├─ Spring: save briefing_reports + briefing_articles
-    ├─ Spring: mark briefing_jobs COMPLETED (or FAILED)
-    └─ (Scheduler path, if EMAIL_AUTO_SEND_ENABLED=true) Spring: send email; record in delivery_logs
+    ├─ Spring: save briefing_reports + briefing_articles; mark briefing_jobs COMPLETED with generationMode
+    └─ (Scheduler path, if EMAIL_AUTO_SEND_ENABLED=true) Spring: call autoDeliverBriefingReport()
+           ├─ subscription re-check (briefing_email_enabled)
+           ├─ require PENDING DeliveryLog (must be created with the report in same TX — not yet implemented atomically)
+           ├─ claimForSending() → SENDING (REQUIRES_NEW TX)
+           ├─ SES/FakeEmailSender.send() — outside any transaction
+           ├─ markSent(providerMessageId) or markFailed(errorMessage) (REQUIRES_NEW TX)
+           └─ on transient error: retry up to 2× with 3-second backoff
 ```
 
 The Agent server is called **only by the Spring Boot backend** (`AgentClient`). The frontend never calls the Agent directly. Agent endpoints do not use the `/api` prefix.

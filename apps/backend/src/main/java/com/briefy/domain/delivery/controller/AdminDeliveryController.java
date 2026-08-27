@@ -26,8 +26,15 @@ public class AdminDeliveryController {
   @Operation(
       summary = "브리핑 리포트 이메일 발송",
       description =
-          "저장된 브리핑 리포트를 현재 email.mode 설정에 따라 이메일로 발송합니다."
-              + " local(mode=log)에서는 FakeEmailSender가 사용됩니다. 중복 호출 시 매번 새 DeliveryLog를 생성합니다.")
+          """
+          저장된 브리핑 리포트를 이메일로 발송합니다. (ADMIN 전용)
+          멱등적으로 동작합니다:
+          - DeliveryLog 없음: PENDING 생성 후 발송
+          - PENDING/FAILED: SENDING 선점 후 발송 (일시 오류 시 최대 2회 재시도)
+          - SENDING: 이미 처리 중 (중복 발송 없음)
+          - SENT: 재발송 없이 기존 성공 결과 반환
+          local(mode=log)에서는 FakeEmailSender가 사용됩니다.\
+          """)
   @PostMapping("/{reportId}/deliver-email")
   public ResponseEntity<ApiResponse<DeliverReportResponse>> deliverEmail(
       @PathVariable Long reportId) {

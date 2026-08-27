@@ -12,4 +12,5 @@ public record DailyCollectionResult(
     int savedCount,
     int persistenceDuplicateCount,
     List<String> warnings,
-    String errorMessage) {}
+    String errorMessage,
+    String outcome) {}
