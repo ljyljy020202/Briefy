@@ -27,8 +27,7 @@ public class CollectionJobService {
 
   private final CollectionJobRepository collectionJobRepository;
 
-  @PersistenceContext
-  EntityManager entityManager;
+  @PersistenceContext EntityManager entityManager;
 
   public CollectionJobService(CollectionJobRepository collectionJobRepository) {
     this.collectionJobRepository = collectionJobRepository;
@@ -91,9 +90,9 @@ public class CollectionJobService {
    *   <li>동시 race condition으로 DIVE 발생 시 entityManager.clear()로 dirty 세션 초기화 후 재조회
    * </ol>
    *
-   * <p>배경: GenerationType.IDENTITY는 persist() 시점에 INSERT를 즉시 실행한다. 기존 try-save/catch-DIVE
-   * 패턴에서는 INSERT 실패 후 엔티티가 L1 캐시에 dirty 상태로 남아, catch 블록의 findByCollectionDate
-   * 호출이 FlushMode.AUTO 에 의해 다시 flush를 시도해 두 번째 UNIQUE 위반이 발생했다.
+   * <p>배경: GenerationType.IDENTITY는 persist() 시점에 INSERT를 즉시 실행한다. 기존 try-save/catch-DIVE 패턴에서는
+   * INSERT 실패 후 엔티티가 L1 캐시에 dirty 상태로 남아, catch 블록의 findByCollectionDate 호출이 FlushMode.AUTO 에 의해 다시
+   * flush를 시도해 두 번째 UNIQUE 위반이 발생했다.
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public CollectionJob createOrGetForDate(

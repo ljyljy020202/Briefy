@@ -86,8 +86,8 @@ class CollectionJobIdempotencyTest {
     // 동시 race condition: 첫 조회에서 없음 → save() DIVE → em.clear() 후 fallback 조회
     CollectionJob existingJob = pendingJob();
     when(collectionJobRepository.findByCollectionDate(TEST_DATE))
-        .thenReturn(Optional.empty())           // 첫 조회: 없음
-        .thenReturn(Optional.of(existingJob));  // fallback 조회: 경쟁 스레드가 만든 job 반환
+        .thenReturn(Optional.empty()) // 첫 조회: 없음
+        .thenReturn(Optional.of(existingJob)); // fallback 조회: 경쟁 스레드가 만든 job 반환
     when(collectionJobRepository.save(any()))
         .thenThrow(new DataIntegrityViolationException("Duplicate entry"));
 
@@ -105,7 +105,7 @@ class CollectionJobIdempotencyTest {
     DataIntegrityViolationException original =
         new DataIntegrityViolationException("Duplicate entry");
     when(collectionJobRepository.findByCollectionDate(TEST_DATE))
-        .thenReturn(Optional.empty())   // 첫 조회: 없음
+        .thenReturn(Optional.empty()) // 첫 조회: 없음
         .thenReturn(Optional.empty()); // fallback 조회: 여전히 없음
     when(collectionJobRepository.save(any())).thenThrow(original);
 
