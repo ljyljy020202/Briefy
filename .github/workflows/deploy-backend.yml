@@ -117,3 +117,7 @@ jobs:
           done
 
           echo "Backend deploy completed"
+
+      - name: Prune unused Docker images
+        if: always()
+        run: docker image prune -af
