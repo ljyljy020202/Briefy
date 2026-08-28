@@ -11,6 +11,7 @@ import com.briefy.domain.briefing.entity.BriefingJobStatus;
 import com.briefy.domain.briefing.entity.BriefingReport;
 import com.briefy.domain.briefing.repository.BriefingJobRepository;
 import com.briefy.domain.briefing.repository.BriefingReportRepository;
+import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -29,6 +30,7 @@ class BriefingJobIdempotencyTest {
 
   @Mock private BriefingJobRepository briefingJobRepository;
   @Mock private BriefingReportRepository briefingReportRepository;
+  @Mock private EntityManager entityManager;
 
   private BriefingJobPersistenceService persistenceService;
 
@@ -38,7 +40,8 @@ class BriefingJobIdempotencyTest {
   @BeforeEach
   void setUp() {
     persistenceService =
-        new BriefingJobPersistenceService(briefingJobRepository, briefingReportRepository);
+        new BriefingJobPersistenceService(
+            briefingJobRepository, briefingReportRepository, entityManager);
   }
 
   private BriefingJob pendingJob() {
