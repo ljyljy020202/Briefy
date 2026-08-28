@@ -6,6 +6,7 @@ import com.briefy.domain.briefing.repository.BriefingJobRepository;
 import com.briefy.domain.briefing.repository.BriefingReportRepository;
 import com.briefy.global.exception.BusinessException;
 import com.briefy.global.exception.ErrorCode;
+import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -23,12 +24,15 @@ public class BriefingJobPersistenceService {
 
   private final BriefingJobRepository briefingJobRepository;
   private final BriefingReportRepository briefingReportRepository;
+  private final EntityManager entityManager;
 
   public BriefingJobPersistenceService(
       BriefingJobRepository briefingJobRepository,
-      BriefingReportRepository briefingReportRepository) {
+      BriefingReportRepository briefingReportRepository,
+      EntityManager entityManager) {
     this.briefingJobRepository = briefingJobRepository;
     this.briefingReportRepository = briefingReportRepository;
+    this.entityManager = entityManager;
   }
 
   /** 멱등적 BriefingJob 생성. UNIQUE(user_id, briefing_date) 충돌 시 기존 job 재조회. */
@@ -37,6 +41,8 @@ public class BriefingJobPersistenceService {
     try {
       return briefingJobRepository.save(newJob);
     } catch (DataIntegrityViolationException ex) {
+      // 중복 키 예외 후 Hibernate 세션이 오염되므로(HHH000099) 1차 캐시를 비우고 재조회한다.
+      entityManager.clear();
       return briefingJobRepository
           .findByUserIdAndBriefingDate(newJob.getUserId(), newJob.getBriefingDate())
           .orElseThrow(() -> ex);
