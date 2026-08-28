@@ -108,3 +108,7 @@ jobs:
           docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T agent python -c "import urllib.request; print(urllib.request.urlopen('http://localhost:8000/health', timeout=5).read().decode())"
 
           echo "Agent deploy completed"
+
+      - name: Prune unused Docker images
+        if: always()
+        run: docker image prune -af
