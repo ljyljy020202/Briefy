@@ -12,7 +12,6 @@ import com.briefy.global.email.EmailSender;
 import com.briefy.global.email.MarkdownToHtmlConverter;
 import com.briefy.global.exception.BusinessException;
 import com.briefy.global.exception.ErrorCode;
-import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -73,9 +72,9 @@ public class EmailDeliveryService {
   }
 
   /**
-   * 스케줄러 경로: 이미 저장된 PENDING DeliveryLog를 대상으로 발송.
+   * 스케줄러 경로: 구독 재확인 후 DeliveryLog를 멱등적으로 생성하여 발송.
    *
-   * <p>구독 재확인 후 PENDING 상태의 DeliveryLog가 없으면 발송을 건너뛴다.
+   * <p>PENDING 상태일 때만 발송한다. 이미 SENT/SENDING/FAILED인 경우 현재 상태를 반환한다.
    */
   public DeliveryLog autoDeliverBriefingReport(Long reportId) {
     BriefingReport report = findReport(reportId);
@@ -89,16 +88,11 @@ public class EmailDeliveryService {
       return null;
     }
 
-    Optional<DeliveryLog> existing = deliveryLogPersistenceService.findByReportId(reportId);
-    if (existing.isEmpty()) {
-      log.warn(
-          "No DeliveryLog found for reportId={} — skipping auto delivery. "
-              + "PENDING log should be created together with BriefingReport.",
-          reportId);
-      return null;
-    }
+    String toEmail = resolveEmail(user);
+    DeliveryLog deliveryLog =
+        deliveryLogPersistenceService.createOrGet(
+            reportId, user.getId(), toEmail, report.getTitle());
 
-    DeliveryLog deliveryLog = existing.get();
     if (deliveryLog.getStatus() != DeliveryStatus.PENDING) {
       log.info(
           "DeliveryLog {} for reportId={} is {} — skipping auto delivery",
