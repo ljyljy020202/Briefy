@@ -176,17 +176,14 @@ class EmailDeliveryServiceTest {
 
   @Test
   void autoDeliverBriefingReport_sendsEmail_whenSubscriptionEnabled() {
-    when(deliveryLogPersistenceService.findByReportId(REPORT_ID))
-        .thenReturn(Optional.of(pendingLog));
+    when(deliveryLogPersistenceService.createOrGet(anyLong(), anyLong(), anyString(), anyString()))
+        .thenReturn(pendingLog);
     when(deliveryLogPersistenceService.claimForSending(LOG_ID)).thenReturn(true);
     when(emailSender.send(any())).thenReturn(EmailSendResult.ok("msg-auto-123"));
 
     DeliveryLog sentLog = mock(DeliveryLog.class);
     when(sentLog.getStatus()).thenReturn(DeliveryStatus.SENT);
-    // findByReportId가 두 번 호출됨: 첫 번째 - PENDING 확인, 두 번째 - 결과 반환
-    when(deliveryLogPersistenceService.findByReportId(REPORT_ID))
-        .thenReturn(Optional.of(pendingLog))
-        .thenReturn(Optional.of(sentLog));
+    when(deliveryLogPersistenceService.findByReportId(REPORT_ID)).thenReturn(Optional.of(sentLog));
 
     DeliveryLog result = emailDeliveryService.autoDeliverBriefingReport(REPORT_ID);
 
@@ -204,12 +201,22 @@ class EmailDeliveryServiceTest {
   }
 
   @Test
-  void autoDeliverBriefingReport_noPendingLog_returnsNull() {
-    when(deliveryLogPersistenceService.findByReportId(REPORT_ID)).thenReturn(Optional.empty());
+  void autoDeliverBriefingReport_noExistingLog_createsLogAndSends() {
+    // DeliveryLog가 없을 때 createOrGet이 새 PENDING 로그를 만들고 발송까지 진행한다
+    when(deliveryLogPersistenceService.createOrGet(anyLong(), anyLong(), anyString(), anyString()))
+        .thenReturn(pendingLog);
+    when(deliveryLogPersistenceService.claimForSending(LOG_ID)).thenReturn(true);
+    when(emailSender.send(any())).thenReturn(EmailSendResult.ok("msg-created-123"));
+
+    DeliveryLog sentLog = mock(DeliveryLog.class);
+    when(sentLog.getStatus()).thenReturn(DeliveryStatus.SENT);
+    when(deliveryLogPersistenceService.findByReportId(REPORT_ID)).thenReturn(Optional.of(sentLog));
 
     DeliveryLog result = emailDeliveryService.autoDeliverBriefingReport(REPORT_ID);
 
-    assertThat(result).isNull();
-    verify(emailSender, never()).send(any());
+    verify(deliveryLogPersistenceService)
+        .createOrGet(anyLong(), anyLong(), anyString(), anyString());
+    verify(emailSender).send(any());
+    assertThat(result.getStatus()).isEqualTo(DeliveryStatus.SENT);
   }
 }
