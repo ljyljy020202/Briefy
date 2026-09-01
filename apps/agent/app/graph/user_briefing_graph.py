@@ -84,7 +84,7 @@ _PATTERNS_FALLBACK_REQUIRED = [
 class UserBriefingState(TypedDict):
     # ── Input (immutable after check_pool) ──────────────────────────────────
     request: BriefingGenerateRequest
-    selected: list[CandidateJobPosting]   # Backend Top-7 sorted by rank
+    selected: list[CandidateJobPosting]  # Backend Top-7 sorted by rank
 
     # ── Enrichment (structured, from enrich_postings) ───────────────────────
     enrichments: dict[str, JobPostingEnrichment]
@@ -92,12 +92,12 @@ class UserBriefingState(TypedDict):
     # ── LLM draft (synthesis or rewrite output) ─────────────────────────────
     draft_summary: str
     draft_content: str
-    draft_referenced_ids: list[str]      # posting IDs declared by LLM
+    draft_referenced_ids: list[str]  # posting IDs declared by LLM
 
     # ── Validation ──────────────────────────────────────────────────────────
-    validation_status: ValidationStatus   # pending|pass|retryable|fallback_required
-    validation_errors: list[str]          # error codes
-    rewrite_count: int                    # max 1
+    validation_status: ValidationStatus  # pending|pass|retryable|fallback_required
+    validation_errors: list[str]  # error codes
+    rewrite_count: int  # max 1
 
     # ── Final output (written by synthesis/rewrite; overwritten by fallback) ─
     articles: list[JobArticle]
@@ -125,7 +125,9 @@ def check_pool_node(state: UserBriefingState) -> dict:
     if len(postings) > _TOP_N:
         logger.warning(
             "[check_pool] userId=%s received %d postings (max %d); truncating",
-            req.user_id, len(postings), _TOP_N,
+            req.user_id,
+            len(postings),
+            _TOP_N,
         )
         postings = postings[:_TOP_N]
 
@@ -134,7 +136,8 @@ def check_pool_node(state: UserBriefingState) -> dict:
         if not p.title or not p.source_url:
             logger.warning(
                 "[check_pool] userId=%s skipping posting id=%s (no title/url)",
-                req.user_id, p.id,
+                req.user_id,
+                p.id,
             )
             continue
         valid.append(p)
@@ -147,7 +150,9 @@ def check_pool_node(state: UserBriefingState) -> dict:
 
     logger.info(
         "[check_pool] userId=%s briefingDate=%s selected=%d postings",
-        req.user_id, req.briefing_date, len(selected),
+        req.user_id,
+        req.briefing_date,
+        len(selected),
     )
     return {"selected": selected}
 
@@ -194,7 +199,10 @@ async def enrich_postings_node(state: UserBriefingState) -> dict:
         new_usage = _add_usage(existing_usage, usage)
         logger.info(
             "[enrich_postings] userId=%s enriched=%d/%d inputTokens=%d",
-            req.user_id, len(enrichments), len(selected), new_usage.input_tokens,
+            req.user_id,
+            len(enrichments),
+            len(selected),
+            new_usage.input_tokens,
         )
         return {
             "enrichments": enrichments,
@@ -204,7 +212,9 @@ async def enrich_postings_node(state: UserBriefingState) -> dict:
     except (LLMUnavailableError, LLMClientError) as exc:
         logger.warning(
             "[enrich_postings] userId=%s LLM enrichment failed (%s: %s)",
-            req.user_id, type(exc).__name__, exc,
+            req.user_id,
+            type(exc).__name__,
+            exc,
         )
         return {
             "enrichments": {},
@@ -258,7 +268,8 @@ async def synthesize_report_node(state: UserBriefingState) -> dict:
             new_usage = _add_usage(existing_usage, usage)
             logger.info(
                 "[synthesize_report] userId=%s LLM synthesis ok inputTokens=%d",
-                req.user_id, new_usage.input_tokens,
+                req.user_id,
+                new_usage.input_tokens,
             )
             return {
                 "articles": articles,
@@ -276,7 +287,9 @@ async def synthesize_report_node(state: UserBriefingState) -> dict:
         except (LLMUnavailableError, LLMClientError) as exc:
             logger.warning(
                 "[synthesize_report] userId=%s LLM synthesis failed (%s: %s)",
-                req.user_id, type(exc).__name__, exc,
+                req.user_id,
+                type(exc).__name__,
+                exc,
             )
             return {
                 "articles": articles,
@@ -291,7 +304,9 @@ async def synthesize_report_node(state: UserBriefingState) -> dict:
         except Exception as exc:
             logger.warning(
                 "[synthesize_report] userId=%s synthesis response invalid (%s: %s)",
-                req.user_id, type(exc).__name__, exc,
+                req.user_id,
+                type(exc).__name__,
+                exc,
             )
             return {
                 "articles": articles,
@@ -424,7 +439,10 @@ def validate_report_node(state: UserBriefingState) -> dict:
     if errors:
         logger.warning(
             "[validate_report] userId=%s status=%s errors=%s rewrite_count=%d",
-            req.user_id, status, errors, state.get("rewrite_count", 0),
+            req.user_id,
+            status,
+            errors,
+            state.get("rewrite_count", 0),
         )
     else:
         logger.info("[validate_report] userId=%s status=pass", req.user_id)
@@ -477,7 +495,9 @@ async def rewrite_report_node(state: UserBriefingState) -> dict:
         new_usage = _add_usage(existing_usage, usage)
         logger.info(
             "[rewrite_report] userId=%s rewrite #%d ok inputTokens=%d",
-            req.user_id, new_count, new_usage.input_tokens,
+            req.user_id,
+            new_count,
+            new_usage.input_tokens,
         )
         return {
             "draft_summary": result.overall_summary,
@@ -494,7 +514,9 @@ async def rewrite_report_node(state: UserBriefingState) -> dict:
     except (LLMUnavailableError, LLMClientError) as exc:
         logger.warning(
             "[rewrite_report] userId=%s LLM rewrite failed (%s: %s)",
-            req.user_id, type(exc).__name__, exc,
+            req.user_id,
+            type(exc).__name__,
+            exc,
         )
         return {
             "rewrite_count": rewrite_count + 1,
@@ -505,7 +527,9 @@ async def rewrite_report_node(state: UserBriefingState) -> dict:
     except Exception as exc:
         logger.warning(
             "[rewrite_report] userId=%s rewrite response invalid (%s: %s)",
-            req.user_id, type(exc).__name__, exc,
+            req.user_id,
+            type(exc).__name__,
+            exc,
         )
         return {
             "rewrite_count": rewrite_count + 1,
@@ -537,8 +561,11 @@ def deterministic_fallback_node(state: UserBriefingState) -> dict:
     logger.warning(
         "[deterministic_fallback] userId=%s briefingDate=%s "
         "error_category=%s validation_errors=%s rewrite_count=%d fallback_reason=%s",
-        req.user_id, req.briefing_date,
-        llm_error_category, validation_errors, state.get("rewrite_count", 0),
+        req.user_id,
+        req.briefing_date,
+        llm_error_category,
+        validation_errors,
+        state.get("rewrite_count", 0),
         fallback_reason,
     )
 
@@ -763,10 +790,15 @@ def _build_enriched_inputs(
             summary = _deterministic_summary(posting)
             matching_reason = _build_why_it_matters(posting, pref, today)
             ev = posting.match_evidence
-            matched_keywords = list(ev.matched_skills) if ev.matched_skills else [
-                s for s in pref.skills
-                if s.lower() in [sk.lower() for sk in posting.skills]
-            ]
+            matched_keywords = (
+                list(ev.matched_skills)
+                if ev.matched_skills
+                else [
+                    s
+                    for s in pref.skills
+                    if s.lower() in [sk.lower() for sk in posting.skills]
+                ]
+            )
 
         days_until = (
             _safe_days_until(posting.deadline, today) if posting.deadline else None
@@ -882,46 +914,48 @@ def _build_why_it_matters(
 
 
 def _build_empty_report(briefing_date: str) -> dict:
-    content = "\n".join([
-        "# 오늘의 채용 브리핑",
-        "",
-        "## 오늘의 핵심 요약",
-        "",
-        f"- {briefing_date} 기준, 선호도에 맞는 채용 공고가 오늘은 없습니다.",
-        "- 선호 조건을 확인하고 내일 다시 브리핑을 살펴보세요.",
-        "- 조건을 조금 넓히면 더 많은 공고를 만날 수 있습니다.",
-        "",
-        "---",
-        "",
-        "## 🏆 추천 공고 TOP 0",
-        "",
-        "오늘 추천할 공고가 없습니다.",
-        "",
-        "---",
-        "",
-        "## ⏰ 신규/마감 임박 공고",
-        "",
-        "선별된 공고 중 7일 이내 마감 임박 공고가 없습니다.",
-        "",
-        "---",
-        "",
-        "## 💡 오늘의 지원 추천 액션",
-        "",
-        "1. 선호 조건(역할, 기업, 스킬, 위치)을 다시 확인해 보세요.",
-        "2. 내일 다시 브리핑을 확인해 주세요.",
-        "",
-        "---",
-        "",
-        "## 🔑 오늘의 키워드",
-        "",
-        "해당 사항 없습니다.",
-        "",
-        "---",
-        "",
-        "## ✏️ 한 줄 정리",
-        "",
-        "내일은 더 많은 공고가 준비되어 있을 거예요.",
-    ])
+    content = "\n".join(
+        [
+            "# 오늘의 채용 브리핑",
+            "",
+            "## 오늘의 핵심 요약",
+            "",
+            f"- {briefing_date} 기준, 선호도에 맞는 채용 공고가 오늘은 없습니다.",
+            "- 선호 조건을 확인하고 내일 다시 브리핑을 살펴보세요.",
+            "- 조건을 조금 넓히면 더 많은 공고를 만날 수 있습니다.",
+            "",
+            "---",
+            "",
+            "## 🏆 추천 공고 TOP 0",
+            "",
+            "오늘 추천할 공고가 없습니다.",
+            "",
+            "---",
+            "",
+            "## ⏰ 신규/마감 임박 공고",
+            "",
+            "선별된 공고 중 7일 이내 마감 임박 공고가 없습니다.",
+            "",
+            "---",
+            "",
+            "## 💡 오늘의 지원 추천 액션",
+            "",
+            "1. 선호 조건(역할, 기업, 스킬, 위치)을 다시 확인해 보세요.",
+            "2. 내일 다시 브리핑을 확인해 주세요.",
+            "",
+            "---",
+            "",
+            "## 🔑 오늘의 키워드",
+            "",
+            "해당 사항 없습니다.",
+            "",
+            "---",
+            "",
+            "## ✏️ 한 줄 정리",
+            "",
+            "내일은 더 많은 공고가 준비되어 있을 거예요.",
+        ]
+    )
     return {
         "articles": [],
         "title": f"오늘의 채용 브리핑 ({briefing_date})",
@@ -945,9 +979,11 @@ def _build_deterministic_report(
     primary_role = pref.roles[0] if pref.roles else "개발자"
     title = f"오늘의 채용 브리핑 — {primary_role} ({briefing_date})"
 
-    unique_companies = list(dict.fromkeys(
-        inp["company_name"] for inp in enriched_inputs if inp["company_name"]
-    ))
+    unique_companies = list(
+        dict.fromkeys(
+            inp["company_name"] for inp in enriched_inputs if inp["company_name"]
+        )
+    )
     co_display = " · ".join(unique_companies[:3])
     extra = len(unique_companies) - 3
     extra_str = f" 외 {extra}개 기업" if extra > 0 else ""
@@ -1013,7 +1049,8 @@ def _build_deterministic_report(
         lines.append("")
 
     deadline_near = [
-        inp for inp in enriched_inputs
+        inp
+        for inp in enriched_inputs
         if inp.get("days_until_deadline") is not None
         and 0 <= inp["days_until_deadline"] <= 7
     ]

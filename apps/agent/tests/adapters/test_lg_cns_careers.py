@@ -1,4 +1,5 @@
 """Tests for LG_CNS_CAREERS adapter."""
+
 from __future__ import annotations
 
 import json
@@ -365,24 +366,30 @@ class TestBuildPosting:
         assert p.description is not None
 
     def test_intern_posting(self) -> None:
-        intern_detail = {**_DETAIL, **{
-            "jobNoticeId": 1000834,
-            "careerTypeCode": "C",
-            "careerTypeName": "인턴",
-            "companyName": "LG CNS",
-        }}
+        intern_detail = {
+            **_DETAIL,
+            **{
+                "jobNoticeId": 1000834,
+                "careerTypeCode": "C",
+                "careerTypeName": "인턴",
+                "companyName": "LG CNS",
+            },
+        }
         profile = _make_profile()
         p = _build_posting(1000834, _INTERN_ITEM, intern_detail, [], profile)
         assert p.employment_type == "인턴"
         assert p.experience_level == "인턴"
 
     def test_mixed_career_posting(self) -> None:
-        mixed_detail = {**_DETAIL, **{
-            "jobNoticeId": 1000409,
-            "careerTypeCode": "D",
-            "careerTypeName": "신입/경력",
-            "companyName": "LG CNS",
-        }}
+        mixed_detail = {
+            **_DETAIL,
+            **{
+                "jobNoticeId": 1000409,
+                "careerTypeCode": "D",
+                "careerTypeName": "신입/경력",
+                "companyName": "LG CNS",
+            },
+        }
         profile = _make_profile()
         p = _build_posting(1000409, _MIXED_ITEM, mixed_detail, [], profile)
         assert p.experience_level == "신입·경력"
@@ -517,9 +524,7 @@ class TestLgCnsCareersParserFetch:
 
     @pytest.mark.asyncio
     async def test_max_fetch_limit_respected(self) -> None:
-        jobs = [
-            {**_JOB_ITEM, "jobNoticeId": 1000000 + i} for i in range(5)
-        ]
+        jobs = [{**_JOB_ITEM, "jobNoticeId": 1000000 + i} for i in range(5)]
         source = _make_source(max_fetch=2)
         profile = _make_profile()
 
@@ -592,5 +597,3 @@ class TestLgCnsCareersLive:
         company_codes = {j.get("companyCode") for j in jobs}
         assert company_codes <= {"CNS"} or len(jobs) == 0
         print(f"\nLive: {len(jobs)} LG CNS jobs discovered")
-
-

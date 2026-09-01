@@ -155,8 +155,8 @@ class _CardInfo:
     seq: int
     company_name: str
     title: str
-    type_text: str       # "경력" / "신입" / "인턴" / "신입·경력"
-    period_text: str     # "YYYY.MM.DD ~ YYYY.MM.DD" or ""
+    type_text: str  # "경력" / "신입" / "인턴" / "신입·경력"
+    period_text: str  # "YYYY.MM.DD ~ YYYY.MM.DD" or ""
     role_flags: list[str] = field(default_factory=list)
 
 
@@ -471,9 +471,7 @@ class SamsungCareersParser(CustomParser):
                         headers=_DETAIL_HEADERS,
                         follow_redirects=True,
                     ) as dc:
-                        rd = await dc.get(
-                            _DETAIL_URL, params={"seqno": str(card.seq)}
-                        )
+                        rd = await dc.get(_DETAIL_URL, params={"seqno": str(card.seq)})
                         rd.raise_for_status()
                 except TimeoutException:
                     warnings.append(

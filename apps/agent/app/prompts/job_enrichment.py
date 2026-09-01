@@ -156,14 +156,16 @@ def _posting_to_dict(p: CandidateJobPosting) -> dict:
     # Include Backend match signals to ground LLM matching reasons
     ev = p.match_evidence
     match_evidence = {
-        k: v for k, v in {
+        k: v
+        for k, v in {
             "matchedRoles": ev.matched_roles,
             "matchedCompanies": ev.matched_companies,
             "matchedSkills": ev.matched_skills,
             "matchedLocations": ev.matched_locations,
             "matchedExperienceLevels": ev.matched_experience_levels,
             "matchedEmploymentTypes": ev.matched_employment_types,
-        }.items() if v
+        }.items()
+        if v
     }
     if match_evidence:
         d["matchEvidence"] = match_evidence

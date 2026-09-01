@@ -44,7 +44,6 @@ from xml.etree import ElementTree as ET
 from bs4 import BeautifulSoup
 from httpx import AsyncClient, HTTPStatusError, TimeoutException
 
-from app.services.description_extractor import extract_jasoseol_description
 from app.adapters.aggregators.jasoseol_role_planner import (
     get_combined_duty_ids,
     plan_developer_roles,
@@ -61,6 +60,7 @@ from app.adapters.base import (
 )
 from app.core.config import settings
 from app.schemas.collection import CollectionOptions, SeedKeywords
+from app.services.description_extractor import extract_jasoseol_description
 
 log = logging.getLogger(__name__)
 
@@ -236,9 +236,7 @@ def _merge_candidates(
         sid = _extract_source_external_id(url)
         key = sid if sid else url
         if key in entries:
-            entries[key] = replace(
-                entries[key], provenance="BOTH", lastmod=lastmod
-            )
+            entries[key] = replace(entries[key], provenance="BOTH", lastmod=lastmod)
         else:
             entries[key] = _CandidateEntry(
                 url=url,
@@ -296,13 +294,13 @@ def _allocate_fetch_budget(
 
     if remaining > 0:
         # Try to backfill from remaining exploration first
-        extra_e = exploration_pool[e_count: e_count + remaining]
+        extra_e = exploration_pool[e_count : e_count + remaining]
         taken_e = taken_e + extra_e
         remaining -= len(extra_e)
 
     if remaining > 0:
         # Then backfill from remaining targeted
-        extra_t = targeted_pool[t_count: t_count + remaining]
+        extra_t = targeted_pool[t_count : t_count + remaining]
         taken_t = taken_t + extra_t
 
     return (taken_t + taken_e)[:detail_fetch_limit]
@@ -576,7 +574,9 @@ def parse_posting_page(html: str, url: str) -> RawJobPosting | None:
         description=description,
         posted_at=None,
         source_external_id=_extract_source_external_id(url),
-        description_truncated=description_truncated if description is not None else None,
+        description_truncated=description_truncated
+        if description is not None
+        else None,
     )
 
 

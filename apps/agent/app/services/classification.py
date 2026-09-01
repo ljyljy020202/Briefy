@@ -3,7 +3,8 @@
 Architecture:
 - Splits postings into batches of `batch_size`.
 - Processes batches concurrently up to `max_concurrency` via asyncio.Semaphore.
-- Each batch: up to `max_attempts_per_item` LLM call attempts (initial + transient retry).
+- Each batch: up to `max_attempts_per_item` LLM call attempts
+  (initial + transient retry).
 - Validation failures per item → rule-based fallback (no per-item LLM retry).
 - Entire processing bounded by `request_budget_seconds`.
 - Observability: LLM call count, token usage, per-category result counts, timing.
@@ -28,6 +29,8 @@ from app.core.llm_client import (
     LLMClientError,
     LLMTokenUsage,
     LLMUnavailableError,
+)
+from app.core.llm_client import (
     llm_client as _global_llm_client,
 )
 from app.prompts import classification as _prompts
@@ -45,18 +48,45 @@ logger = logging.getLogger(__name__)
 # ── Enum allow-lists ──────────────────────────────────────────────────────────
 
 _VALID_JOB_DOMAIN = frozenset({"IT", "NON_IT", "MIXED", "UNKNOWN"})
-_VALID_POSTING_SCOPE = frozenset({"ROLE_SPECIFIC", "MULTI_ROLE", "OPEN_RECRUITMENT", "UNKNOWN"})
-_VALID_ROLE_GROUPS = frozenset({
-    "BACKEND", "FRONTEND", "FULLSTACK", "DATA", "AI_ML", "MOBILE",
-    "DEVOPS_INFRA", "GENERAL_IT", "OTHER_IT", "NON_DEV",
-})
-_DEV_ROLE_GROUPS = frozenset({
-    "BACKEND", "FRONTEND", "FULLSTACK", "DATA", "AI_ML", "MOBILE",
-    "DEVOPS_INFRA", "GENERAL_IT", "OTHER_IT",
-})
-_VALID_RECRUITMENT_TYPE = frozenset({
-    "EXPERIENCED_HIRE", "NEW_GRAD_HIRE", "OPEN_HIRE", "INTERNSHIP", "UNKNOWN",
-})
+_VALID_POSTING_SCOPE = frozenset(
+    {"ROLE_SPECIFIC", "MULTI_ROLE", "OPEN_RECRUITMENT", "UNKNOWN"}
+)
+_VALID_ROLE_GROUPS = frozenset(
+    {
+        "BACKEND",
+        "FRONTEND",
+        "FULLSTACK",
+        "DATA",
+        "AI_ML",
+        "MOBILE",
+        "DEVOPS_INFRA",
+        "GENERAL_IT",
+        "OTHER_IT",
+        "NON_DEV",
+    }
+)
+_DEV_ROLE_GROUPS = frozenset(
+    {
+        "BACKEND",
+        "FRONTEND",
+        "FULLSTACK",
+        "DATA",
+        "AI_ML",
+        "MOBILE",
+        "DEVOPS_INFRA",
+        "GENERAL_IT",
+        "OTHER_IT",
+    }
+)
+_VALID_RECRUITMENT_TYPE = frozenset(
+    {
+        "EXPERIENCED_HIRE",
+        "NEW_GRAD_HIRE",
+        "OPEN_HIRE",
+        "INTERNSHIP",
+        "UNKNOWN",
+    }
+)
 _VALID_EXP_REQ_TYPE = frozenset({"REQUIRED", "PREFERRED", "NONE", "UNKNOWN"})
 _MULTI_TRACK_SCOPES = frozenset({"MULTI_ROLE", "OPEN_RECRUITMENT"})
 
@@ -68,32 +98,75 @@ _KW_FRONTEND = {"frontend", "프론트엔드", "front-end"}
 _KW_FULLSTACK = {"fullstack", "풀스택", "full-stack"}
 _KW_DATA = {"data engineer", "데이터 엔지니어", "data pipeline", "데이터 파이프라인"}
 _KW_AI_ML = {
-    "machine learning", "머신러닝", "ml engineer", "ai engineer",
-    "deep learning", "딥러닝", "nlp engineer",
+    "machine learning",
+    "머신러닝",
+    "ml engineer",
+    "ai engineer",
+    "deep learning",
+    "딥러닝",
+    "nlp engineer",
 }
 _KW_DEVOPS = {
-    "devops", "sre", "site reliability", "platform engineer", "cloud engineer",
-    "인프라 엔지니어", "infra engineer",
+    "devops",
+    "sre",
+    "site reliability",
+    "platform engineer",
+    "cloud engineer",
+    "인프라 엔지니어",
+    "infra engineer",
 }
 _KW_MOBILE = {"android", "ios", "mobile", "앱 개발", "flutter", "react native"}
 _KW_OTHER_IT = {
-    "qa engineer", "qa 엔지니어", "quality engineer", "security engineer",
-    "보안 엔지니어", "automation engineer", "테스트 엔지니어",
+    "qa engineer",
+    "qa 엔지니어",
+    "quality engineer",
+    "security engineer",
+    "보안 엔지니어",
+    "automation engineer",
+    "테스트 엔지니어",
 }
 _KW_GENERAL_IT = {
-    "software engineer", "소프트웨어 엔지니어", "developer", "개발자",
-    "programmer", "프로그래머", "engineer", "엔지니어",
+    "software engineer",
+    "소프트웨어 엔지니어",
+    "developer",
+    "개발자",
+    "programmer",
+    "프로그래머",
+    "engineer",
+    "엔지니어",
 }
 _KW_NON_IT = {
-    "sales", "영업", "operations manager", "operations specialist",
-    "운영", "총무", "경리", "회계", "재무", "marketing", "마케팅",
-    "hr manager", "인사", "보험", "insurance", "법무", "legal",
-    "manager", "매니저",  # only matched when no dev keywords present
+    "sales",
+    "영업",
+    "operations manager",
+    "operations specialist",
+    "운영",
+    "총무",
+    "경리",
+    "회계",
+    "재무",
+    "marketing",
+    "마케팅",
+    "hr manager",
+    "인사",
+    "보험",
+    "insurance",
+    "법무",
+    "legal",
+    "manager",
+    "매니저",  # only matched when no dev keywords present
 }
 # Dev keywords that take priority over NON_IT keywords
 _KW_DEV_ANY = (
-    _KW_BACKEND | _KW_FRONTEND | _KW_FULLSTACK | _KW_DATA | _KW_AI_ML
-    | _KW_DEVOPS | _KW_MOBILE | _KW_OTHER_IT | _KW_GENERAL_IT
+    _KW_BACKEND
+    | _KW_FRONTEND
+    | _KW_FULLSTACK
+    | _KW_DATA
+    | _KW_AI_ML
+    | _KW_DEVOPS
+    | _KW_MOBILE
+    | _KW_OTHER_IT
+    | _KW_GENERAL_IT
 )
 
 # Prompt injection detection patterns
@@ -160,7 +233,9 @@ def _add_usage(a: LLMTokenUsage, b: LLMTokenUsage) -> LLMTokenUsage:
 # ── Output validation ─────────────────────────────────────────────────────────
 
 
-def _validate_evidence_quotes(evidence: str, posting: ClassifyPostingInput) -> list[str]:
+def _validate_evidence_quotes(
+    evidence: str, posting: ClassifyPostingInput
+) -> list[str]:
     """Check that short quoted excerpts in evidence exist in the posting input."""
     if not evidence:
         return []
@@ -168,14 +243,19 @@ def _validate_evidence_quotes(evidence: str, posting: ClassifyPostingInput) -> l
     quotes = re.findall(r'"([^"]{5,80})"', evidence)
     if not quotes:
         return []
-    searchable = " ".join(filter(None, [
-        posting.title,
-        posting.company,
-        posting.description or "",
-        " ".join(posting.parsed_roles),
-        posting.parsed_experience_level or "",
-        posting.parsed_employment_type or "",
-    ])).lower()
+    searchable = " ".join(
+        filter(
+            None,
+            [
+                posting.title,
+                posting.company,
+                posting.description or "",
+                " ".join(posting.parsed_roles),
+                posting.parsed_experience_level or "",
+                posting.parsed_employment_type or "",
+            ],
+        )
+    ).lower()
     errors = []
     for q in quotes:
         if q.lower() not in searchable:
@@ -183,7 +263,9 @@ def _validate_evidence_quotes(evidence: str, posting: ClassifyPostingInput) -> l
     return errors
 
 
-def _validate_track(raw_track: dict, posting_id: int) -> tuple[ClassifyTrack | None, list[str]]:
+def _validate_track(
+    raw_track: dict, posting_id: int
+) -> tuple[ClassifyTrack | None, list[str]]:
     """Validate a single track object. Returns (track, errors)."""
     errors: list[str] = []
     jd = raw_track.get("jobDomain", "UNKNOWN")
@@ -249,7 +331,9 @@ def _validate_item(
     # ID must match
     got_id = raw.get("jobPostingId")
     if got_id != posting.job_posting_id:
-        raise _ItemValidationError([f"ID_MISMATCH:got={got_id},expected={posting.job_posting_id}"])
+        raise _ItemValidationError(
+            [f"ID_MISMATCH:got={got_id},expected={posting.job_posting_id}"]
+        )
 
     # jobDomain
     job_domain = raw.get("jobDomain", "UNKNOWN")
@@ -288,7 +372,9 @@ def _validate_item(
     # acceptsNewGrad — must remain nullable boolean
     accepts_new_grad = raw.get("acceptsNewGrad")
     if accepts_new_grad is not None and not isinstance(accepts_new_grad, bool):
-        errors.append(f"INVALID_ACCEPTS_NEW_GRAD_TYPE:{type(accepts_new_grad).__name__}")
+        errors.append(
+            f"INVALID_ACCEPTS_NEW_GRAD_TYPE:{type(accepts_new_grad).__name__}"
+        )
         accepts_new_grad = None
 
     # minRequiredYears / maxRequiredYears
@@ -356,7 +442,9 @@ def _validate_item(
         uncertainty_reasons=list(raw.get("uncertaintyReasons") or []),
         confidence=confidence,
         input_completeness=None,
-        description_truncated=posting.input_quality.description_truncated if not posting.input_quality.description_truncated else True,
+        description_truncated=posting.input_quality.description_truncated
+        if not posting.input_quality.description_truncated
+        else True,
     )
     return result, warnings
 
@@ -368,7 +456,9 @@ def _contains_any(text: str, keywords: set[str]) -> bool:
     return any(kw in text for kw in keywords)
 
 
-def _apply_rule_fallback(posting: ClassifyPostingInput, error_code: str = "") -> ClassificationResult:
+def _apply_rule_fallback(
+    posting: ClassifyPostingInput, error_code: str = ""
+) -> ClassificationResult:
     """Generate a rule-based FALLBACK result without calling LLM."""
     text = f"{posting.title} {' '.join(posting.parsed_roles)}".lower()
 
@@ -469,13 +559,39 @@ class ClassificationService:
         max_description_length: int | None = None,
     ) -> None:
         self._llm = llm_client if llm_client is not None else _global_llm_client
-        self._batch_size = batch_size if batch_size is not None else settings.classify_batch_size
-        self._max_concurrency = max_concurrency if max_concurrency is not None else settings.classify_max_concurrency
-        self._llm_timeout = llm_timeout_seconds if llm_timeout_seconds is not None else settings.classify_llm_timeout_seconds
-        self._max_attempts = max_attempts_per_item if max_attempts_per_item is not None else settings.classify_max_attempts_per_item
-        self._budget = request_budget_seconds if request_budget_seconds is not None else settings.classify_request_budget_seconds
-        self._max_items = max_items_per_request if max_items_per_request is not None else settings.classify_max_items_per_request
-        self._max_desc_len = max_description_length if max_description_length is not None else settings.classify_max_description_length
+        self._batch_size = (
+            batch_size if batch_size is not None else settings.classify_batch_size
+        )
+        self._max_concurrency = (
+            max_concurrency
+            if max_concurrency is not None
+            else settings.classify_max_concurrency
+        )
+        self._llm_timeout = (
+            llm_timeout_seconds
+            if llm_timeout_seconds is not None
+            else settings.classify_llm_timeout_seconds
+        )
+        self._max_attempts = (
+            max_attempts_per_item
+            if max_attempts_per_item is not None
+            else settings.classify_max_attempts_per_item
+        )
+        self._budget = (
+            request_budget_seconds
+            if request_budget_seconds is not None
+            else settings.classify_request_budget_seconds
+        )
+        self._max_items = (
+            max_items_per_request
+            if max_items_per_request is not None
+            else settings.classify_max_items_per_request
+        )
+        self._max_desc_len = (
+            max_description_length
+            if max_description_length is not None
+            else settings.classify_max_description_length
+        )
 
     async def classify(self, request: ClassifyRequest) -> ClassifyResponse:
         t0 = time.monotonic()
@@ -485,9 +601,11 @@ class ClassificationService:
         warnings: list[str] = []
         self._validate_request(request, warnings)
 
-        postings = request.postings[:self._max_items]
+        postings = request.postings[: self._max_items]
         if len(request.postings) > self._max_items:
-            warnings.append(f"INPUT_TRUNCATED:requested={len(request.postings)},max={self._max_items}")
+            warnings.append(
+                f"INPUT_TRUNCATED:requested={len(request.postings)},max={self._max_items}"
+            )
 
         # Truncate long descriptions
         truncated_postings = self._truncate_descriptions(postings)
@@ -496,7 +614,9 @@ class ClassificationService:
         for p in truncated_postings:
             inj = _detect_prompt_injection(p)
             if inj:
-                warnings.append(f"PROMPT_INJECTION_DETECTED:id={p.job_posting_id},pattern={inj}")
+                warnings.append(
+                    f"PROMPT_INJECTION_DETECTED:id={p.job_posting_id},pattern={inj}"
+                )
 
         # ── Batch processing ────────────────────────────────────────────────
         batches = _split_batches(truncated_postings, self._batch_size)
@@ -569,7 +689,7 @@ class ClassificationService:
         result = []
         for p in postings:
             if p.description and len(p.description) > self._max_desc_len:
-                # Rebuild with truncated description — Pydantic model is immutable so copy
+                # Pydantic models are immutable — rebuild from dict with truncated desc
                 data = p.model_dump()
                 data["description"] = p.description[: self._max_desc_len]
                 result.append(ClassifyPostingInput.model_validate(data))
@@ -631,7 +751,8 @@ class ClassificationService:
                 last_error_code = "TIMEOUT"
                 logger.warning(
                     "classification: batch LLM call timed out (attempt %d/%d) ids=%s",
-                    attempt + 1, self._max_attempts,
+                    attempt + 1,
+                    self._max_attempts,
                     [p.job_posting_id for p in batch],
                 )
             except LLMUnavailableError:
@@ -643,13 +764,19 @@ class ClassificationService:
                 msg = str(exc)
                 if _is_config_error(msg):
                     last_error_code = "CONFIG_ERROR"
-                    logger.error("classification: config error (no retry): %s", msg[:200])
+                    logger.error(
+                        "classification: config error (no retry): %s", msg[:200]
+                    )
                     break
                 if _is_transient_llm_error(msg):
-                    last_error_code = "RATE_LIMIT" if "429" in msg else "TRANSIENT_ERROR"
+                    last_error_code = (
+                        "RATE_LIMIT" if "429" in msg else "TRANSIENT_ERROR"
+                    )
                     logger.warning(
                         "classification: transient LLM error (attempt %d/%d): %s",
-                        attempt + 1, self._max_attempts, msg[:200],
+                        attempt + 1,
+                        self._max_attempts,
+                        msg[:200],
                     )
                     await asyncio.sleep(min(backoff, 10.0))
                     backoff *= 2
@@ -658,7 +785,9 @@ class ClassificationService:
                     last_error_code = "LLM_ERROR"
                     logger.warning(
                         "classification: LLM error (attempt %d/%d): %s",
-                        attempt + 1, self._max_attempts, msg[:200],
+                        attempt + 1,
+                        self._max_attempts,
+                        msg[:200],
                     )
 
         br.usage = usage
@@ -667,9 +796,7 @@ class ClassificationService:
             # All attempts failed → rule fallback for entire batch
             for p in batch:
                 br.results.append(_apply_rule_fallback(p, last_error_code))
-                br.warnings.append(
-                    f"FALLBACK_{last_error_code}:id={p.job_posting_id}"
-                )
+                br.warnings.append(f"FALLBACK_{last_error_code}:id={p.job_posting_id}")
             return br
 
         # ── Validate per-item ───────────────────────────────────────────────
@@ -719,14 +846,17 @@ class ClassificationService:
 def _split_batches(
     postings: list[ClassifyPostingInput], batch_size: int
 ) -> list[list[ClassifyPostingInput]]:
-    return [postings[i: i + batch_size] for i in range(0, len(postings), batch_size)]
+    return [postings[i : i + batch_size] for i in range(0, len(postings), batch_size)]
 
 
 def _detect_prompt_injection(posting: ClassifyPostingInput) -> str:
     """Return the first matched injection pattern label, or empty string."""
-    text = " ".join(filter(None, [
-        posting.title, posting.description or "", " ".join(posting.parsed_roles)
-    ]))
+    text = " ".join(
+        filter(
+            None,
+            [posting.title, posting.description or "", " ".join(posting.parsed_roles)],
+        )
+    )
     for pat in _INJECTION_PATTERNS:
         m = pat.search(text)
         if m:

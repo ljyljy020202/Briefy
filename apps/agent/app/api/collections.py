@@ -27,7 +27,8 @@ async def collect_daily(request: DailyCollectRequest) -> DailyCollectResponse:
     summary="Batch-classify job postings (internal — Spring backend only)",
 )
 async def classify_postings(request: ClassifyRequest) -> ClassifyResponse:
-    """Internal endpoint for Spring backend to trigger LLM-based job posting classification.
+    """Internal endpoint for Spring backend to trigger LLM-based job posting
+    classification.
 
     Not for public access. Protected by network boundary (agent is not internet-facing).
     Validates input, runs LLM classification in configurable batches, returns results.

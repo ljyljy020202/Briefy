@@ -164,12 +164,14 @@ _ITEM_SKH = _list_item(
 
 class TestParseConfig:
     def test_full_config(self) -> None:
-        cfg = json.dumps({
-            "parser_key": "SK_CAREERS",
-            "corp_code": "10005",
-            "expected_corp_name": "SK telecom",
-            "max_fetch": 30,
-        })
+        cfg = json.dumps(
+            {
+                "parser_key": "SK_CAREERS",
+                "corp_code": "10005",
+                "expected_corp_name": "SK telecom",
+                "max_fetch": 30,
+            }
+        )
         c = _parse_config(cfg)
         assert c.corp_code == "10005"
         assert c.expected_corp_name == "SK telecom"
@@ -263,9 +265,7 @@ class TestFieldHelpers:
         assert _parse_roles("") == []
 
     def test_roles_mixed(self) -> None:
-        roles = _parse_roles(
-            "Infra/무선 Network,유선/IP Network,Core Network"
-        )
+        roles = _parse_roles("Infra/무선 Network,유선/IP Network,Core Network")
         assert roles == [
             "Infra/무선 Network",
             "유선/IP Network",
@@ -283,9 +283,7 @@ class TestBuildPosting:
         p = _build_posting(_ITEM_SKT, "SK텔레콤")
         assert p.source == "sk_careers"
         assert p.source_external_id == "R261849"
-        assert p.source_url == (
-            "https://www.skcareers.com/Recruit/Detail/R261849"
-        )
+        assert p.source_url == ("https://www.skcareers.com/Recruit/Detail/R261849")
         assert p.title == "Data Platform Engineer"
         assert p.company_name == "SK텔레콤"
         assert p.experience_level == "경력"
@@ -336,8 +334,9 @@ def _patch_client(mock_resp: MagicMock):
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=None)
     mock_client.post = AsyncMock(return_value=mock_resp)
-    return patch("app.adapters.official.sk_careers.httpx.AsyncClient",
-                 return_value=mock_client)
+    return patch(
+        "app.adapters.official.sk_careers.httpx.AsyncClient", return_value=mock_client
+    )
 
 
 class TestSkCareersParserFetch:
@@ -510,9 +509,7 @@ class TestSkCareersParserFetch:
         mock_client = MagicMock()
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=None)
-        mock_client.post = AsyncMock(
-            side_effect=Exception("connection refused")
-        )
+        mock_client.post = AsyncMock(side_effect=Exception("connection refused"))
 
         with patch(
             "app.adapters.official.sk_careers.httpx.AsyncClient",
@@ -621,9 +618,7 @@ class TestRegistration:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skipif(
-    True, reason="live — 수동 실행: poetry run pytest -k live -v -s"
-)
+@pytest.mark.skipif(True, reason="live — 수동 실행: poetry run pytest -k live -v -s")
 class TestSkCareersLive:
     @pytest.mark.asyncio
     async def test_live_skt(self) -> None:
@@ -660,8 +655,5 @@ class TestSkCareersLive:
         )
         if result.postings:
             p = result.postings[0]
-            print(
-                f"  Sample: {p.source_external_id} | {p.title!r} | "
-                f"{p.deadline}"
-            )
+            print(f"  Sample: {p.source_external_id} | {p.title!r} | " f"{p.deadline}")
         assert result.source_stats.discovered >= 0

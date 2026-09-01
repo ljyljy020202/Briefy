@@ -25,14 +25,22 @@ if TYPE_CHECKING:
 _MAX_LENGTH = 4000
 
 # 제거 대상 태그: 네비게이션, 스크립트, 스타일 등
-_STRIP_TAGS = frozenset({
-    "nav", "header", "footer", "aside", "script", "style", "noscript",
-    "iframe", "form",
-})
+_STRIP_TAGS = frozenset(
+    {
+        "nav",
+        "header",
+        "footer",
+        "aside",
+        "script",
+        "style",
+        "noscript",
+        "iframe",
+        "form",
+    }
+)
 
-# 공고 본문 컨테이너 후보 선택자 (우선순위 순)
-_CONTENT_SELECTORS = [
-    # jasoseol 공고 상세 페이지에서 관측되는 패턴
+# jasoseol 공고 상세 페이지에서 관측되는 특화 선택자 (우선순위 순)
+_SPECIFIC_SELECTORS = [
     "[class*='recruit_wrap']",
     "[class*='job_detail']",
     "[class*='detail_content']",
@@ -40,17 +48,29 @@ _CONTENT_SELECTORS = [
     "[class*='recruit_detail']",
     "[class*='jse_text']",
     "[class*='wr_con']",
+]
+
+# 광범위한 일반 HTML 선택자 — 공고 본문 키워드가 있을 때만 채택
+# 메뉴·날짜·고용형태 등 레이아웃 컨테이너와 실제 JD를 구분하기 위함
+_BROAD_SELECTORS = [
     "article",
     "main",
     "[role='main']",
 ]
 
 # 자격요건·업무 섹션 키워드 (이 단어를 포함하는 섹션 우선 보존)
-_PRIORITY_KEYWORDS = frozenset({
-    "모집분야", "담당업무", "주요업무",
-    "자격요건", "필수요건", "우대요건",
-    "지원자격", "우대사항",
-})
+_PRIORITY_KEYWORDS = frozenset(
+    {
+        "모집분야",
+        "담당업무",
+        "주요업무",
+        "자격요건",
+        "필수요건",
+        "우대요건",
+        "지원자격",
+        "우대사항",
+    }
+)
 
 # 중복 공백 정규화
 _WHITESPACE_RE = re.compile(r"[ \t]+")
@@ -82,7 +102,9 @@ def _extract_from_json_ld(soup: "BeautifulSoup") -> str | None:
             data = json.loads(tag.string or "")
             if isinstance(data, list):
                 data = data[0] if data else {}
-            desc = data.get("description") or data.get("jobPosting", {}).get("description")
+            desc = data.get("description") or data.get("jobPosting", {}).get(
+                "description"
+            )
             if desc and isinstance(desc, str) and desc.strip():
                 return desc.strip()
         except (json.JSONDecodeError, AttributeError, TypeError):
@@ -119,22 +141,33 @@ def extract_jasoseol_description(soup: "BeautifulSoup") -> tuple[str | None, boo
         if cleaned:
             return _apply_limit(cleaned)
 
-    # 2. 공고 본문 컨테이너 선택자
-    for selector in _CONTENT_SELECTORS:
+    # 2. jasoseol 특화 선택자 — 길이 기준만 적용
+    for selector in _SPECIFIC_SELECTORS:
         text = _extract_from_selector(soup, selector)
         if text and len(text) >= 50:
             return _apply_limit(text)
 
-    # 3. body 전체에서 제외 태그 제거 후 추출 (최후 수단)
+    # 3. 광범위 선택자 — 공고 본문 키워드가 있어야 채택
+    # main/article 등은 레이아웃 컨테이너로도 쓰이므로 키워드 없이 채택하면
+    # 회사명·날짜·고용형태 등 메타 정보를 description으로 오인할 수 있음
+    for selector in _BROAD_SELECTORS:
+        text = _extract_from_selector(soup, selector)
+        if text and len(text) >= 50 and any(kw in text for kw in _PRIORITY_KEYWORDS):
+            return _apply_limit(text)
+
+    # 4. body 전체 폴백 — 공고 본문 키워드가 있어야 채택
     body = soup.find("body")
     if body is None:
         return None, False
 
-    body_copy = body  # soup.find 는 참조를 반환
-    _strip_excluded_elements(body_copy)
-    text = body_copy.get_text(separator="\n", strip=True)
+    _strip_excluded_elements(body)
+    text = body.get_text(separator="\n", strip=True)
     cleaned = _clean_text(text)
-    if cleaned and len(cleaned) >= 50:
+    if (
+        cleaned
+        and len(cleaned) >= 50
+        and any(kw in cleaned for kw in _PRIORITY_KEYWORDS)
+    ):
         return _apply_limit(cleaned)
 
     return None, False

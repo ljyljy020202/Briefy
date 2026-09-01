@@ -55,10 +55,12 @@ def _make_source(max_fetch: int = 50) -> OfficialCompanySource:
         source_type="OFFICIAL_CAREER",
         source_url="https://talent.hyundai.com/theme/hall.hc",
         adapter_type="CUSTOM",
-        config_json=json.dumps({
-            "parser_key": "HYUNDAI_MOTOR_CAREERS",
-            "max_fetch": max_fetch,
-        }),
+        config_json=json.dumps(
+            {
+                "parser_key": "HYUNDAI_MOTOR_CAREERS",
+                "max_fetch": max_fetch,
+            }
+        ),
     )
 
 
@@ -172,9 +174,12 @@ def _detail_resp(detail: dict[str, Any]) -> MagicMock:
 
 _ITEM_01 = _list_item(295, title="SDV E&E 통합·배포·검증", jd_recu_cate="01")
 _ITEM_02 = _list_item(
-    297, title="[AVP] 모빌리티 플랫폼 사업 개발",
-    fld_code_nm="경영전략", work_place_code_nm="서울",
-    app_disp_ed_dt="20261231", jd_recu_cate="02",
+    297,
+    title="[AVP] 모빌리티 플랫폼 사업 개발",
+    fld_code_nm="경영전략",
+    work_place_code_nm="서울",
+    app_disp_ed_dt="20261231",
+    jd_recu_cate="02",
 )
 _DETAIL_295 = _detail_info(295, title="SDV E&E 통합·배포·검증")
 _DETAIL_297 = _detail_info(297, title="[AVP] 모빌리티 플랫폼 사업 개발")
@@ -199,11 +204,15 @@ def _patch_clients(
             call_counts[0] += 1
             if idx < len(detail_resps):
                 return detail_resps[idx]
-            return detail_resps[-1] if detail_resps else MagicMock(
-                raise_for_status=MagicMock(),
-                json=MagicMock(return_value={
-                    "status": 200, "data": {"applyInfo": {}}
-                })
+            return (
+                detail_resps[-1]
+                if detail_resps
+                else MagicMock(
+                    raise_for_status=MagicMock(),
+                    json=MagicMock(
+                        return_value={"status": 200, "data": {"applyInfo": {}}}
+                    ),
+                )
             )
 
     mock_client = MagicMock()
@@ -380,9 +389,7 @@ class TestHyundaiMotorCareersParserFetch:
     @pytest.mark.asyncio
     async def test_logo_nm_mismatch_skipped(self) -> None:
         """Non-현대 logo (e.g. Genesis) → skip."""
-        genesis_item = _list_item(
-            501, title="제네시스 공고", logo_nm="제네시스"
-        )
+        genesis_item = _list_item(501, title="제네시스 공고", logo_nm="제네시스")
         tab01 = _list_resp([genesis_item])
         tab02 = _list_resp([])
 
@@ -592,9 +599,7 @@ class TestRegistration:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skipif(
-    True, reason="live — 수동 실행: poetry run pytest -k live -v -s"
-)
+@pytest.mark.skipif(True, reason="live — 수동 실행: poetry run pytest -k live -v -s")
 class TestHyundaiMotorCareersLive:
     @pytest.mark.asyncio
     async def test_live_full(self) -> None:

@@ -2,22 +2,25 @@
 
 from __future__ import annotations
 
-import pytest
-
 from app.core.identifiers import compute_analysis_input_hash
-
 
 # ── 안정성 및 결정론 ─────────────────────────────────────────────────────────
 
+
 def test_same_inputs_produce_same_hash():
-    h1 = compute_analysis_input_hash("백엔드 개발자", "설명", ["Backend"], "3년 이상", "정규직", None)
-    h2 = compute_analysis_input_hash("백엔드 개발자", "설명", ["Backend"], "3년 이상", "정규직", None)
+    h1 = compute_analysis_input_hash(
+        "백엔드 개발자", "설명", ["Backend"], "3년 이상", "정규직", None
+    )
+    h2 = compute_analysis_input_hash(
+        "백엔드 개발자", "설명", ["Backend"], "3년 이상", "정규직", None
+    )
     assert h1 == h2
     assert len(h1) == 64
     assert h1.isalnum()  # hex chars
 
 
 # ── roles 순서 불변 ──────────────────────────────────────────────────────────
+
 
 def test_roles_order_does_not_affect_hash():
     h_asc = compute_analysis_input_hash(
@@ -31,11 +34,14 @@ def test_roles_order_does_not_affect_hash():
 
 def test_empty_roles_list_treated_same_as_no_roles():
     h_empty = compute_analysis_input_hash("백엔드 개발자", "설명", [], None, None, None)
-    h_none_list = compute_analysis_input_hash("백엔드 개발자", "설명", [], None, None, None)
+    h_none_list = compute_analysis_input_hash(
+        "백엔드 개발자", "설명", [], None, None, None
+    )
     assert h_empty == h_none_list
 
 
 # ── null/blank 정규화 ────────────────────────────────────────────────────────
+
 
 def test_null_and_empty_description_produce_same_hash():
     h_null = compute_analysis_input_hash("백엔드 개발자", None, [], None, None, None)
@@ -50,46 +56,65 @@ def test_null_and_empty_experience_produce_same_hash():
 
 
 def test_whitespace_in_title_is_normalized():
-    h_single = compute_analysis_input_hash("백엔드 개발자", "설명", [], None, None, None)
-    h_extra  = compute_analysis_input_hash("백엔드  개발자", "설명", [], None, None, None)
+    h_single = compute_analysis_input_hash(
+        "백엔드 개발자", "설명", [], None, None, None
+    )
+    h_extra = compute_analysis_input_hash(
+        "백엔드  개발자", "설명", [], None, None, None
+    )
     assert h_single == h_extra
 
 
 # ── descriptionTruncated 구분 ─────────────────────────────────────────────────
 
+
 def test_truncated_none_vs_false_produce_different_hashes():
-    h_none  = compute_analysis_input_hash("백엔드 개발자", "설명", [], None, None, None)
-    h_false = compute_analysis_input_hash("백엔드 개발자", "설명", [], None, None, False)
+    h_none = compute_analysis_input_hash("백엔드 개발자", "설명", [], None, None, None)
+    h_false = compute_analysis_input_hash(
+        "백엔드 개발자", "설명", [], None, None, False
+    )
     assert h_none != h_false
 
 
 def test_truncated_false_vs_true_produce_different_hashes():
-    h_false = compute_analysis_input_hash("백엔드 개발자", "설명", [], None, None, False)
-    h_true  = compute_analysis_input_hash("백엔드 개발자", "설명", [], None, None, True)
+    h_false = compute_analysis_input_hash(
+        "백엔드 개발자", "설명", [], None, None, False
+    )
+    h_true = compute_analysis_input_hash("백엔드 개발자", "설명", [], None, None, True)
     assert h_false != h_true
 
 
 # ── 입력 변경 시 hash 변경 ────────────────────────────────────────────────────
 
+
 def test_description_change_changes_hash():
     h1 = compute_analysis_input_hash("백엔드 개발자", "기존 설명", [], None, None, None)
-    h2 = compute_analysis_input_hash("백엔드 개발자", "변경된 설명", [], None, None, None)
+    h2 = compute_analysis_input_hash(
+        "백엔드 개발자", "변경된 설명", [], None, None, None
+    )
     assert h1 != h2
 
 
 def test_experience_change_changes_hash():
-    h1 = compute_analysis_input_hash("백엔드 개발자", "설명", [], "3년 이상", None, None)
-    h2 = compute_analysis_input_hash("백엔드 개발자", "설명", [], "5년 이상", None, None)
+    h1 = compute_analysis_input_hash(
+        "백엔드 개발자", "설명", [], "3년 이상", None, None
+    )
+    h2 = compute_analysis_input_hash(
+        "백엔드 개발자", "설명", [], "5년 이상", None, None
+    )
     assert h1 != h2
 
 
 def test_roles_addition_changes_hash():
     h1 = compute_analysis_input_hash("백엔드 개발자", "설명", [], None, None, None)
-    h2 = compute_analysis_input_hash("백엔드 개발자", "설명", ["Backend"], None, None, None)
+    h2 = compute_analysis_input_hash(
+        "백엔드 개발자", "설명", ["Backend"], None, None, None
+    )
     assert h1 != h2
 
 
 # ── contentHash[:500] 동일, full description 다름 → hash 다름 ─────────────────
+
 
 def test_full_description_change_detected_beyond_500_chars():
     """contentHash[:500]이 같아도 전체 설명이 다르면 analysisInputHash는 달라야 한다."""

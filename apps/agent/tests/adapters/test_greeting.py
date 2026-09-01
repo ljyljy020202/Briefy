@@ -95,8 +95,7 @@ def _options() -> CollectionOptions:
 
 def _list_html(*job_ids: int | str, extra_links: list[str] | None = None) -> str:
     links = "".join(
-        f'<a href="/companies/{_SLUG}/jobs/{jid}">직무 {jid}</a>'
-        for jid in job_ids
+        f'<a href="/companies/{_SLUG}/jobs/{jid}">직무 {jid}</a>' for jid in job_ids
     )
     for href in extra_links or []:
         links += f'<a href="{href}">기타</a>'
@@ -111,9 +110,7 @@ def _detail_html(
     location: str | None = None,
     in_main: bool = True,
 ) -> str:
-    extras = " ".join(
-        filter(None, [employment_type, deadline, location])
-    )
+    extras = " ".join(filter(None, [employment_type, deadline, location]))
     if in_main:
         body = f"<main><h1>{title}</h1><p>{extras}</p></main>"
     else:
@@ -160,18 +157,14 @@ def test_parse_greeting_config_defaults():
 
 
 def test_parse_greeting_config_custom_values():
-    raw = json.dumps(
-        {"parser_key": "GREETING", "max_discover": 30, "max_fetch": 10}
-    )
+    raw = json.dumps({"parser_key": "GREETING", "max_discover": 30, "max_fetch": 10})
     cfg = _parse_greeting_config(raw)
     assert cfg.max_discover == 30
     assert cfg.max_fetch == 10
 
 
 def test_parse_greeting_config_include_exclude_paths():
-    raw = json.dumps(
-        {"include_paths": ["/jobs/"], "exclude_paths": ["/archived/"]}
-    )
+    raw = json.dumps({"include_paths": ["/jobs/"], "exclude_paths": ["/archived/"]})
     cfg = _parse_greeting_config(raw)
     assert cfg.include_paths == ["/jobs/"]
     assert cfg.exclude_paths == ["/archived/"]
@@ -200,10 +193,10 @@ def test_discover_job_urls_finds_matching_links():
 
 def test_discover_job_urls_deduplicates():
     html = (
-        f'<html><body>'
+        f"<html><body>"
         f'<a href="/companies/{_SLUG}/jobs/101">a</a>'
         f'<a href="/companies/{_SLUG}/jobs/101">b</a>'
-        f'</body></html>'
+        f"</body></html>"
     )
     urls = _discover_job_urls(html, _LIST_URL, _GreetingConfig())
     assert urls.count(_JOB_URL_1) == 1
@@ -244,9 +237,9 @@ def test_discover_job_urls_skips_non_job_links():
 
 def test_discover_job_urls_resolves_relative_links():
     html = (
-        f'<html><body>'
+        f"<html><body>"
         f'<a href="/companies/{_SLUG}/jobs/999">job</a>'
-        f'</body></html>'
+        f"</body></html>"
     )
     urls = _discover_job_urls(html, _LIST_URL, _GreetingConfig())
     assert f"{_BASE}/companies/{_SLUG}/jobs/999" in urls
@@ -254,9 +247,9 @@ def test_discover_job_urls_resolves_relative_links():
 
 def test_discover_job_urls_strips_query_and_fragment():
     html = (
-        f'<html><body>'
+        f"<html><body>"
         f'<a href="/companies/{_SLUG}/jobs/101?ref=top#apply">job</a>'
-        f'</body></html>'
+        f"</body></html>"
     )
     urls = _discover_job_urls(html, _LIST_URL, _GreetingConfig())
     assert _JOB_URL_1 in urls
@@ -369,9 +362,7 @@ def test_parse_greeting_job_description_from_main():
 
 
 def test_parse_greeting_job_source_external_id():
-    result = _parse_greeting_job(
-        _detail_html("직무"), _JOB_URL_1, "카카오", "sid"
-    )
+    result = _parse_greeting_job(_detail_html("직무"), _JOB_URL_1, "카카오", "sid")
     assert result is not None
     assert result.source_external_id == "101"
 
@@ -389,9 +380,7 @@ async def test_greeting_parser_fetch_returns_postings(monkeypatch):
     monkeypatch.setattr(_target, lambda **kw: mock)
 
     src = _source()
-    result = await GreetingParser().fetch(
-        src, _profile(), _options(), _COLLECT_DATE
-    )
+    result = await GreetingParser().fetch(src, _profile(), _options(), _COLLECT_DATE)
 
     assert len(result.postings) == 1
     p = result.postings[0]
@@ -407,9 +396,7 @@ async def test_greeting_parser_fetch_returns_postings(monkeypatch):
 
 async def test_greeting_parser_fetch_no_source_url(monkeypatch):
     src = _source(source_url=None)
-    result = await GreetingParser().fetch(
-        src, None, _options(), _COLLECT_DATE
-    )
+    result = await GreetingParser().fetch(src, None, _options(), _COLLECT_DATE)
     assert result.postings == []
     assert any("no source_url" in w for w in result.warnings)
 
@@ -455,11 +442,13 @@ async def test_greeting_parser_list_page_http_error(monkeypatch):
 
 async def test_greeting_parser_detail_http_error_skipped(monkeypatch):
     list_html = _list_html(101, 102)
-    mock = _MockClient([
-        (200, list_html),
-        (404, "Not Found"),
-        (200, _detail_html("두번째 직무")),
-    ])
+    mock = _MockClient(
+        [
+            (200, list_html),
+            (404, "Not Found"),
+            (200, _detail_html("두번째 직무")),
+        ]
+    )
     _target = "app.adapters.official.greeting.AsyncClient"
     monkeypatch.setattr(_target, lambda **kw: mock)
 
@@ -473,11 +462,13 @@ async def test_greeting_parser_detail_http_error_skipped(monkeypatch):
 
 async def test_greeting_parser_respects_max_fetch(monkeypatch):
     list_html = _list_html(101, 102, 103)
-    mock = _MockClient([
-        (200, list_html),
-        (200, _detail_html("직무 A")),
-        (200, _detail_html("직무 B")),
-    ])
+    mock = _MockClient(
+        [
+            (200, list_html),
+            (200, _detail_html("직무 A")),
+            (200, _detail_html("직무 B")),
+        ]
+    )
     _target = "app.adapters.official.greeting.AsyncClient"
     monkeypatch.setattr(_target, lambda **kw: mock)
 
@@ -493,11 +484,13 @@ async def test_greeting_parser_respects_max_fetch(monkeypatch):
 
 async def test_greeting_parser_multiple_postings(monkeypatch):
     list_html = _list_html(101, 102)
-    mock = _MockClient([
-        (200, list_html),
-        (200, _detail_html("백엔드 개발자")),
-        (200, _detail_html("프론트엔드 개발자")),
-    ])
+    mock = _MockClient(
+        [
+            (200, list_html),
+            (200, _detail_html("백엔드 개발자")),
+            (200, _detail_html("프론트엔드 개발자")),
+        ]
+    )
     _target = "app.adapters.official.greeting.AsyncClient"
     monkeypatch.setattr(_target, lambda **kw: mock)
 
@@ -612,9 +605,7 @@ def _sh_list_html(
     base: str, *job_ids: int, extra_links: list[str] | None = None
 ) -> str:
     """Synthetic Greeting self-hosted list page with /ko/o/{id} job cards."""
-    links = "".join(
-        f'<a href="/ko/o/{jid}">공고 {jid}</a>' for jid in job_ids
-    )
+    links = "".join(f'<a href="/ko/o/{jid}">공고 {jid}</a>' for jid in job_ids)
     for href in extra_links or []:
         links += f'<a href="{href}">기타</a>'
     return f"<html><body>{links}</body></html>"
@@ -671,10 +662,10 @@ def test_selfhosted_discover_external_url_excluded():
 def test_selfhosted_discover_deduplicates():
     """Duplicate /ko/o/{id} links appear only once."""
     html = (
-        '<html><body>'
+        "<html><body>"
         '<a href="/ko/o/101">a</a>'
         '<a href="/ko/o/101">b</a>'
-        '</body></html>'
+        "</body></html>"
     )
     urls = _discover_job_urls(html, _SH_A_HOME, _GreetingConfig())
     assert urls.count(_SH_A_JOB_1) == 1
@@ -683,11 +674,11 @@ def test_selfhosted_discover_deduplicates():
 def test_selfhosted_discover_non_job_links_excluded():
     """Nav links like /ko/home and /ko/apply are NOT matched."""
     html = (
-        '<html><body>'
+        "<html><body>"
         '<a href="/ko/home">홈</a>'
         '<a href="/ko/apply">공고 목록</a>'
         '<a href="/about">회사 소개</a>'
-        '</body></html>'
+        "</body></html>"
     )
     urls = _discover_job_urls(html, _SH_A_HOME, _GreetingConfig())
     assert urls == []
@@ -839,11 +830,13 @@ async def test_selfhosted_type_b_partial_detail_failure_warns(monkeypatch):
     """Type B: first detail 500, second OK → warning + partial success."""
     list_html = _sh_list_html(_SH_B_BASE, 201, 202)
     detail_html = _sh_detail_html("SW 개발자")
-    mock = _MockClient([
-        (200, list_html),
-        (500, "Internal Server Error"),
-        (200, detail_html),
-    ])
+    mock = _MockClient(
+        [
+            (200, list_html),
+            (500, "Internal Server Error"),
+            (200, detail_html),
+        ]
+    )
     _target = "app.adapters.official.greeting.AsyncClient"
     monkeypatch.setattr(_target, lambda **kw: mock)
 
@@ -957,9 +950,7 @@ def test_career_experienced_with_from():
 
 def test_career_experienced_no_from():
     assert (
-        _career_to_experience_level(
-            {"careerType": "EXPERIENCED", "careerFrom": None}
-        )
+        _career_to_experience_level({"careerType": "EXPERIENCED", "careerFrom": None})
         == "경력"
     )
 
@@ -973,6 +964,7 @@ def test_career_unknown_type_returns_none():
 
 
 # ── _extract_greeting_metadata ───────────────────────────────────────────────
+
 
 def _opening(
     opening_id: int = 1001,
@@ -989,9 +981,7 @@ def _opening(
 ) -> dict:
     """Build a synthetic Greeting 'openings' list entry."""
     ws_job = {"id": 1, "job": job, "sortOrder": 1} if job else None
-    ws_occ = (
-        {"id": 2, "occupation": occupation, "sortOrder": 1} if occupation else None
-    )
+    ws_occ = {"id": 2, "occupation": occupation, "sortOrder": 1} if occupation else None
     return {
         "openingId": opening_id,
         "title": title,
@@ -1041,9 +1031,7 @@ def test_extract_metadata_dev_role_from_workspace_job():
 
 
 def test_extract_metadata_role_from_occupation_when_no_job():
-    meta = _extract_greeting_metadata(
-        _opening(job=None, occupation="Design/VMD")
-    )
+    meta = _extract_greeting_metadata(_opening(job=None, occupation="Design/VMD"))
     assert meta["roles"] == ["Design/VMD"]
 
 
@@ -1076,16 +1064,12 @@ def test_extract_metadata_experience_level_not_matter():
 
 
 def test_extract_metadata_employment_type_full_time():
-    meta = _extract_greeting_metadata(
-        _opening(employment_type="FULL_TIME_WORKER")
-    )
+    meta = _extract_greeting_metadata(_opening(employment_type="FULL_TIME_WORKER"))
     assert meta["employment_type"] == "정규직"
 
 
 def test_extract_metadata_employment_type_contract():
-    meta = _extract_greeting_metadata(
-        _opening(employment_type="CONTRACT_WORKER")
-    )
+    meta = _extract_greeting_metadata(_opening(employment_type="CONTRACT_WORKER"))
     assert meta["employment_type"] == "계약직"
 
 
@@ -1095,18 +1079,14 @@ def test_extract_metadata_location():
 
 
 def test_extract_metadata_open_date_sets_posted_at():
-    meta = _extract_greeting_metadata(
-        _opening(open_date="2026-07-01T09:00:00Z")
-    )
+    meta = _extract_greeting_metadata(_opening(open_date="2026-07-01T09:00:00Z"))
     assert meta["posted_at"] is not None
     assert meta["posted_at"].year == 2026
     assert meta["posted_at"].month == 7
 
 
 def test_extract_metadata_due_date_sets_deadline():
-    meta = _extract_greeting_metadata(
-        _opening(due_date="2026-08-31T14:59:59Z")
-    )
+    meta = _extract_greeting_metadata(_opening(due_date="2026-08-31T14:59:59Z"))
     assert meta["deadline"] == date(2026, 8, 31)
 
 
@@ -1121,6 +1101,7 @@ def test_extract_metadata_no_positions_returns_empty():
 
 
 # ── _extract_next_data_openings ───────────────────────────────────────────────
+
 
 def _next_data_html(openings: list[dict]) -> str:
     """Build a minimal HTML page with __NEXT_DATA__ containing an openings query."""
@@ -1140,10 +1121,10 @@ def _next_data_html(openings: list[dict]) -> str:
     }
     payload_json = json.dumps(payload, ensure_ascii=False)
     return (
-        f'<html><head></head><body>'
+        f"<html><head></head><body>"
         f'<script id="__NEXT_DATA__" type="application/json">'
-        f'{payload_json}'
-        f'</script></body></html>'
+        f"{payload_json}"
+        f"</script></body></html>"
     )
 
 
@@ -1175,6 +1156,7 @@ def test_extract_next_data_openings_empty_list_returns_empty():
 
 # ── _postings_from_next_data ─────────────────────────────────────────────────
 
+
 def test_postings_from_next_data_basic():
     openings = [
         _opening(1001, "Backend Developer", job="Backend Engineering"),
@@ -1199,8 +1181,11 @@ def test_postings_from_next_data_non_dev_roles_preserved():
         _opening(2003, "영업 담당", occupation="Off-Line Operation", job=None),
     ]
     stubs, _ = _postings_from_next_data(
-        openings, "https://career.example.com/ko/apply",
-        "TestCo", "src", _GreetingConfig()
+        openings,
+        "https://career.example.com/ko/apply",
+        "TestCo",
+        "src",
+        _GreetingConfig(),
     )
     assert stubs[0].roles == ["MD"]
     assert stubs[1].roles == ["BX Design"]
@@ -1210,8 +1195,11 @@ def test_postings_from_next_data_non_dev_roles_preserved():
 def test_postings_from_next_data_respects_max_discover():
     openings = [_opening(i) for i in range(1001, 1010)]
     stubs, _ = _postings_from_next_data(
-        openings, "https://career.example.com/ko/apply",
-        "TestCo", "src", _GreetingConfig(max_discover=3)
+        openings,
+        "https://career.example.com/ko/apply",
+        "TestCo",
+        "src",
+        _GreetingConfig(max_discover=3),
     )
     assert len(stubs) == 3
 
@@ -1228,8 +1216,11 @@ def test_postings_from_next_data_experience_levels():
             _opening(3000 + i, career_type=career_type, career_from=career_from)
         ]
         stubs, _ = _postings_from_next_data(
-            openings, "https://career.example.com/ko/apply",
-            "TestCo", "src", _GreetingConfig()
+            openings,
+            "https://career.example.com/ko/apply",
+            "TestCo",
+            "src",
+            _GreetingConfig(),
         )
         assert stubs[0].experience_level == expected_level, (
             f"career_type={career_type} career_from={career_from}: "
@@ -1241,8 +1232,11 @@ def test_postings_from_next_data_description_is_none():
     """Stubs from __NEXT_DATA__ have description=None (filled later by detail fetch)."""
     openings = [_opening(4001, "백엔드 개발자")]
     stubs, _ = _postings_from_next_data(
-        openings, "https://career.example.com/ko/apply",
-        "TestCo", "src", _GreetingConfig()
+        openings,
+        "https://career.example.com/ko/apply",
+        "TestCo",
+        "src",
+        _GreetingConfig(),
     )
     assert stubs[0].description is None
 
@@ -1257,14 +1251,18 @@ def test_postings_from_next_data_skips_opening_without_title():
         _opening(5002, "정상 공고"),
     ]
     stubs, _ = _postings_from_next_data(
-        openings, "https://career.example.com/ko/apply",
-        "TestCo", "src", _GreetingConfig()
+        openings,
+        "https://career.example.com/ko/apply",
+        "TestCo",
+        "src",
+        _GreetingConfig(),
     )
     assert len(stubs) == 1
     assert stubs[0].title == "정상 공고"
 
 
 # ── _build_self_hosted_job_url ────────────────────────────────────────────────
+
 
 def test_build_job_url_ko_locale_from_home():
     url = _build_self_hosted_job_url("https://www.musinsacareers.com/ko/home", 227433)
@@ -1283,6 +1281,7 @@ def test_build_job_url_no_locale():
 
 
 # ── GreetingParser.fetch with __NEXT_DATA__ path ─────────────────────────────
+
 
 def _next_data_list_html(openings: list[dict]) -> str:
     """Full page HTML with __NEXT_DATA__ openings AND anchor links for job cards."""
@@ -1303,14 +1302,13 @@ def _next_data_list_html(openings: list[dict]) -> str:
     payload_json = json.dumps(payload, ensure_ascii=False)
     # Also include the anchor links (as real Greeting pages do)
     links = "".join(
-        '<a href="/ko/o/{}">{}</a>'.format(o["openingId"], o["title"])
-        for o in openings
+        '<a href="/ko/o/{}">{}</a>'.format(o["openingId"], o["title"]) for o in openings
     )
     return (
-        f'<html><head></head><body>{links}'
+        f"<html><head></head><body>{links}"
         f'<script id="__NEXT_DATA__" type="application/json">'
-        f'{payload_json}'
-        f'</script></body></html>'
+        f"{payload_json}"
+        f"</script></body></html>"
     )
 
 
@@ -1380,9 +1378,9 @@ async def test_fetch_non_dev_role_not_misclassified(monkeypatch):
         assert len(result.postings) == 1
         p = result.postings[0]
         expected_role = job or occ or ""
-        assert p.roles == [expected_role], (
-            f"title={title}: expected [{expected_role}], got {p.roles}"
-        )
+        assert p.roles == [
+            expected_role
+        ], f"title={title}: expected [{expected_role}], got {p.roles}"
 
 
 async def test_fetch_next_data_empty_openings_returns_zero_with_warning(monkeypatch):
@@ -1451,9 +1449,7 @@ async def test_fetch_next_data_multiple_openings_respects_max_fetch(monkeypatch)
     list_html = _next_data_list_html(openings)
     detail_html = _detail_html_with_description("상세 내용")
     # Provide 3 detail pages for max_fetch=3
-    mock = _MockClient(
-        [(200, list_html)] + [(200, detail_html)] * 3
-    )
+    mock = _MockClient([(200, list_html)] + [(200, detail_html)] * 3)
     _target = "app.adapters.official.greeting.AsyncClient"
     monkeypatch.setattr(_target, lambda **kw: mock)
 
@@ -1479,9 +1475,7 @@ async def test_fetch_structured_data_over_inferred_roles(monkeypatch):
     """Structured roles from __NEXT_DATA__ take precedence over title-inferred roles."""
     # Title "백엔드 개발자" would normally infer roles=["백엔드"] from title.
     # But explicit roles="Backend Engineering" from payload should win.
-    openings = [
-        _opening(501, "백엔드 개발자", job="Backend Engineering")
-    ]
+    openings = [_opening(501, "백엔드 개발자", job="Backend Engineering")]
     list_html = _next_data_list_html(openings)
     detail_html = _detail_html_with_description("서버 개발")
     mock = _MockClient([(200, list_html), (200, detail_html)])
@@ -1501,10 +1495,10 @@ async def test_fetch_malformed_next_data_falls_back_to_anchor_links(monkeypatch)
     """If __NEXT_DATA__ is present but malformed, fall back to anchor-link discovery."""
     # Malformed: __NEXT_DATA__ is invalid JSON
     list_html = (
-        '<html><body>'
+        "<html><body>"
         '<a href="/ko/o/601">공고 601</a>'
         '<script id="__NEXT_DATA__" type="application/json">invalid{json}</script>'
-        '</body></html>'
+        "</body></html>"
     )
     detail_html = _sh_detail_html("폴백 공고")
     mock = _MockClient([(200, list_html), (200, detail_html)])

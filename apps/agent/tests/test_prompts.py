@@ -388,9 +388,9 @@ def test_synthesis_system_prompt_forbids_vague_matching_phrases():
     prompt = briefing_synthesis.get_system_prompt(7)
     prohibited = ["좋은 기회", "적합한 공고", "기대해볼 만한", "추천드립니다"]
     listed_in_prompt = [p for p in prohibited if p in prompt]
-    assert listed_in_prompt, (
-        "synthesis prompt should explicitly list prohibited vague phrases"
-    )
+    assert (
+        listed_in_prompt
+    ), "synthesis prompt should explicitly list prohibited vague phrases"
 
 
 def test_synthesis_system_prompt_requires_concrete_matching_reason():
@@ -424,9 +424,9 @@ def test_enrichment_system_prompt_forbids_vague_matching_phrases():
     prompt = job_enrichment.get_system_prompt()
     prohibited = ["좋은 기회입니다", "적합한 공고입니다", "기대해볼 만한"]
     listed_in_prompt = [p for p in prohibited if p in prompt]
-    assert listed_in_prompt, (
-        "enrichment prompt should explicitly list prohibited vague phrases"
-    )
+    assert (
+        listed_in_prompt
+    ), "enrichment prompt should explicitly list prohibited vague phrases"
 
 
 def test_enrichment_system_prompt_requires_concrete_matching_examples():

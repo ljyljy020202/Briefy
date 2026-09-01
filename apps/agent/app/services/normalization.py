@@ -15,9 +15,7 @@ from app.schemas.collection import CollectedJobPosting, SourceRef
 _INTERN_KEYWORDS: frozenset[str] = frozenset(
     {"인턴", "intern", "internship", "채용연계형"}
 )
-_NEW_GRAD_TITLE_KEYWORDS: frozenset[str] = frozenset(
-    {"신입", "new grad", "졸업예정"}
-)
+_NEW_GRAD_TITLE_KEYWORDS: frozenset[str] = frozenset({"신입", "new grad", "졸업예정"})
 
 # ── Role inference from title ─────────────────────────────────────────────────
 # Ordered: more specific phrases before shorter keywords to avoid false matches.
@@ -54,15 +52,28 @@ _DEV_ROLE_TITLE_MAP: list[tuple[str, str]] = [
 # receive inferred dev roles, even when other dev keywords are present.
 _NON_DEV_TITLE_KEYWORDS: frozenset[str] = frozenset(
     {
-        "마케팅", "marketing",
-        "영업", "sales",
-        "인사 담당", "인사팀", "hr manager", "human resource",
-        "재무", "finance",
-        "회계", "accounting",
-        "product manager", "서비스 기획",
-        "콘텐츠 에디터", "content writer", "content editor",
-        "법무", "legal",
-        "graphic designer", "ui designer", "ux designer",
+        "마케팅",
+        "marketing",
+        "영업",
+        "sales",
+        "인사 담당",
+        "인사팀",
+        "hr manager",
+        "human resource",
+        "재무",
+        "finance",
+        "회계",
+        "accounting",
+        "product manager",
+        "서비스 기획",
+        "콘텐츠 에디터",
+        "content writer",
+        "content editor",
+        "법무",
+        "legal",
+        "graphic designer",
+        "ui designer",
+        "ux designer",
     }
 )
 
@@ -156,9 +167,8 @@ def _infer_classification(
 
     # ── employment_type ───────────────────────────────────────────────────────
     title_is_intern = any(kw in title_lower for kw in _INTERN_KEYWORDS)
-    raw_type_is_intern = (
-        cleaned_employment_type is not None
-        and _has_intern_keyword(cleaned_employment_type)
+    raw_type_is_intern = cleaned_employment_type is not None and _has_intern_keyword(
+        cleaned_employment_type
     )
 
     if title_is_intern or raw_type_is_intern:
@@ -167,9 +177,8 @@ def _infer_classification(
         employment_type = cleaned_employment_type  # preserve adapter value
 
     # ── experience_level ──────────────────────────────────────────────────────
-    raw_exp_is_intern = (
-        cleaned_experience_level is not None
-        and _has_intern_keyword(cleaned_experience_level)
+    raw_exp_is_intern = cleaned_experience_level is not None and _has_intern_keyword(
+        cleaned_experience_level
     )
 
     if cleaned_experience_level and not raw_exp_is_intern:

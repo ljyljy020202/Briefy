@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 from bs4 import BeautifulSoup
 
 from app.services.description_extractor import (
@@ -16,6 +15,7 @@ def _soup(html: str) -> BeautifulSoup:
 
 
 # ── JSON-LD 추출 ────────────────────────────────────────────────────────────
+
 
 class TestJsonLd:
     def test_extracts_description_from_json_ld(self):
@@ -46,7 +46,10 @@ class TestJsonLd:
         html = """
         <html><head>
         <script type="application/ld+json">NOT JSON</script>
-        </head><body><main>본문 내용이 여기 있습니다. 자격요건: 경력 3년 이상 Java Spring Boot 개발 경험 필수, AWS 운영 경험 우대</main></body></html>
+        </head><body>
+        <main>본문 내용이 여기 있습니다. 자격요건: 경력 3년 이상
+        Java Spring Boot 개발 경험 필수, AWS 운영 경험 우대</main>
+        </body></html>
         """
         desc, trunc = extract_jasoseol_description(_soup(html))
         # JSON-LD 실패 → selector(main) → 본문 추출
@@ -57,13 +60,17 @@ class TestJsonLd:
         html = """
         <html><head>
         <script type="application/ld+json">{}</script>
-        </head><body><article>자격요건: Java Spring Boot 경력 3년 이상, 담당업무: RESTful API 개발 및 유지보수, 우대사항: AWS 경험</article></body></html>
+        </head><body>
+        <article>자격요건: Java Spring Boot 경력 3년 이상,
+        담당업무: RESTful API 개발 및 유지보수, 우대사항: AWS 경험</article>
+        </body></html>
         """
         desc, trunc = extract_jasoseol_description(_soup(html))
         assert desc is not None
 
 
 # ── CSS 선택자 추출 ─────────────────────────────────────────────────────────
+
 
 class TestCssSelector:
     def test_extracts_via_recruit_wrap_class(self):
@@ -80,14 +87,22 @@ class TestCssSelector:
         assert "불필요한 내비게이션" not in desc
 
     def test_extracts_via_article_tag(self):
-        content = "담당업무: RESTful API 개발 및 유지보수. 자격요건: Python FastAPI 경력 3년 이상. 우대사항: Docker, Kubernetes 경험."
+        content = (
+            "담당업무: RESTful API 개발 및 유지보수. "
+            "자격요건: Python FastAPI 경력 3년 이상. "
+            "우대사항: Docker, Kubernetes 경험."
+        )
         html = f"<html><body><article>{content}</article></body></html>"
         desc, trunc = extract_jasoseol_description(_soup(html))
         assert desc is not None
         assert "API 개발" in desc
 
     def test_strips_nav_header_footer(self):
-        content = "자격요건: Java Spring Boot 3년 이상. 담당업무: 백엔드 서버 개발 및 유지보수. 우대사항: AWS EC2, RDS 운영 경험 보유자."
+        content = (
+            "자격요건: Java Spring Boot 3년 이상. "
+            "담당업무: 백엔드 서버 개발 및 유지보수. "
+            "우대사항: AWS EC2, RDS 운영 경험 보유자."
+        )
         html = f"""
         <html><body>
         <header>헤더 정보</header>
@@ -105,7 +120,8 @@ class TestCssSelector:
         html = """
         <html><body>
         <div class="recruit_wrap">짧음</div>
-        <main>자격요건 Python Django 경력 2년 이상 서버사이드 개발 담당업무 RESTful API</main>
+        <main>자격요건 Python Django 경력 2년 이상
+        서버사이드 개발 담당업무 RESTful API</main>
         </body></html>
         """
         desc, trunc = extract_jasoseol_description(_soup(html))
@@ -116,9 +132,13 @@ class TestCssSelector:
 
 # ── Body 폴백 ───────────────────────────────────────────────────────────────
 
+
 class TestBodyFallback:
     def test_falls_back_to_body_when_no_selector_matches(self):
-        content = "자격요건: Java Spring Boot 경력 3년 이상. 담당업무: 백엔드 API 설계 및 개발."
+        content = (
+            "자격요건: Java Spring Boot 경력 3년 이상. "
+            "담당업무: 백엔드 API 설계 및 개발."
+        )
         html = f"<html><body><p>{content}</p></body></html>"
         desc, trunc = extract_jasoseol_description(_soup(html))
         assert desc is not None
@@ -132,6 +152,7 @@ class TestBodyFallback:
 
 
 # ── 길이 제한 (MAX_LENGTH) ──────────────────────────────────────────────────
+
 
 class TestLengthLimit:
     def test_long_json_ld_is_truncated(self):
@@ -167,6 +188,7 @@ class TestLengthLimit:
 
 
 # ── None 반환 계약 ──────────────────────────────────────────────────────────
+
 
 class TestNoneContract:
     def test_completely_empty_html_returns_none(self):

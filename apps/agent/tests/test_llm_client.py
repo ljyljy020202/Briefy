@@ -140,8 +140,7 @@ async def test_call_json_parses_valid_json_object():
 
 async def test_call_json_parses_nested_json():
     payload = (
-        '{"enrichments": [{"id": "1", "summary": "요약",'
-        ' "matchingReason": "이유"}]}'
+        '{"enrichments": [{"id": "1", "summary": "요약",' ' "matchingReason": "이유"}]}'
     )
     mock = _make_mock_openai(content=payload)
     client = LLMClient(_openai_client=mock)
@@ -178,7 +177,7 @@ async def test_call_json_raises_client_error_on_api_failure():
 
 
 async def test_call_json_strips_markdown_fences_before_parsing():
-    fenced = "```json\n{\"answer\": 1}\n```"
+    fenced = '```json\n{"answer": 1}\n```'
     mock = _make_mock_openai(content=fenced)
     client = LLMClient(_openai_client=mock)
     parsed, _ = await client.call_json("system", "user")
@@ -195,7 +194,7 @@ def test_strip_code_fences_removes_json_block():
 
 
 def test_strip_code_fences_removes_plain_block():
-    assert _strip_code_fences("```\n{\"a\": 1}\n```") == '{"a": 1}'
+    assert _strip_code_fences('```\n{"a": 1}\n```') == '{"a": 1}'
 
 
 def test_strip_code_fences_leaves_plain_json_untouched():
@@ -203,7 +202,7 @@ def test_strip_code_fences_leaves_plain_json_untouched():
 
 
 def test_strip_code_fences_handles_no_closing_fence():
-    result = _strip_code_fences("```json\n{\"x\": 2}")
+    result = _strip_code_fences('```json\n{"x": 2}')
     assert '{"x": 2}' in result
 
 

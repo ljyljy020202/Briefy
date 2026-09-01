@@ -66,9 +66,7 @@ def parse_search_html(
                 key_str = str(q.get("queryKey", ""))
                 if "jobSearch" not in key_str:
                     continue
-                postings = (
-                    q.get("state", {}).get("data", {}).get("data", [])
-                )
+                postings = q.get("state", {}).get("data", {}).get("data", [])
                 for p in postings:
                     pid = p.get("id")
                     if not pid:

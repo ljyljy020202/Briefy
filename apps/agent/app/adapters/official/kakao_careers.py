@@ -298,9 +298,7 @@ class KakaoCareersParser(CustomParser):
     ) -> AdapterResult:
         config = _parse_config(source.config_json)
         sid = f"company_{source.company_id}_custom_kakao_careers"
-        company_name = (
-            (profile.canonical_name if profile else None) or "카카오"
-        )
+        company_name = (profile.canonical_name if profile else None) or "카카오"
         warnings: list[str] = []
         timeout = settings.job_collection_timeout_seconds
 
@@ -329,9 +327,7 @@ class KakaoCareersParser(CustomParser):
                     warnings=warnings, source_stats=AdapterSourceStats()
                 )
             except Exception as exc:
-                warnings.append(
-                    f"kakao_careers: listing error [{sid}]: {exc}"
-                )
+                warnings.append(f"kakao_careers: listing error [{sid}]: {exc}")
                 return AdapterResult(
                     warnings=warnings, source_stats=AdapterSourceStats()
                 )
@@ -375,9 +371,7 @@ class KakaoCareersParser(CustomParser):
                         try:
                             rp = await client.get(
                                 _LIST_BASE,
-                                params={
-                                    "company": _COMPANY_PARAM, "page": page
-                                },
+                                params={"company": _COMPANY_PARAM, "page": page},
                             )
                             rp.raise_for_status()
                             ct_p = rp.headers.get("content-type", "")
@@ -389,8 +383,7 @@ class KakaoCareersParser(CustomParser):
                             return list(rp.json().get("jobList") or [])
                         except Exception as exc:
                             warnings.append(
-                                f"kakao_careers: page {page} error [{sid}]: "
-                                f"{exc}"
+                                f"kakao_careers: page {page} error [{sid}]: " f"{exc}"
                             )
                             return []
 

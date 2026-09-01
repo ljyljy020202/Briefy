@@ -61,7 +61,7 @@ _JOB_POSTING_CATEGORY = "JOB_POSTING"
 # Per-adapter retry helpers
 # ---------------------------------------------------------------------------
 
-_RETRY_MAX_ATTEMPTS = 2   # total tries = 1 initial + 1 retry
+_RETRY_MAX_ATTEMPTS = 2  # total tries = 1 initial + 1 retry
 _RETRY_SLEEP_SECONDS = 2
 
 
@@ -400,9 +400,16 @@ class DailyCollectionService:
             "daily_collection: discovered=%d fetched=%d parsed=%d "
             "source_exact=%d cross_merged=%d expired=%d stale=%d "
             "truncated=%d final=%d source_budget=[%s]",
-            total_discovered, total_fetched, total_parsed,
-            source_exact, cross_merged, expired_count, stale_count,
-            truncated, len(selected), source_budget_log,
+            total_discovered,
+            total_fetched,
+            total_parsed,
+            source_exact,
+            cross_merged,
+            expired_count,
+            stale_count,
+            truncated,
+            len(selected),
+            source_budget_log,
         )
 
         return DailyCollectResponse(

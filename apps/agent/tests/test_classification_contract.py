@@ -5,9 +5,6 @@ camelCase 직렬화, nullable boolean 보존, 계약 규칙(ID 일치, hash 에�
 
 from __future__ import annotations
 
-import pytest
-from pydantic import ValidationError
-
 from app.schemas.classification import (
     ClassificationResult,
     ClassifyInputQuality,
@@ -18,7 +15,6 @@ from app.schemas.classification import (
     ClassifyTokenUsage,
     ClassifyTrack,
 )
-
 
 # ── camelCase 직렬화 ─────────────────────────────────────────────────────────
 
@@ -236,7 +232,11 @@ def test_classify_response_deserializes_from_camel_case():
                 "descriptionTruncated": False,
             }
         ],
-        "tokenUsage": {"promptTokens": 500, "completionTokens": 100, "totalTokens": 600},
+        "tokenUsage": {
+            "promptTokens": 500,
+            "completionTokens": 100,
+            "totalTokens": 600,
+        },
         "warnings": [],
     }
 

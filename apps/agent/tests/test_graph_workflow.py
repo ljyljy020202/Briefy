@@ -265,10 +265,12 @@ async def test_synthesis_exception_routes_to_fallback(client):
     """Synthesis LLM exception → llm_error_category=synthesis_failed → fallback."""
     with patch("app.graph.user_briefing_graph.llm_client") as m:
         m.enabled = True
-        m.call_json = AsyncMock(side_effect=[
-            (_EMPTY_ENRICHMENT, _usage(50, 20)),
-            LLMClientError("synthesis boom"),
-        ])
+        m.call_json = AsyncMock(
+            side_effect=[
+                (_EMPTY_ENRICHMENT, _usage(50, 20)),
+                LLMClientError("synthesis boom"),
+            ]
+        )
         resp = await client.post("/briefings/generate", json=FULL_REQUEST)
 
     assert resp.status_code == 200
@@ -288,11 +290,13 @@ async def test_rewrite_exception_routes_to_fallback(client):
     """Rewrite LLM exception → llm_error_category=rewrite_failed → fallback."""
     with patch("app.graph.user_briefing_graph.llm_client") as m:
         m.enabled = True
-        m.call_json = AsyncMock(side_effect=[
-            (_EMPTY_ENRICHMENT, _usage(50, 20)),
-            (_synthesis_missing_section(), _usage(100, 40)),
-            LLMClientError("rewrite boom"),
-        ])
+        m.call_json = AsyncMock(
+            side_effect=[
+                (_EMPTY_ENRICHMENT, _usage(50, 20)),
+                (_synthesis_missing_section(), _usage(100, 40)),
+                LLMClientError("rewrite boom"),
+            ]
+        )
         resp = await client.post("/briefings/generate", json=FULL_REQUEST)
 
     assert resp.status_code == 200
@@ -395,17 +399,22 @@ async def test_token_usage_accumulates_across_all_llm_calls(client):
     """Total token usage = enrichment + synthesis + rewrite tokens."""
     with patch("app.graph.user_briefing_graph.llm_client") as m:
         m.enabled = True
-        m.call_json = AsyncMock(side_effect=[
-            (_EMPTY_ENRICHMENT, _usage(100, 50)),           # enrichment
-            (_synthesis_missing_section(), _usage(200, 80)), # synthesis (RETRYABLE)
-            (_synthesis_ok(), _usage(150, 60)),              # rewrite (PASS)
-        ])
+        m.call_json = AsyncMock(
+            side_effect=[
+                (_EMPTY_ENRICHMENT, _usage(100, 50)),  # enrichment
+                (
+                    _synthesis_missing_section(),
+                    _usage(200, 80),
+                ),  # synthesis (RETRYABLE)
+                (_synthesis_ok(), _usage(150, 60)),  # rewrite (PASS)
+            ]
+        )
         resp = await client.post("/briefings/generate", json=FULL_REQUEST)
 
     assert resp.status_code == 200
     usage = resp.json()["tokenUsage"]
-    assert usage["inputTokens"] == 100 + 200 + 150   # 450
-    assert usage["outputTokens"] == 50 + 80 + 60     # 190
+    assert usage["inputTokens"] == 100 + 200 + 150  # 450
+    assert usage["outputTokens"] == 50 + 80 + 60  # 190
 
 
 # ---------------------------------------------------------------------------
@@ -435,7 +444,7 @@ async def test_empty_candidatepool_uses_empty_state_no_llm(client):
     body = resp.json()
     assert body["articles"] == []
     assert "없습니다" in body["content"]
-    assert len(call_log) == 0   # LLM not called
+    assert len(call_log) == 0  # LLM not called
 
 
 # ---------------------------------------------------------------------------
@@ -448,13 +457,15 @@ async def test_agent_does_not_rerank_even_with_low_score_at_rank1(client):
     low_score_rank1 = dict(_POOL_POSTINGS[0])
     low_score_rank1["rank"] = 1
     low_score_rank1["scoreBreakdown"] = {
-        **low_score_rank1["scoreBreakdown"], "adjustedScore": 5
+        **low_score_rank1["scoreBreakdown"],
+        "adjustedScore": 5,
     }
 
     high_score_rank2 = dict(_POOL_POSTINGS[1])
     high_score_rank2["rank"] = 2
     high_score_rank2["scoreBreakdown"] = {
-        **high_score_rank2["scoreBreakdown"], "adjustedScore": 999
+        **high_score_rank2["scoreBreakdown"],
+        "adjustedScore": 999,
     }
 
     request = {
@@ -468,14 +479,19 @@ async def test_agent_does_not_rerank_even_with_low_score_at_rank1(client):
 
     with patch("app.graph.user_briefing_graph.llm_client") as m:
         m.enabled = True
-        m.call_json = AsyncMock(side_effect=[
-            (_EMPTY_ENRICHMENT, _usage()),
-            ({
-                "markdownContent": _VALID_MARKDOWN,
-                "overallSummary": "요약",
-                "referencedPostingIds": ["1", "2"],
-            }, _usage()),
-        ])
+        m.call_json = AsyncMock(
+            side_effect=[
+                (_EMPTY_ENRICHMENT, _usage()),
+                (
+                    {
+                        "markdownContent": _VALID_MARKDOWN,
+                        "overallSummary": "요약",
+                        "referencedPostingIds": ["1", "2"],
+                    },
+                    _usage(),
+                ),
+            ]
+        )
         resp = await client.post("/briefings/generate", json=request)
 
     assert resp.status_code == 200
@@ -554,7 +570,7 @@ def test_validate_retryable_on_id_order_mismatch():
         "enrichments": {},
         "draft_summary": "요약",
         "draft_content": _VALID_MARKDOWN,
-        "draft_referenced_ids": ["3", "1", "2"],   # wrong order
+        "draft_referenced_ids": ["3", "1", "2"],  # wrong order
         "validation_status": "pending",
         "validation_errors": [],
         "rewrite_count": 0,
@@ -657,7 +673,9 @@ def test_validate_retryable_on_hallucination():
 def test_validate_retryable_on_unknown_url():
     selected = _pool_postings()
     # Add a URL not in any posting's sourceUrl
-    content_with_bad_url = _VALID_MARKDOWN + "\n[공고 보기](https://www.evil.com/fake)\n"
+    content_with_bad_url = (
+        _VALID_MARKDOWN + "\n[공고 보기](https://www.evil.com/fake)\n"
+    )
     state: UserBriefingState = {
         "request": _make_request(),
         "selected": selected,
@@ -749,6 +767,6 @@ def test_fallback_rank_order_preserved():
     result = deterministic_fallback_node(state)
     articles = result["articles"]
     assert len(articles) == 3
-    assert "네이버" in articles[0].title   # rank 1
-    assert "카카오" in articles[1].title   # rank 2
-    assert "라인" in articles[2].title     # rank 3
+    assert "네이버" in articles[0].title  # rank 1
+    assert "카카오" in articles[1].title  # rank 2
+    assert "라인" in articles[2].title  # rank 3

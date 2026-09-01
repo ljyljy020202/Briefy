@@ -26,7 +26,11 @@ async def test_collect_daily_response_has_required_fields(client):
     response = await client.post("/collections/daily", json=COLLECT_REQUEST)
     body = response.json()
     for field in (
-        "collectDate", "jobPostings", "companyIssues", "industryIssues", "stats"
+        "collectDate",
+        "jobPostings",
+        "companyIssues",
+        "industryIssues",
+        "stats",
     ):
         assert field in body, f"missing field: {field}"
 
@@ -59,8 +63,12 @@ async def test_collect_daily_posting_fields_are_camelcase(client):
     response = await client.post("/collections/daily", json=COLLECT_REQUEST)
     posting = response.json()["jobPostings"][0]
     for field in (
-        "sourceUrl", "companyName", "contentHash",
-        "employmentType", "experienceLevel", "postedAt",
+        "sourceUrl",
+        "companyName",
+        "contentHash",
+        "employmentType",
+        "experienceLevel",
+        "postedAt",
     ):
         assert field in posting, f"missing camelCase field: {field}"
     assert "source_url" not in posting
