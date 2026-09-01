@@ -44,6 +44,7 @@ from xml.etree import ElementTree as ET
 from bs4 import BeautifulSoup
 from httpx import AsyncClient, HTTPStatusError, TimeoutException
 
+from app.services.description_extractor import extract_jasoseol_description
 from app.adapters.aggregators.jasoseol_role_planner import (
     get_combined_duty_ids,
     plan_developer_roles,
@@ -558,6 +559,8 @@ def parse_posting_page(html: str, url: str) -> RawJobPosting | None:
     if not company_name or not title:
         return None
 
+    description, description_truncated = extract_jasoseol_description(soup)
+
     return RawJobPosting(
         source=_SOURCE,
         source_url=url,
@@ -570,9 +573,10 @@ def parse_posting_page(html: str, url: str) -> RawJobPosting | None:
         roles=[],
         location=None,
         experience_level=None,
-        description=None,
+        description=description,
         posted_at=None,
         source_external_id=_extract_source_external_id(url),
+        description_truncated=description_truncated if description is not None else None,
     )
 
 

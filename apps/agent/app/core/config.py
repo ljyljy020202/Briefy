@@ -39,6 +39,15 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.2
     llm_timeout_seconds: int = 30
 
+    # Classification service
+    classify_batch_size: int = 5
+    classify_max_concurrency: int = 2
+    classify_llm_timeout_seconds: int = 30
+    classify_max_attempts_per_item: int = 2
+    classify_request_budget_seconds: int = 75
+    classify_max_items_per_request: int = 50
+    classify_max_description_length: int = 4000
+
     @property
     def briefing_use_llm(self) -> bool:
         return bool(self.openai_api_key)

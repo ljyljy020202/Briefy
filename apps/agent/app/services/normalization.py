@@ -251,6 +251,7 @@ def normalize(raw: RawJobPosting) -> CollectedJobPosting:
         source_record_key=source_record_key,
         canonical_fingerprint=canonical_fingerprint,
         source_refs=source_refs,
+        description_truncated=raw.description_truncated,
     )
 
 
