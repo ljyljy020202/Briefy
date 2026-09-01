@@ -96,7 +96,7 @@ public final class ExperiencePolicy {
   }
 
   /** Returns true if any preference value indicates a new-graduate or intern level. */
-  static boolean isNewGradUser(List<String> expLevels) {
+  public static boolean isNewGradUser(List<String> expLevels) {
     if (expLevels == null) return false;
     for (String e : expLevels) {
       String l = e.trim().toLowerCase();

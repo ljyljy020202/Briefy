@@ -11,7 +11,9 @@ public record AgentMatchEvidence(
     List<String> matchedLocations,
     List<String> matchedExperienceLevels,
     List<String> matchedEmploymentTypes,
-    List<String> matchedCompanySizes) {
+    List<String> matchedCompanySizes,
+    /** null when no classification analysis was applied. */
+    String analysisRoleMatch) {
 
   public static AgentMatchEvidence from(MatchEvidence ev) {
     return new AgentMatchEvidence(
@@ -22,6 +24,7 @@ public record AgentMatchEvidence(
         ev.matchedLocations(),
         ev.matchedExperienceLevels(),
         ev.matchedEmploymentTypes(),
-        ev.matchedCompanySizes());
+        ev.matchedCompanySizes(),
+        ev.analysisRoleMatch());
   }
 }

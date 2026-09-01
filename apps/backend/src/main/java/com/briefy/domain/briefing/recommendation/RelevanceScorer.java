@@ -29,6 +29,7 @@ public final class RelevanceScorer {
 
   // ── Preference weights ────────────────────────────────────────────────────
   static final int SCORE_ROLE_MATCH = 30;
+  static final int SCORE_ROLE_BROAD_IT_MATCH = 15;
   static final int SCORE_TARGET_COMPANY = 25;
   static final int SCORE_SKILL = 5;
   static final int SCORE_SKILLS_MAX = 25;
@@ -182,7 +183,7 @@ public final class RelevanceScorer {
             companySizeScore);
 
     MatchEvidence evidence =
-        new MatchEvidence(
+        MatchEvidence.of(
             matchedRoles,
             matchedCompanies,
             List.copyOf(matchedSkills),
@@ -193,6 +194,68 @@ public final class RelevanceScorer {
             matchedCompanySizes);
 
     return new ScoringResult(breakdown, evidence);
+  }
+
+  /**
+   * Classification-aware score overload.
+   *
+   * <p>When {@code eligibility} is non-null and not deferred, the role score and experience score
+   * are derived from the classification result rather than keyword matching:
+   *
+   * <ul>
+   *   <li>DIRECT_MATCH → roleScore = 30
+   *   <li>BROAD_IT_MATCH → roleScore = 15
+   *   <li>Experience FULL → experienceScore = 15; PARTIAL/EXCLUDED/UNKNOWN → 0
+   * </ul>
+   *
+   * <p>All other dimensions (company, skills, industry, location, empType, companySize) retain the
+   * keyword-based scores. Returns the same result as {@link #score(JobPosting, Map)} when
+   * eligibility is null or deferred.
+   */
+  public static ScoringResult score(
+      JobPosting posting, Map<String, Object> preference, AnalysisEligibility eligibility) {
+
+    ScoringResult keywordResult = score(posting, preference);
+    if (eligibility == null || eligibility.isDeferred()) {
+      return keywordResult;
+    }
+
+    int classRoleScore =
+        switch (eligibility.roleMatch()) {
+          case DIRECT_MATCH -> SCORE_ROLE_MATCH;
+          case BROAD_IT_MATCH -> SCORE_ROLE_BROAD_IT_MATCH;
+          case MISMATCH, UNKNOWN -> 0;
+        };
+
+    int classExpScore =
+        eligibility.experienceMatch() == ExperienceMatchType.FULL ? SCORE_EXPERIENCE : 0;
+
+    ScoreBreakdown orig = keywordResult.breakdown();
+    ScoreBreakdown updated =
+        ScoreBreakdown.ofRelevance(
+            classRoleScore,
+            orig.companyScore(),
+            orig.skillScore(),
+            classExpScore,
+            orig.industryScore(),
+            orig.locationScore(),
+            orig.employmentTypeScore(),
+            orig.companySizeScore());
+
+    MatchEvidence origEv = keywordResult.evidence();
+    MatchEvidence updatedEv =
+        new MatchEvidence(
+            origEv.matchedRoles(),
+            origEv.matchedCompanies(),
+            origEv.matchedSkills(),
+            origEv.matchedIndustries(),
+            origEv.matchedLocations(),
+            origEv.matchedExperienceLevels(),
+            origEv.matchedEmploymentTypes(),
+            origEv.matchedCompanySizes(),
+            eligibility.roleMatch().name());
+
+    return new ScoringResult(updated, updatedEv);
   }
 
   /**
