@@ -87,9 +87,7 @@ def _rss_xml(items: list[tuple[str, str, str | None]]) -> str:
     item_xml = ""
     for title, link, pub in items:
         pub_tag = f"<pubDate>{pub}</pubDate>" if pub else ""
-        item_xml += (
-            f"<item><title>{title}</title><link>{link}</link>{pub_tag}</item>"
-        )
+        item_xml += f"<item><title>{title}</title><link>{link}</link>{pub_tag}</item>"
     return (
         f'<?xml version="1.0"?>'
         f'<rss version="2.0"><channel>{item_xml}</channel></rss>'
@@ -102,8 +100,7 @@ def _atom_xml(entries: list[tuple[str, str, str | None]]) -> str:
     for title, href, pub in entries:
         pub_tag = f"<published>{pub}</published>" if pub else ""
         entry_xml += (
-            f'<entry><title>{title}</title>'
-            f'<link href="{href}"/>{pub_tag}</entry>'
+            f"<entry><title>{title}</title>" f'<link href="{href}"/>{pub_tag}</entry>'
         )
     return (
         '<?xml version="1.0"?>'
@@ -209,11 +206,7 @@ def test_parse_page_generic_strips_title_suffix():
 
 
 def test_parse_page_generic_extracts_korean_deadline():
-    html = (
-        "<html><body><h1>직무</h1>"
-        "<p>마감일: 2026년 8월 15일</p>"
-        "</body></html>"
-    )
+    html = "<html><body><h1>직무</h1>" "<p>마감일: 2026년 8월 15일</p>" "</body></html>"
     result = parse_page_generic(html, f"{_BASE}/j", "Co", "src")
     assert result is not None
     assert result.deadline == date(2026, 8, 15)
@@ -274,9 +267,7 @@ def test_parse_rss_feed_atom_success():
 
 
 def test_parse_rss_feed_max_items_respected():
-    xml = _rss_xml(
-        [(f"직무{i}", f"{_BASE}/jobs/{i}", None) for i in range(10)]
-    )
+    xml = _rss_xml([(f"직무{i}", f"{_BASE}/jobs/{i}", None) for i in range(10)])
     postings = parse_rss_feed(xml, "Co", "src", max_items=3)
     assert len(postings) == 3
 
@@ -345,13 +336,9 @@ async def test_adapter_sitemap_success(monkeypatch):
     sitemap = _sm_xml([("2026-07-05", f"{_BASE}/jobs/1")])
     page_html = "<html><body><h1>백엔드 개발자</h1></body></html>"
     mock = _MockClient([(200, sitemap), (200, page_html)])
-    monkeypatch.setattr(
-        "app.adapters.official_company.AsyncClient", lambda **kw: mock
-    )
+    monkeypatch.setattr("app.adapters.official_company.AsyncClient", lambda **kw: mock)
 
-    adapter = OfficialCompanyAdapter(
-        [_source(adapter_type="SITEMAP")], [_profile()]
-    )
+    adapter = OfficialCompanyAdapter([_source(adapter_type="SITEMAP")], [_profile()])
     result = await adapter.fetch(SeedKeywords(), _options(), _COLLECT_DATE)
 
     assert isinstance(result, AdapterResult)
@@ -374,12 +361,8 @@ async def test_adapter_sitemap_no_source_url_warns():
 
 async def test_adapter_sitemap_http_error_warns(monkeypatch):
     mock = _MockClient([(404, "Not Found")])
-    monkeypatch.setattr(
-        "app.adapters.official_company.AsyncClient", lambda **kw: mock
-    )
-    adapter = OfficialCompanyAdapter(
-        [_source(adapter_type="SITEMAP")], [_profile()]
-    )
+    monkeypatch.setattr("app.adapters.official_company.AsyncClient", lambda **kw: mock)
+    adapter = OfficialCompanyAdapter([_source(adapter_type="SITEMAP")], [_profile()])
     result = await adapter.fetch(SeedKeywords(), _options(), _COLLECT_DATE)
     assert result.postings == []
     assert any("HTTP 404" in w for w in result.warnings)
@@ -387,12 +370,8 @@ async def test_adapter_sitemap_http_error_warns(monkeypatch):
 
 async def test_adapter_sitemap_timeout_warns(monkeypatch):
     mock = _MockClient([TimeoutException("timed out")])
-    monkeypatch.setattr(
-        "app.adapters.official_company.AsyncClient", lambda **kw: mock
-    )
-    adapter = OfficialCompanyAdapter(
-        [_source(adapter_type="SITEMAP")], [_profile()]
-    )
+    monkeypatch.setattr("app.adapters.official_company.AsyncClient", lambda **kw: mock)
+    adapter = OfficialCompanyAdapter([_source(adapter_type="SITEMAP")], [_profile()])
     result = await adapter.fetch(SeedKeywords(), _options(), _COLLECT_DATE)
     assert result.postings == []
     assert any("timeout" in w for w in result.warnings)
@@ -400,12 +379,8 @@ async def test_adapter_sitemap_timeout_warns(monkeypatch):
 
 async def test_adapter_sitemap_empty_sitemap_returns_empty(monkeypatch):
     mock = _MockClient([(200, _sm_xml([]))])
-    monkeypatch.setattr(
-        "app.adapters.official_company.AsyncClient", lambda **kw: mock
-    )
-    adapter = OfficialCompanyAdapter(
-        [_source(adapter_type="SITEMAP")], [_profile()]
-    )
+    monkeypatch.setattr("app.adapters.official_company.AsyncClient", lambda **kw: mock)
+    adapter = OfficialCompanyAdapter([_source(adapter_type="SITEMAP")], [_profile()])
     result = await adapter.fetch(SeedKeywords(), _options(), _COLLECT_DATE)
     assert result.postings == []
     assert result.warnings == []
@@ -415,13 +390,9 @@ async def test_adapter_sitemap_uses_canonical_name_from_profile(monkeypatch):
     sitemap = _sm_xml([("2026-07-05", f"{_BASE}/jobs/1")])
     page_html = "<html><body><h1>개발자</h1></body></html>"
     mock = _MockClient([(200, sitemap), (200, page_html)])
-    monkeypatch.setattr(
-        "app.adapters.official_company.AsyncClient", lambda **kw: mock
-    )
+    monkeypatch.setattr("app.adapters.official_company.AsyncClient", lambda **kw: mock)
     profile = _profile(name="Kakao Corp")
-    adapter = OfficialCompanyAdapter(
-        [_source(adapter_type="SITEMAP")], [profile]
-    )
+    adapter = OfficialCompanyAdapter([_source(adapter_type="SITEMAP")], [profile])
     result = await adapter.fetch(SeedKeywords(), _options(), _COLLECT_DATE)
     assert result.postings[0].company_name == "Kakao Corp"
 
@@ -430,9 +401,7 @@ async def test_adapter_sitemap_unknown_profile_uses_fallback(monkeypatch):
     sitemap = _sm_xml([("2026-07-05", f"{_BASE}/jobs/1")])
     page_html = "<html><body><h1>개발자</h1></body></html>"
     mock = _MockClient([(200, sitemap), (200, page_html)])
-    monkeypatch.setattr(
-        "app.adapters.official_company.AsyncClient", lambda **kw: mock
-    )
+    monkeypatch.setattr("app.adapters.official_company.AsyncClient", lambda **kw: mock)
     adapter = OfficialCompanyAdapter(
         [_source(company_id=99, adapter_type="SITEMAP")], []
     )
@@ -448,9 +417,7 @@ async def test_adapter_rss_success(monkeypatch):
         [("백엔드 개발자", f"{_BASE}/jobs/1", "Mon, 01 Jul 2026 09:00:00 +0900")]
     )
     mock = _MockClient([(200, feed)])
-    monkeypatch.setattr(
-        "app.adapters.official_company.AsyncClient", lambda **kw: mock
-    )
+    monkeypatch.setattr("app.adapters.official_company.AsyncClient", lambda **kw: mock)
     adapter = OfficialCompanyAdapter(
         [_source(adapter_type="RSS", source_url=f"{_BASE}/feed.xml")],
         [_profile()],
@@ -463,9 +430,7 @@ async def test_adapter_rss_success(monkeypatch):
 
 
 async def test_adapter_rss_no_source_url_warns():
-    s = OfficialCompanySource(
-        company_id=1, source_type="FEED", adapter_type="RSS"
-    )
+    s = OfficialCompanySource(company_id=1, source_type="FEED", adapter_type="RSS")
     adapter = OfficialCompanyAdapter([s], [_profile()])
     result = await adapter.fetch(SeedKeywords(), _options(), _COLLECT_DATE)
     assert result.postings == []
@@ -474,9 +439,7 @@ async def test_adapter_rss_no_source_url_warns():
 
 async def test_adapter_rss_http_error_warns(monkeypatch):
     mock = _MockClient([(500, "Server Error")])
-    monkeypatch.setattr(
-        "app.adapters.official_company.AsyncClient", lambda **kw: mock
-    )
+    monkeypatch.setattr("app.adapters.official_company.AsyncClient", lambda **kw: mock)
     adapter = OfficialCompanyAdapter(
         [_source(adapter_type="RSS", source_url=f"{_BASE}/feed.xml")],
         [_profile()],
@@ -488,9 +451,7 @@ async def test_adapter_rss_http_error_warns(monkeypatch):
 
 async def test_adapter_rss_timeout_warns(monkeypatch):
     mock = _MockClient([TimeoutException("timed out")])
-    monkeypatch.setattr(
-        "app.adapters.official_company.AsyncClient", lambda **kw: mock
-    )
+    monkeypatch.setattr("app.adapters.official_company.AsyncClient", lambda **kw: mock)
     adapter = OfficialCompanyAdapter(
         [_source(adapter_type="RSS", source_url=f"{_BASE}/feed.xml")],
         [_profile()],
@@ -503,9 +464,7 @@ async def test_adapter_rss_timeout_warns(monkeypatch):
 async def test_adapter_rss_atom_feed(monkeypatch):
     feed = _atom_xml([("프론트엔드 개발자", f"{_BASE}/jobs/5", None)])
     mock = _MockClient([(200, feed)])
-    monkeypatch.setattr(
-        "app.adapters.official_company.AsyncClient", lambda **kw: mock
-    )
+    monkeypatch.setattr("app.adapters.official_company.AsyncClient", lambda **kw: mock)
     adapter = OfficialCompanyAdapter(
         [_source(adapter_type="RSS", source_url=f"{_BASE}/atom.xml")],
         [_profile()],
@@ -856,9 +815,7 @@ async def test_adapter_unsupported_type_warns():
 
 
 async def test_adapter_none_adapter_type_warns():
-    s = OfficialCompanySource(
-        company_id=1, source_type="X", adapter_type=None
-    )
+    s = OfficialCompanySource(company_id=1, source_type="X", adapter_type=None)
     adapter = OfficialCompanyAdapter([s], [_profile()])
     result = await adapter.fetch(SeedKeywords(), _options(), _COLLECT_DATE)
     assert any("unsupported adapterType" in w for w in result.warnings)
@@ -868,12 +825,8 @@ async def test_adapter_multiple_sources_aggregated(monkeypatch):
     sitemap = _sm_xml([("2026-07-05", f"{_BASE}/jobs/1")])
     page_html = "<html><body><h1>개발자</h1></body></html>"
     feed = _rss_xml([("디자이너", f"{_BASE}/jobs/2", None)])
-    mock = _MockClient(
-        [(200, sitemap), (200, page_html), (200, feed)]
-    )
-    monkeypatch.setattr(
-        "app.adapters.official_company.AsyncClient", lambda **kw: mock
-    )
+    mock = _MockClient([(200, sitemap), (200, page_html), (200, feed)])
+    monkeypatch.setattr("app.adapters.official_company.AsyncClient", lambda **kw: mock)
     sources = [
         _source(company_id=1, adapter_type="SITEMAP"),
         _source(
@@ -940,12 +893,8 @@ async def test_adapter_source_stats_aggregated(monkeypatch):
     sitemap = _sm_xml([("2026-07-05", f"{_BASE}/jobs/1")])
     page_html = "<html><body><h1>개발자</h1></body></html>"
     mock = _MockClient([(200, sitemap), (200, page_html)])
-    monkeypatch.setattr(
-        "app.adapters.official_company.AsyncClient", lambda **kw: mock
-    )
-    adapter = OfficialCompanyAdapter(
-        [_source(adapter_type="SITEMAP")], [_profile()]
-    )
+    monkeypatch.setattr("app.adapters.official_company.AsyncClient", lambda **kw: mock)
+    adapter = OfficialCompanyAdapter([_source(adapter_type="SITEMAP")], [_profile()])
     result = await adapter.fetch(SeedKeywords(), _options(), _COLLECT_DATE)
     stats = result.source_stats
     assert stats is not None

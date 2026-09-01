@@ -216,8 +216,8 @@ class HyundaiMotorCareersParser(CustomParser):
     ) -> AdapterResult:
         config = _parse_config(source.config_json)
         company_name: str = (
-            (profile.canonical_name if profile else None) or "현대자동차"
-        )
+            profile.canonical_name if profile else None
+        ) or "현대자동차"
         warnings: list[str] = []
 
         # ── Stage 1: 두 탭 목록 수집 + 중복 제거 ───────────────────────────────

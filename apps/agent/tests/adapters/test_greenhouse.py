@@ -83,9 +83,8 @@ def _source(config_json: str | None = None) -> OfficialCompanySource:
         source_type="OFFICIAL_CAREER",
         source_url="https://careers.daangn.com/jobs/",
         adapter_type="CUSTOM",
-        config_json=config_json or json.dumps(
-            {"parser_key": "DAANGN_CAREERS", "max_discover": 50}
-        ),
+        config_json=config_json
+        or json.dumps({"parser_key": "DAANGN_CAREERS", "max_discover": 50}),
     )
 
 
@@ -146,6 +145,7 @@ def test_daangn_careers_is_greenhouse_instance():
 def test_naver_and_greeting_unaffected():
     import app.adapters.official.greeting  # noqa: F401
     import app.adapters.official.naver_careers  # noqa: F401
+
     assert "NAVER_CAREERS" in _CUSTOM_REGISTRY_BY_KEY
     assert "GREETING" in _CUSTOM_REGISTRY_BY_KEY
 
@@ -196,6 +196,7 @@ _SAMPLE_META = [
     {"name": "Valid Through", "value": ""},
     {"name": "NullField", "value": None},
 ]
+
 
 def test_get_meta_present():
     assert _get_meta(_SAMPLE_META, "Division") == "Tech"
@@ -263,7 +264,9 @@ def test_build_roles_dedup_when_same():
 def test_build_roles_multiple_depts():
     depts = [{"name": "Software Engineer, Backend"}, {"name": "Software Engineer, iOS"}]
     assert _build_roles(depts, "Tech") == [
-        "Tech", "Software Engineer, Backend", "Software Engineer, iOS"
+        "Tech",
+        "Software Engineer, Backend",
+        "Software Engineer, iOS",
     ]
 
 
@@ -274,7 +277,8 @@ def test_build_roles_empty():
 def test_build_roles_product_manager():
     depts = [{"name": "Product Manager"}]
     assert _build_roles(depts, "Product Management") == [
-        "Product Management", "Product Manager"
+        "Product Management",
+        "Product Manager",
     ]
 
 
@@ -389,6 +393,7 @@ def test_source_record_key_different_jobs():
 
 def test_normalize_intern_in_title():
     from app.adapters.base import RawJobPosting
+
     raw = RawJobPosting(
         source="company_10_custom_daangn_careers",
         source_url="https://careers.daangn.com/jobs/role/6615071003/",
@@ -409,6 +414,7 @@ def test_normalize_intern_in_title():
 
 def test_normalize_experience_3yr():
     from app.adapters.base import RawJobPosting
+
     raw = RawJobPosting(
         source="company_10_custom_daangn_careers",
         source_url="https://careers.daangn.com/jobs/role/5046757003/",
@@ -432,6 +438,7 @@ def test_normalize_experience_3yr():
 @pytest.mark.asyncio
 async def test_full_list_parsed(monkeypatch):
     """All 9 fixture jobs are parsed (no filter)."""
+
     async def handler(url, kw):
         return _json_resp(url, _LIST_DATA)
 
@@ -693,6 +700,7 @@ async def test_malformed_metadata_produces_posting(monkeypatch):
 @pytest.mark.asyncio
 async def test_max_items_cap(monkeypatch):
     """max_items=3 → only first 3 postings returned."""
+
     async def handler(url, kw):
         return _json_resp(url, _LIST_DATA)
 
@@ -711,6 +719,7 @@ async def test_max_items_cap(monkeypatch):
 @pytest.mark.asyncio
 async def test_genuine_empty_list(monkeypatch):
     """Empty jobs list → 0 postings, no warnings."""
+
     async def handler(url, kw):
         return _json_resp(url, {"jobs": [], "meta": {"total": 0}})
 
@@ -729,6 +738,7 @@ async def test_genuine_empty_list(monkeypatch):
 @pytest.mark.asyncio
 async def test_schema_failure_missing_jobs_key(monkeypatch):
     """Response without 'jobs' key → schema warning, 0 postings."""
+
     async def handler(url, kw):
         return _json_resp(url, {"error": "not found"})
 
@@ -748,7 +758,8 @@ async def test_schema_failure_missing_jobs_key(monkeypatch):
 async def test_malformed_json_warning(monkeypatch):
     async def handler(url, kw):
         return httpx.Response(
-            200, content=b"not-json",
+            200,
+            content=b"not-json",
             headers={"Content-Type": "application/json"},
             request=httpx.Request("GET", url),
         )

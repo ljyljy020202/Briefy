@@ -15,7 +15,10 @@ from app.core.identifiers import (
 
 
 def test_canonicalize_url_strips_trailing_slash():
-    assert canonicalize_url("https://example.com/jobs/123/") == "https://example.com/jobs/123"
+    assert (
+        canonicalize_url("https://example.com/jobs/123/")
+        == "https://example.com/jobs/123"
+    )
 
 
 def test_canonicalize_url_preserves_root_path():
@@ -38,7 +41,9 @@ def test_canonicalize_url_strips_query():
 
 
 def test_canonicalize_url_is_stable():
-    assert canonicalize_url("https://example.com/jobs/1") == canonicalize_url("https://example.com/jobs/1")
+    assert canonicalize_url("https://example.com/jobs/1") == canonicalize_url(
+        "https://example.com/jobs/1"
+    )
 
 
 # ── normalize_company_name ────────────────────────────────────────────────────
@@ -92,7 +97,9 @@ def test_compute_source_record_key_returns_64_hex():
 
 
 def test_compute_source_record_key_uses_external_id_when_available():
-    key_with_id = compute_source_record_key("원티드", "ext-001", "https://wanted.co.kr/wd/123")
+    key_with_id = compute_source_record_key(
+        "원티드", "ext-001", "https://wanted.co.kr/wd/123"
+    )
     key_no_id = compute_source_record_key("원티드", None, "https://wanted.co.kr/wd/123")
     assert key_with_id != key_no_id
 

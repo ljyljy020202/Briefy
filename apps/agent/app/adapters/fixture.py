@@ -15,10 +15,19 @@ _MAX_POSTINGS = 5
 
 _FIXTURE_COMPANIES = ["네이버", "카카오", "라인플러스", "쿠팡", "당근마켓"]
 _FIXTURE_ROLES = [
-    "백엔드 개발자", "프론트엔드 개발자", "풀스택 개발자", "DevOps 엔지니어",
+    "백엔드 개발자",
+    "프론트엔드 개발자",
+    "풀스택 개발자",
+    "DevOps 엔지니어",
 ]
 _FIXTURE_SKILLS = [
-    "Java", "Spring Boot", "Python", "FastAPI", "TypeScript", "React", "Docker",
+    "Java",
+    "Spring Boot",
+    "Python",
+    "FastAPI",
+    "TypeScript",
+    "React",
+    "Docker",
 ]
 _FIXTURE_EMP_TYPES = ["정규직", "인턴"]
 _FIXTURE_EXP_LEVELS = ["신입", "경력 무관", "3년 이상"]

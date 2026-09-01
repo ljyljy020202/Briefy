@@ -183,15 +183,11 @@ def _parse_job(job: Any) -> RawJobPosting | None:
             return None
 
         emp_type = ((position.get("job-type") or {}).get("name") or "").strip() or None
-        location = (
-            ((position.get("location") or {}).get("name") or "").strip() or None
-        )
+        location = ((position.get("location") or {}).get("name") or "").strip() or None
         exp_level = (
-            ((position.get("experience-level") or {}).get("name") or "").strip() or None
-        )
-        job_category = (
-            ((position.get("job-category") or {}).get("name") or "").strip()
-        )
+            (position.get("experience-level") or {}).get("name") or ""
+        ).strip() or None
+        job_category = ((position.get("job-category") or {}).get("name") or "").strip()
         roles = [job_category] if job_category else []
 
         keyword_str = str(job.get("keyword") or "").strip()
@@ -408,9 +404,7 @@ class SaraminAdapter(JobBoardAdapter):
 
         parsed = len(unique)
 
-        entries = [
-            (p.posted_at.date() if p.posted_at else date.min, p) for p in unique
-        ]
+        entries = [(p.posted_at.date() if p.posted_at else date.min, p) for p in unique]
         selected = _select_postings(
             entries, seed_keywords, options.max_results_per_source
         )

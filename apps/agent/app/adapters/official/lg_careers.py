@@ -262,9 +262,7 @@ class LgCareersParser(CustomParser):
 
             # 상세 조회
             try:
-                async with httpx.AsyncClient(
-                    headers=_HEADERS, timeout=_TIMEOUT
-                ) as dc:
+                async with httpx.AsyncClient(headers=_HEADERS, timeout=_TIMEOUT) as dc:
                     dr = await dc.post(_DETAIL_EP, json={"jobNoticeId": job_id})
                     dr.raise_for_status()
                 fetched += 1
@@ -379,9 +377,7 @@ async def lg_careers_preflight(
     result["reachable"] = True
 
     try:
-        jobs: list[dict[str, Any]] = (
-            r.json().get("data", {}).get("jobNoticeList", [])
-        )
+        jobs: list[dict[str, Any]] = r.json().get("data", {}).get("jobNoticeList", [])
     except Exception as exc:
         result["warnings"].append(f"LG_CAREERS list JSON parse error: {exc}")
         result["failure_code"] = "JSON_PARSE_ERROR"
@@ -440,7 +436,7 @@ async def lg_careers_preflight(
     result["sample_parsed"] = True
     result["sample_roles"] = _roles_from_recs(recs)
     result["sample_location"] = _location_from_recs(recs)
-    result["sample_title"] = (
-        detail.get("jobNoticeName") or filtered[0].get("jobNoticeName")
+    result["sample_title"] = detail.get("jobNoticeName") or filtered[0].get(
+        "jobNoticeName"
     )
     return result

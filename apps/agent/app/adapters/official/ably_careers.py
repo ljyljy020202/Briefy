@@ -185,9 +185,7 @@ def _extract_address_key(apply_url: str) -> str | None:
     return None
 
 
-def _career_to_experience(
-    career: str | None, career_range: dict | None
-) -> str | None:
+def _career_to_experience(career: str | None, career_range: dict | None) -> str | None:
     """Convert Ably career fields to a normalized experience_level string.
 
     'below only' → "N년 이하"  (never flipped to "이상").
@@ -320,16 +318,13 @@ class AblyCareersParser(CustomParser):
                 )
             except HTTPStatusError as exc:
                 warnings.append(
-                    f"ably_careers: listing HTTP"
-                    f" {exc.response.status_code} [{sid}]"
+                    f"ably_careers: listing HTTP" f" {exc.response.status_code} [{sid}]"
                 )
                 return AdapterResult(
                     warnings=warnings, source_stats=AdapterSourceStats()
                 )
             except Exception as exc:
-                warnings.append(
-                    f"ably_careers: listing error [{sid}]: {exc}"
-                )
+                warnings.append(f"ably_careers: listing error [{sid}]: {exc}")
                 return AdapterResult(
                     warnings=warnings, source_stats=AdapterSourceStats()
                 )
@@ -343,9 +338,9 @@ class AblyCareersParser(CustomParser):
                 )
 
             active = [
-                r for r in all_recruits
-                if r.get("status") == "in_progress"
-                and not r.get("isPrivate", False)
+                r
+                for r in all_recruits
+                if r.get("status") == "in_progress" and not r.get("isPrivate", False)
             ]
 
             # Deduplicate by addressKey
@@ -387,9 +382,7 @@ class AblyCareersParser(CustomParser):
                     content_html = _extract_detail_content(resp.text)
                     description = _html_to_text(content_html or "")
                 except TimeoutException:
-                    warnings.append(
-                        f"ably_careers: detail timeout {address_key}"
-                    )
+                    warnings.append(f"ably_careers: detail timeout {address_key}")
                     stats.fetched += 1
                 except HTTPStatusError as exc:
                     warnings.append(
@@ -398,15 +391,11 @@ class AblyCareersParser(CustomParser):
                     )
                     stats.fetched += 1
                 except Exception as exc:
-                    warnings.append(
-                        f"ably_careers: detail error {address_key}: {exc}"
-                    )
+                    warnings.append(f"ably_careers: detail error {address_key}: {exc}")
 
                 posting = _build_posting(item, company_name, address_key, description)
                 if not posting.title:
-                    warnings.append(
-                        f"ably_careers: empty title {address_key}"
-                    )
+                    warnings.append(f"ably_careers: empty title {address_key}")
                     return None
                 stats.parsed += 1
                 return posting
@@ -475,7 +464,8 @@ async def ably_preflight(source: OfficialCompanySource) -> dict:
         }
 
     active = [
-        r for r in recruits
+        r
+        for r in recruits
         if r.get("status") == "in_progress" and not r.get("isPrivate", False)
     ]
     discovered_count = len(active)

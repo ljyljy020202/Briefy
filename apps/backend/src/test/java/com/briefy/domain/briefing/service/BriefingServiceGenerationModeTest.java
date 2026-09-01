@@ -9,6 +9,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.briefy.config.BriefingProperties;
+import com.briefy.config.ClassificationMode;
+import com.briefy.config.ClassificationProperties;
 import com.briefy.domain.briefing.dto.GenerateResult;
 import com.briefy.domain.briefing.entity.BriefingJob;
 import com.briefy.domain.briefing.entity.BriefingJobStatus;
@@ -17,6 +19,7 @@ import com.briefy.domain.briefing.entity.BriefingTriggerType;
 import com.briefy.domain.briefing.repository.BriefingArticleRepository;
 import com.briefy.domain.briefing.repository.BriefingJobRepository;
 import com.briefy.domain.briefing.repository.BriefingReportRepository;
+import com.briefy.domain.candidatepool.repository.JobPostingAnalysisRepository;
 import com.briefy.domain.candidatepool.service.CandidatePoolService;
 import com.briefy.domain.preference.repository.UserBriefingPreferenceRepository;
 import com.briefy.domain.user.repository.UserRepository;
@@ -53,6 +56,13 @@ class BriefingServiceGenerationModeTest {
   @Mock private UserRepository userRepository;
   @Mock private BriefingJobPersistenceService briefingJobPersistenceService;
   @Mock private BriefingProperties briefingProperties;
+  @Mock private JobPostingAnalysisRepository jobPostingAnalysisRepository;
+
+  private static final ClassificationProperties CLASSIFICATION_PROPS =
+      new ClassificationProperties(
+          ClassificationMode.OFF,
+          "1.0.0",
+          new ClassificationProperties.Worker(60000, 100, 600, 5, 2, 90, 700, 5, 60));
 
   private BriefingService briefingService;
 
@@ -71,7 +81,9 @@ class BriefingServiceGenerationModeTest {
             candidatePoolService,
             userRepository,
             briefingJobPersistenceService,
-            briefingProperties);
+            briefingProperties,
+            jobPostingAnalysisRepository,
+            CLASSIFICATION_PROPS);
 
     when(briefingArticleRepository.findRecentExposuresByUserId(any(), any())).thenReturn(List.of());
     when(userBriefingPreferenceRepository.findAllByUserIdAndActiveTrue(USER_ID))

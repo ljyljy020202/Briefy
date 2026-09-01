@@ -176,6 +176,54 @@ public class JobPosting extends BaseTimeEntity {
   }
 
   /**
+   * 동일 소스에서 내용이 변경된 공고를 갱신한다.
+   *
+   * <p>교차 소스의 {@link #refreshFrom} 과 달리, 기존 값이 채워져 있어도 새 값(non-null)으로 덮어쓴다. null/blank 로 들어오는 값은
+   * 추출 실패로 간주하여 기존 값을 보존한다.
+   */
+  public void updateFromSameSource(
+      LocalDate newDeadline,
+      String newDescription,
+      String newContentHash,
+      LocalDate collectedDate,
+      String newRoles,
+      String newSkills,
+      String newExperienceLevel,
+      String newEmploymentType,
+      String newLocation,
+      LocalDateTime newPublishedAt) {
+    if (newDeadline != null) {
+      this.deadline = newDeadline;
+    }
+    if (newDescription != null && !newDescription.isBlank()) {
+      this.description = newDescription;
+    }
+    if (newContentHash != null) {
+      this.contentHash = newContentHash;
+    }
+    this.collectedDate = collectedDate;
+    // 동일 소스: 새 값이 있으면 기존 값 덮어쓰기 (교차 소스와의 차이점)
+    if (newRoles != null && !newRoles.isBlank()) {
+      this.roles = newRoles;
+    }
+    if (newSkills != null && !newSkills.isBlank()) {
+      this.skills = newSkills;
+    }
+    if (newExperienceLevel != null && !newExperienceLevel.isBlank()) {
+      this.experienceLevel = newExperienceLevel;
+    }
+    if (newEmploymentType != null && !newEmploymentType.isBlank()) {
+      this.employmentType = newEmploymentType;
+    }
+    if (newLocation != null && !newLocation.isBlank()) {
+      this.location = newLocation;
+    }
+    if (newPublishedAt != null) {
+      this.publishedAt = newPublishedAt;
+    }
+  }
+
+  /**
    * @deprecated Use {@link #refreshFrom(LocalDate, String, String, LocalDate, String, String,
    *     String, String, String, LocalDateTime)} instead.
    */

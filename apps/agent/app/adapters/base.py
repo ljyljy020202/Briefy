@@ -21,6 +21,7 @@ class RawJobPosting:
     description: str | None = None
     posted_at: datetime | None = None
     source_external_id: str | None = None
+    description_truncated: bool | None = None
 
 
 @dataclass

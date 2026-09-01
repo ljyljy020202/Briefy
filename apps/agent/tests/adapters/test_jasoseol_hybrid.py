@@ -57,7 +57,9 @@ def _sitemap_xml(entries: list[tuple[str, str]]) -> str:
     )
 
 
-def _candidate(url_id: str, provenance: str, lastmod: date = date.min) -> _CandidateEntry:  # noqa: E501
+def _candidate(
+    url_id: str, provenance: str, lastmod: date = date.min
+) -> _CandidateEntry:  # noqa: E501
     return _CandidateEntry(
         url=f"{_BASE}/recruit/{url_id}",
         source_external_id=url_id,
@@ -154,10 +156,9 @@ def test_merge_same_posting_both_paths_fetched_once():
 
 
 def test_allocate_prefers_targeted_80pct():
-    candidates = (
-        [_candidate(str(i), "TARGETED") for i in range(100, 180)]
-        + [_candidate(str(i), "EXPLORATION", date(2026, 7, 9)) for i in range(200, 230)]
-    )
+    candidates = [_candidate(str(i), "TARGETED") for i in range(100, 180)] + [
+        _candidate(str(i), "EXPLORATION", date(2026, 7, 9)) for i in range(200, 230)
+    ]
     result = _allocate_fetch_budget(
         candidates, detail_fetch_limit=100, targeted_ratio=0.8
     )
@@ -169,10 +170,9 @@ def test_allocate_prefers_targeted_80pct():
 
 def test_allocate_targeted_shortfall_backfills_exploration():
     # Only 30 targeted candidates; remainder should come from exploration
-    candidates = (
-        [_candidate(str(i), "TARGETED") for i in range(100, 130)]
-        + [_candidate(str(i), "EXPLORATION", date(2026, 7, 9)) for i in range(200, 280)]
-    )
+    candidates = [_candidate(str(i), "TARGETED") for i in range(100, 130)] + [
+        _candidate(str(i), "EXPLORATION", date(2026, 7, 9)) for i in range(200, 280)
+    ]
     result = _allocate_fetch_budget(
         candidates, detail_fetch_limit=100, targeted_ratio=0.8
     )
@@ -183,10 +183,9 @@ def test_allocate_targeted_shortfall_backfills_exploration():
 
 def test_allocate_exploration_shortfall_backfills_targeted():
     # Only 5 exploration candidates; remainder should come from targeted
-    candidates = (
-        [_candidate(str(i), "TARGETED") for i in range(100, 195)]
-        + [_candidate(str(i), "EXPLORATION", date(2026, 7, 9)) for i in range(200, 205)]
-    )
+    candidates = [_candidate(str(i), "TARGETED") for i in range(100, 195)] + [
+        _candidate(str(i), "EXPLORATION", date(2026, 7, 9)) for i in range(200, 205)
+    ]
     result = _allocate_fetch_budget(
         candidates, detail_fetch_limit=100, targeted_ratio=0.8
     )
@@ -196,13 +195,9 @@ def test_allocate_exploration_shortfall_backfills_targeted():
 
 
 def test_allocate_never_exceeds_detail_fetch_limit():
-    candidates = (
-        [_candidate(str(i), "TARGETED") for i in range(200)]
-        + [
-            _candidate(str(i + 200), "EXPLORATION", date(2026, 7, 9))
-            for i in range(200)
-        ]
-    )
+    candidates = [_candidate(str(i), "TARGETED") for i in range(200)] + [
+        _candidate(str(i + 200), "EXPLORATION", date(2026, 7, 9)) for i in range(200)
+    ]
     result = _allocate_fetch_budget(
         candidates, detail_fetch_limit=100, targeted_ratio=0.8
     )
@@ -210,24 +205,18 @@ def test_allocate_never_exceeds_detail_fetch_limit():
 
 
 def test_allocate_deterministic():
-    candidates = (
-        [_candidate(str(i), "TARGETED") for i in range(50)]
-        + [_candidate(str(i + 50), "EXPLORATION", date(2026, 7, 9)) for i in range(50)]
-    )
-    r1 = _allocate_fetch_budget(
-        candidates, detail_fetch_limit=50, targeted_ratio=0.8
-    )
-    r2 = _allocate_fetch_budget(
-        candidates, detail_fetch_limit=50, targeted_ratio=0.8
-    )
+    candidates = [_candidate(str(i), "TARGETED") for i in range(50)] + [
+        _candidate(str(i + 50), "EXPLORATION", date(2026, 7, 9)) for i in range(50)
+    ]
+    r1 = _allocate_fetch_budget(candidates, detail_fetch_limit=50, targeted_ratio=0.8)
+    r2 = _allocate_fetch_budget(candidates, detail_fetch_limit=50, targeted_ratio=0.8)
     assert [c.url for c in r1] == [c.url for c in r2]
 
 
 def test_allocate_both_provenance_counts_as_targeted():
-    candidates = (
-        [_candidate(str(i), "BOTH", date(2026, 7, 9)) for i in range(50)]
-        + [_candidate(str(i + 50), "EXPLORATION", date(2026, 7, 9)) for i in range(50)]
-    )
+    candidates = [_candidate(str(i), "BOTH", date(2026, 7, 9)) for i in range(50)] + [
+        _candidate(str(i + 50), "EXPLORATION", date(2026, 7, 9)) for i in range(50)
+    ]
     result = _allocate_fetch_budget(
         candidates, detail_fetch_limit=100, targeted_ratio=0.8
     )
@@ -237,10 +226,9 @@ def test_allocate_both_provenance_counts_as_targeted():
 
 
 def test_allocate_few_total_candidates():
-    candidates = (
-        [_candidate("1", "TARGETED")]
-        + [_candidate("2", "EXPLORATION", date(2026, 7, 9))]
-    )
+    candidates = [_candidate("1", "TARGETED")] + [
+        _candidate("2", "EXPLORATION", date(2026, 7, 9))
+    ]
     result = _allocate_fetch_budget(
         candidates, detail_fetch_limit=100, targeted_ratio=0.8
     )
@@ -382,10 +370,12 @@ async def test_adapter_targeted_search_timeout_falls_back_to_sitemap(monkeypatch
 @pytest.mark.skipif(not _EXPLORATION_ENABLED, reason="sitemap exploration disabled")
 async def test_adapter_stats_discovered_is_unique_merged_count(monkeypatch):
     search_html = _read("jasoseol_search_page.html")  # IDs: 201001, 201002, 201003
-    sitemap_xml = _sitemap_xml([
-        (f"{_BASE}/recruit/201001", "2026-07-09T10:00:00+09:00"),  # overlap
-        (f"{_BASE}/recruit/104949", "2026-07-09T10:00:00+09:00"),  # unique
-    ])
+    sitemap_xml = _sitemap_xml(
+        [
+            (f"{_BASE}/recruit/201001", "2026-07-09T10:00:00+09:00"),  # overlap
+            (f"{_BASE}/recruit/104949", "2026-07-09T10:00:00+09:00"),  # unique
+        ]
+    )
     responses = {
         f"{_BASE}/search?dutyGroupIds=176&page=1": (200, search_html),
         _SITEMAP_1: (200, sitemap_xml),
@@ -429,10 +419,12 @@ async def test_adapter_fetch_count_equals_actual_detail_fetches(monkeypatch):
 
 async def test_adapter_total_discovery_respects_limit(monkeypatch):
     search_html = _read("jasoseol_search_page.html")  # 3 candidates
-    sitemap_xml = _sitemap_xml([
-        (f"{_BASE}/recruit/{i}", "2026-07-09T10:00:00+09:00")
-        for i in range(90000, 90010)
-    ])
+    sitemap_xml = _sitemap_xml(
+        [
+            (f"{_BASE}/recruit/{i}", "2026-07-09T10:00:00+09:00")
+            for i in range(90000, 90010)
+        ]
+    )
     responses = {
         f"{_BASE}/search?dutyGroupIds=176&page=1": (200, search_html),
         _SITEMAP_1: (200, sitemap_xml),
@@ -457,10 +449,12 @@ async def test_adapter_total_discovery_respects_limit(monkeypatch):
 
 async def test_adapter_total_fetch_respects_limit(monkeypatch):
     search_html = _read("jasoseol_search_page.html")  # 3 candidates
-    sitemap_xml = _sitemap_xml([
-        (f"{_BASE}/recruit/{i}", "2026-07-09T10:00:00+09:00")
-        for i in range(90000, 90005)
-    ])
+    sitemap_xml = _sitemap_xml(
+        [
+            (f"{_BASE}/recruit/{i}", "2026-07-09T10:00:00+09:00")
+            for i in range(90000, 90005)
+        ]
+    )
     responses = {
         f"{_BASE}/search?dutyGroupIds=176&page=1": (200, search_html),
         _SITEMAP_1: (200, sitemap_xml),
@@ -522,12 +516,14 @@ async def test_developer_postings_survive_non_dev_sitemap(monkeypatch):
       - This test must FAIL under old sitemap-only behavior.
     """
     # Build non-developer sitemap
-    non_dev_sitemap = _sitemap_xml([
-        (f"{_BASE}/recruit/50001", "2026-07-09T10:00:00+09:00"),  # 간호사
-        (f"{_BASE}/recruit/50002", "2026-07-09T10:00:00+09:00"),  # 마케팅
-        (f"{_BASE}/recruit/50003", "2026-07-09T10:00:00+09:00"),  # 영업
-        (f"{_BASE}/recruit/50004", "2026-07-09T10:00:00+09:00"),  # 생산직
-    ])
+    non_dev_sitemap = _sitemap_xml(
+        [
+            (f"{_BASE}/recruit/50001", "2026-07-09T10:00:00+09:00"),  # 간호사
+            (f"{_BASE}/recruit/50002", "2026-07-09T10:00:00+09:00"),  # 마케팅
+            (f"{_BASE}/recruit/50003", "2026-07-09T10:00:00+09:00"),  # 영업
+            (f"{_BASE}/recruit/50004", "2026-07-09T10:00:00+09:00"),  # 생산직
+        ]
+    )
 
     def _make_non_dev_html(title: str, company: str) -> str:
         return f"""<html><body>
@@ -563,20 +559,19 @@ async def test_developer_postings_survive_non_dev_sitemap(monkeypatch):
         _SITEMAP_2: (200, _EMPTY_SITEMAP),
         # Non-dev sitemap pages
         f"{_BASE}/recruit/50001": (
-            200, _make_non_dev_html("병원 간호사 채용", "서울대병원")),
+            200,
+            _make_non_dev_html("병원 간호사 채용", "서울대병원"),
+        ),
         f"{_BASE}/recruit/50002": (
-            200, _make_non_dev_html("마케팅 매니저", "현대자동차")),
-        f"{_BASE}/recruit/50003": (
-            200, _make_non_dev_html("영업직 사원", "삼성생명")),
-        f"{_BASE}/recruit/50004": (
-            200, _make_non_dev_html("생산직 사원", "포스코")),
+            200,
+            _make_non_dev_html("마케팅 매니저", "현대자동차"),
+        ),
+        f"{_BASE}/recruit/50003": (200, _make_non_dev_html("영업직 사원", "삼성생명")),
+        f"{_BASE}/recruit/50004": (200, _make_non_dev_html("생산직 사원", "포스코")),
         # Developer detail pages from targeted search
-        f"{_BASE}/recruit/60001": (
-            200, _make_dev_html("서버 백엔드 개발자", "라인")),
-        f"{_BASE}/recruit/60002": (
-            200, _make_dev_html("백엔드 엔지니어", "토스")),
-        f"{_BASE}/recruit/60003": (
-            200, _make_dev_html("DevOps 엔지니어", "쿠팡")),
+        f"{_BASE}/recruit/60001": (200, _make_dev_html("서버 백엔드 개발자", "라인")),
+        f"{_BASE}/recruit/60002": (200, _make_dev_html("백엔드 엔지니어", "토스")),
+        f"{_BASE}/recruit/60003": (200, _make_dev_html("DevOps 엔지니어", "쿠팡")),
     }
 
     monkeypatch.setattr(
@@ -593,8 +588,7 @@ async def test_developer_postings_survive_non_dev_sitemap(monkeypatch):
 
     dev_keywords = {"백엔드", "서버", "devops", "backend"}
     dev_postings = [
-        p for p in result.postings
-        if any(kw in p.title.lower() for kw in dev_keywords)
+        p for p in result.postings if any(kw in p.title.lower() for kw in dev_keywords)
     ]
     assert len(dev_postings) >= 1, (
         "Developer postings must appear in result even when sitemap is "

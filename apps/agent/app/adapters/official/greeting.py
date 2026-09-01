@@ -183,9 +183,7 @@ def _discover_job_urls(
         else:
             continue
 
-        if config.include_paths and not any(
-            p in path for p in config.include_paths
-        ):
+        if config.include_paths and not any(p in path for p in config.include_paths):
             continue
 
         if any(p in path for p in config.exclude_paths):
@@ -263,18 +261,12 @@ def _extract_next_data_detail_description(html: str) -> str | None:
     try:
         payload = json.loads(m.group(1))
         dehydrated = (
-            payload.get("props", {})
-            .get("pageProps", {})
-            .get("dehydratedState", {})
+            payload.get("props", {}).get("pageProps", {}).get("dehydratedState", {})
         )
         for query in dehydrated.get("queries", []):
             key = query.get("queryKey", [])
             if len(key) >= 2 and key[1] == "getOpeningById":
-                inner = (
-                    query.get("state", {})
-                    .get("data", {})
-                    .get("data", {})
-                )
+                inner = query.get("state", {}).get("data", {}).get("data", {})
                 detail_html = inner.get("openingsInfo", {}).get("detail")
                 if detail_html:
                     # Strip HTML tags to plain text
@@ -346,9 +338,7 @@ def _extract_greeting_metadata(opening: dict) -> dict:
             location = ws_place.get("location") or None
 
             # Experience level
-            experience_level = _career_to_experience_level(
-                pos.get("jobPositionCareer")
-            )
+            experience_level = _career_to_experience_level(pos.get("jobPositionCareer"))
 
             # Employment type
             emp = pos.get("jobPositionEmployment") or {}
@@ -531,18 +521,12 @@ def _parse_greeting_job(
         try:
             payload = json.loads(m.group(1))
             dehydrated = (
-                payload.get("props", {})
-                .get("pageProps", {})
-                .get("dehydratedState", {})
+                payload.get("props", {}).get("pageProps", {}).get("dehydratedState", {})
             )
             for query in dehydrated.get("queries", []):
                 key = query.get("queryKey", [])
                 if len(key) >= 2 and key[1] == "getOpeningById":
-                    inner = (
-                        query.get("state", {})
-                        .get("data", {})
-                        .get("data", {})
-                    )
+                    inner = query.get("state", {}).get("data", {}).get("data", {})
                     # jobPositionSetting has the same structure as openingJobPositions
                     job_pos_setting = inner.get("jobPositionSetting", {})
                     positions = job_pos_setting.get("jobPositions", [])
@@ -605,9 +589,7 @@ def _parse_greeting_job(
         dm = _KR_DATE_RE.search(page_text)
         if dm:
             try:
-                deadline = date(
-                    int(dm.group(1)), int(dm.group(2)), int(dm.group(3))
-                )
+                deadline = date(int(dm.group(1)), int(dm.group(2)), int(dm.group(3)))
             except ValueError:
                 pass
 
@@ -656,16 +638,13 @@ class GreetingParser(CustomParser):
         if not source.source_url:
             return AdapterResult(
                 warnings=[
-                    f"greeting: no source_url"
-                    f" (company_id={source.company_id})"
+                    f"greeting: no source_url" f" (company_id={source.company_id})"
                 ],
                 source_stats=AdapterSourceStats(),
             )
 
         company_name = (
-            profile.canonical_name
-            if profile
-            else f"company_{source.company_id}"
+            profile.canonical_name if profile else f"company_{source.company_id}"
         )
         config = _parse_greeting_config(source.config_json)
         sid = f"company_{source.company_id}_custom_greeting"
@@ -743,18 +722,16 @@ class GreetingParser(CustomParser):
                             )
                             if desc is None:
                                 # fallback: extract from main/article
-                                detail_soup = BeautifulSoup(
-                                    detail_resp.text, "lxml"
-                                )
+                                detail_soup = BeautifulSoup(detail_resp.text, "lxml")
                                 main = (
                                     detail_soup.find("main")
                                     or detail_soup.find("article")
                                     or detail_soup.find(attrs={"role": "main"})
                                 )
                                 if main:
-                                    desc = main.get_text(
-                                        separator="\n", strip=True
-                                    )[:2000]
+                                    desc = main.get_text(separator="\n", strip=True)[
+                                        :2000
+                                    ]
                             # Attach description; keep all other metadata from stub
                             postings.append(
                                 RawJobPosting(
@@ -787,8 +764,7 @@ class GreetingParser(CustomParser):
                             postings.append(stub)
                         except Exception as exc:
                             warnings.append(
-                                f"greeting: detail error"
-                                f" {stub.source_url}: {exc}"
+                                f"greeting: detail error" f" {stub.source_url}: {exc}"
                             )
                             postings.append(stub)
 
@@ -807,9 +783,7 @@ class GreetingParser(CustomParser):
                 # ── Strategy B: anchor-link discovery + detail-page parsing ───
                 # Used when __NEXT_DATA__ doesn't contain an openings list
                 # (e.g. careers.greeting.works hosted pages).
-                job_urls = _discover_job_urls(
-                    list_html, source.source_url, config
-                )
+                job_urls = _discover_job_urls(list_html, source.source_url, config)
                 discovered = len(job_urls)
                 if discovered == 0:
                     warnings.append(
@@ -831,23 +805,18 @@ class GreetingParser(CustomParser):
                         if posting is not None:
                             postings_b.append(posting)
                     except TimeoutException:
-                        warnings.append(
-                            f"greeting: detail timeout: {job_url}"
-                        )
+                        warnings.append(f"greeting: detail timeout: {job_url}")
                     except HTTPStatusError as exc:
                         warnings.append(
                             f"greeting: detail HTTP"
                             f" {exc.response.status_code}: {job_url}"
                         )
                     except Exception as exc:
-                        warnings.append(
-                            f"greeting: detail error {job_url}: {exc}"
-                        )
+                        warnings.append(f"greeting: detail error {job_url}: {exc}")
 
         except Exception as exc:
             msg = (
-                f"greeting: unexpected error"
-                f" company_id={source.company_id}: {exc}"
+                f"greeting: unexpected error" f" company_id={source.company_id}: {exc}"
             )
             log.warning(msg)
             return AdapterResult(
@@ -861,9 +830,7 @@ class GreetingParser(CustomParser):
             parsed=len(postings_b),
             selected=len(postings_b),
         )
-        return AdapterResult(
-            postings=postings_b, warnings=warnings, source_stats=stats
-        )
+        return AdapterResult(postings=postings_b, warnings=warnings, source_stats=stats)
 
 
 async def greeting_preflight(source: OfficialCompanySource) -> dict:
@@ -978,9 +945,7 @@ async def greeting_preflight(source: OfficialCompanySource) -> dict:
                             "title": posting.title,
                             "employment_type": posting.employment_type,
                             "deadline": (
-                                str(posting.deadline)
-                                if posting.deadline
-                                else None
+                                str(posting.deadline) if posting.deadline else None
                             ),
                             "location": posting.location,
                             "source_external_id": posting.source_external_id,

@@ -163,9 +163,7 @@ def _build_posting(
         location=item.get("workingArea") or None,
         experience_level=_experience_level(item.get("recruitType") or ""),
         employment_type=_employment_type(item.get("workingType") or ""),
-        posted_at=(
-            _parse_posted_at(item.get("start"))
-        ),
+        posted_at=(_parse_posted_at(item.get("start"))),
         deadline=_parse_date(item.get("end")),
         description=None,
     )
@@ -235,9 +233,7 @@ class SkCareersParser(CustomParser):
                 )
                 r.raise_for_status()
         except Exception as exc:
-            warnings.append(
-                f"SK_CAREERS list failed [{config.corp_code}]: {exc}"
-            )
+            warnings.append(f"SK_CAREERS list failed [{config.corp_code}]: {exc}")
             return AdapterResult(
                 postings=[],
                 warnings=warnings,

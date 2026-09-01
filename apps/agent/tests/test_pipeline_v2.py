@@ -260,13 +260,19 @@ async def test_stale_filter_uses_lookback_days(monkeypatch):
 
     # collect_date=2026-07-02, lookback_days=7 → cutoff=2026-06-25
     recent = RawJobPosting(
-        source="mock", source_url="https://mock.local/jobs/r",
-        company_name="회사", title="최신 공고", deadline=_FUTURE,
+        source="mock",
+        source_url="https://mock.local/jobs/r",
+        company_name="회사",
+        title="최신 공고",
+        deadline=_FUTURE,
         posted_at=datetime(2026, 7, 1, 9, 0, 0),  # after cutoff → kept
     )
     old = RawJobPosting(
-        source="mock", source_url="https://mock.local/jobs/o",
-        company_name="회사2", title="오래된 공고", deadline=_FUTURE,
+        source="mock",
+        source_url="https://mock.local/jobs/o",
+        company_name="회사2",
+        title="오래된 공고",
+        deadline=_FUTURE,
         posted_at=datetime(2026, 6, 20, 9, 0, 0),  # before 2026-06-25 → stale
     )
     mock_fetch = AsyncMock(return_value=AdapterResult(postings=[recent, old]))
@@ -317,7 +323,7 @@ async def test_truncated_count_no_double_counting_with_filtered(monkeypatch):
         MockF.return_value.source_name = "fixture"
         resp = await DailyCollectionService().collect(_request(options=options))
 
-    assert resp.stats.filtered_count == 2   # expired only
+    assert resp.stats.filtered_count == 2  # expired only
     assert resp.stats.truncated_count == 2  # 5 valid - 3 cap
     assert resp.stats.final_count == 3
     # No double counting: filtered + truncated + final = discovered
@@ -390,8 +396,10 @@ async def test_stale_rescued_when_deadline_within_window(monkeypatch):
     # collect_date=2026-07-02, deadline_within_days=14 → horizon=2026-07-16
     # deadline=2026-07-10 ≤ 2026-07-16 → rescued despite old posted_at
     rescued = RawJobPosting(
-        source="mock", source_url="https://mock.local/jobs/rescued",
-        company_name="회사A", title="마감임박 공고",
+        source="mock",
+        source_url="https://mock.local/jobs/rescued",
+        company_name="회사A",
+        title="마감임박 공고",
         posted_at=datetime(2026, 5, 1, 9, 0, 0),
         deadline=date(2026, 7, 10),
     )
@@ -416,8 +424,10 @@ async def test_stale_not_rescued_when_deadline_beyond_window(monkeypatch):
     # collect_date=2026-07-02, deadline_within_days=14 → horizon=2026-07-16
     # _FUTURE=2026-07-20 > 2026-07-16 → not rescued → stale
     stale = RawJobPosting(
-        source="mock", source_url="https://mock.local/jobs/stale2",
-        company_name="회사B", title="오래된 공고",
+        source="mock",
+        source_url="https://mock.local/jobs/stale2",
+        company_name="회사B",
+        title="오래된 공고",
         posted_at=datetime(2026, 5, 1, 9, 0, 0),
         deadline=_FUTURE,
     )
@@ -440,8 +450,10 @@ async def test_null_posted_at_is_always_kept(monkeypatch):
     monkeypatch.setattr(_USE_REAL, False)
 
     no_date = RawJobPosting(
-        source="mock", source_url="https://mock.local/jobs/no-date",
-        company_name="회사C", title="날짜없는 공고",
+        source="mock",
+        source_url="https://mock.local/jobs/no-date",
+        company_name="회사C",
+        title="날짜없는 공고",
         posted_at=None,
         deadline=None,
     )
@@ -454,5 +466,3 @@ async def test_null_posted_at_is_always_kept(monkeypatch):
 
     assert resp.stats.filtered_count == 0
     assert resp.stats.final_count == 1
-
-

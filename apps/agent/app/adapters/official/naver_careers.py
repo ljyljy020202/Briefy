@@ -107,8 +107,12 @@ def _parse_datetime(value: str | None) -> datetime | None:
     if m:
         try:
             return datetime(
-                int(m.group(1)), int(m.group(2)), int(m.group(3)),
-                int(m.group(4)), int(m.group(5)), int(m.group(6)),
+                int(m.group(1)),
+                int(m.group(2)),
+                int(m.group(3)),
+                int(m.group(4)),
+                int(m.group(5)),
+                int(m.group(6)),
             )
         except ValueError:
             pass
@@ -164,6 +168,7 @@ def _parse_config(config_json: str | None) -> _NaverConfig:
 
 
 # ── List item parsing ─────────────────────────────────────────────────────────
+
 
 def _parse_roles(class_cd: str | None, sub_job_cd: str | None) -> list[str]:
     """Return [classCdNm, subJobCdNm] with duplicates and blanks removed.
@@ -233,10 +238,9 @@ def _parse_list_item(item: dict) -> _ListItem | None:
 
         # dates
         posted_at = _parse_datetime(item.get("staYmdTime"))
-        deadline = (
-            _parse_date_from_string(item.get("endYmdTime"))
-            or _parse_date_from_ymd(item.get("endYmd"))
-        )
+        deadline = _parse_date_from_string(
+            item.get("endYmdTime")
+        ) or _parse_date_from_ymd(item.get("endYmd"))
 
         # location from workAreaCd (code, not name — map via lookup table)
         area_cd = str(item.get("workAreaCd", "")).strip()
@@ -270,21 +274,25 @@ def _parse_list_item(item: dict) -> _ListItem | None:
 # ── Detail page parsing ───────────────────────────────────────────────────────
 
 # Section headings that indicate required qualifications (not preferred/optional)
-_REQUIRED_SECTION_HEADINGS: frozenset[str] = frozenset({
-    "Required Skills",
-    "필요 역량",
-    "자격 요건",
-    "필수 요건",
-    "지원 자격",
-    "What You'll Do",  # contains tasks — may include year mentions
-})
+_REQUIRED_SECTION_HEADINGS: frozenset[str] = frozenset(
+    {
+        "Required Skills",
+        "필요 역량",
+        "자격 요건",
+        "필수 요건",
+        "지원 자격",
+        "What You'll Do",  # contains tasks — may include year mentions
+    }
+)
 
-_PREFERRED_SECTION_HEADINGS: frozenset[str] = frozenset({
-    "Preferred Skills",
-    "우대 사항",
-    "우대사항",
-    "우대 조건",
-})
+_PREFERRED_SECTION_HEADINGS: frozenset[str] = frozenset(
+    {
+        "Preferred Skills",
+        "우대 사항",
+        "우대사항",
+        "우대 조건",
+    }
+)
 
 
 @dataclass

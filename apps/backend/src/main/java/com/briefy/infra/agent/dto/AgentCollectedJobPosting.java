@@ -19,4 +19,5 @@ public record AgentCollectedJobPosting(
     String contentHash,
     String sourceExternalId,
     String sourceRecordKey,
-    String canonicalFingerprint) {}
+    String canonicalFingerprint,
+    Boolean descriptionTruncated) {}

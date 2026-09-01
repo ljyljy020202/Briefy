@@ -32,9 +32,16 @@ def normalize_company_name(name: str) -> str:
     """
     normalized = re.sub(r"\s+", " ", name).strip().lower()
     _SUFFIXES = [
-        "(주)", "주식회사",
-        " co.", " co,", " corp.", " corp,",
-        " inc.", " inc,", " ltd.", " ltd,",
+        "(주)",
+        "주식회사",
+        " co.",
+        " co,",
+        " corp.",
+        " corp,",
+        " inc.",
+        " inc,",
+        " ltd.",
+        " ltd,",
     ]
     for suffix in _SUFFIXES:
         normalized = normalized.replace(suffix, "")
@@ -79,6 +86,49 @@ def compute_content_hash(
     # Cap description contribution so minor edits don't invalidate the hash
     desc_str = (description or "").strip()[:500]
     raw = f"{normalized_company}|{normalized_title}|{deadline_str}|{desc_str}"
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
+def compute_analysis_input_hash(
+    title: str,
+    description: str | None,
+    roles: list[str],
+    experience_level: str | None,
+    employment_type: str | None,
+    description_truncated: bool | None,
+) -> str:
+    """분류 입력 스냅샷의 SHA-256 해시 (64-char hex).
+
+    Spring이 권위를 가진다 — 이 함수는 Python 측 계약 검증과
+    교차 언어 fixture 테스트에 사용한다.
+
+    정규화 규칙:
+    - 문자열: None → "", lowercase, 연속 whitespace → 공백 1개, strip
+    - roles 배열: 각 요소 정규화 후 알파벳순 정렬, "," 연결
+    - description_truncated: None → "?", True → "1", False → "0"
+    - 수집 시각, 소스 식별자 등 의미 없는 시각 변화는 포함하지 않는다.
+
+    입력 전처리 방식 변경은 classifierVersion 갱신 대상이다.
+    """
+
+    def _norm(s: str | None) -> str:
+        if not s:
+            return ""
+        return re.sub(r"\s+", " ", s).strip().lower()
+
+    title_n = _norm(title)
+    desc_n = _norm(description)
+    has_desc = "1" if (description and description.strip()) else "0"
+    roles_n = ",".join(sorted(_norm(r) for r in roles if r and r.strip()))
+    exp_n = _norm(experience_level)
+    emp_n = _norm(employment_type)
+    trunc = (
+        "?"
+        if description_truncated is None
+        else ("1" if description_truncated else "0")
+    )
+
+    raw = f"{title_n}|{desc_n}|{roles_n}|{exp_n}|{emp_n}|{has_desc}|{trunc}"
     return hashlib.sha256(raw.encode()).hexdigest()
 
 

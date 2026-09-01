@@ -9,11 +9,14 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.briefy.config.BriefingProperties;
+import com.briefy.config.ClassificationMode;
+import com.briefy.config.ClassificationProperties;
 import com.briefy.domain.briefing.entity.BriefingJob;
 import com.briefy.domain.briefing.entity.BriefingReport;
 import com.briefy.domain.briefing.repository.BriefingArticleRepository;
 import com.briefy.domain.briefing.repository.BriefingJobRepository;
 import com.briefy.domain.briefing.repository.BriefingReportRepository;
+import com.briefy.domain.candidatepool.repository.JobPostingAnalysisRepository;
 import com.briefy.domain.candidatepool.service.CandidatePoolService;
 import com.briefy.domain.preference.repository.UserBriefingPreferenceRepository;
 import com.briefy.domain.user.repository.UserRepository;
@@ -54,11 +57,17 @@ class BriefingTransactionBoundaryTest {
   @Mock private CandidatePoolService candidatePoolService;
   @Mock private UserRepository userRepository;
   @Mock private BriefingJobPersistenceService briefingJobPersistenceService;
+  @Mock private JobPostingAnalysisRepository jobPostingAnalysisRepository;
 
   private BriefingService briefingService;
 
   private static final Long USER_ID = 1L;
   private static final BriefingProperties BRIEFING_PROPS = new BriefingProperties(0, 0, 3);
+  private static final ClassificationProperties CLASSIFICATION_PROPS =
+      new ClassificationProperties(
+          ClassificationMode.OFF,
+          "1.0.0",
+          new ClassificationProperties.Worker(60000, 100, 600, 5, 2, 90, 700, 5, 60));
 
   @BeforeEach
   void setUp() {
@@ -72,7 +81,9 @@ class BriefingTransactionBoundaryTest {
             candidatePoolService,
             userRepository,
             briefingJobPersistenceService,
-            BRIEFING_PROPS);
+            BRIEFING_PROPS,
+            jobPostingAnalysisRepository,
+            CLASSIFICATION_PROPS);
 
     when(briefingArticleRepository.findRecentExposuresByUserId(any(), any())).thenReturn(List.of());
     when(userBriefingPreferenceRepository.findAllByUserIdAndActiveTrue(USER_ID))
