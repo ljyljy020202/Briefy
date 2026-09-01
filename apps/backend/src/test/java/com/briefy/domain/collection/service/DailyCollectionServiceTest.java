@@ -113,7 +113,8 @@ class DailyCollectionServiceTest {
         "a".repeat(64),
         null,
         null,
-        null);
+        null,
+        null); // descriptionTruncated
   }
 
   private AgentCollectionResponse agentResponse(List<AgentCollectedJobPosting> postings) {
@@ -160,7 +161,7 @@ class DailyCollectionServiceTest {
     when(agentClient.triggerDailyCollection(any(), anyInt(), anyInt()))
         .thenReturn(agentResponse(List.of(samplePosting())));
     when(candidatePoolPersistenceService.saveAtomically(any(), any()))
-        .thenReturn(new CandidatePoolUpsertResult(1, 1, 0));
+        .thenReturn(CandidatePoolUpsertResult.of(1, 1, 0));
 
     DailyCollectionResult result =
         dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
@@ -216,7 +217,7 @@ class DailyCollectionServiceTest {
     when(agentClient.triggerDailyCollection(captor.capture(), anyInt(), anyInt()))
         .thenReturn(agentResponse(List.of()));
     when(candidatePoolPersistenceService.saveAtomically(any(), any()))
-        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+        .thenReturn(CandidatePoolUpsertResult.of(0, 0, 0));
 
     dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
 
@@ -240,7 +241,7 @@ class DailyCollectionServiceTest {
     ArgumentCaptor<List<CollectedJobPostingData>> postingCaptor =
         ArgumentCaptor.forClass(List.class);
     when(candidatePoolPersistenceService.saveAtomically(postingCaptor.capture(), eq(TEST_DATE)))
-        .thenReturn(new CandidatePoolUpsertResult(1, 1, 0));
+        .thenReturn(CandidatePoolUpsertResult.of(1, 1, 0));
 
     dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
 
@@ -264,7 +265,7 @@ class DailyCollectionServiceTest {
     when(agentClient.triggerDailyCollection(captor.capture(), anyInt(), anyInt()))
         .thenReturn(agentResponse(List.of()));
     when(candidatePoolPersistenceService.saveAtomically(any(), any()))
-        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+        .thenReturn(CandidatePoolUpsertResult.of(0, 0, 0));
 
     dailyCollectionService.triggerDailyCollection(TEST_DATE, null);
 
@@ -281,7 +282,7 @@ class DailyCollectionServiceTest {
     when(agentClient.triggerDailyCollection(any(), anyInt(), anyInt()))
         .thenReturn(agentResponse(List.of()));
     when(candidatePoolPersistenceService.saveAtomically(any(), any()))
-        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+        .thenReturn(CandidatePoolUpsertResult.of(0, 0, 0));
 
     DailyCollectionResult result =
         dailyCollectionService.triggerScheduledDailyCollection(TEST_DATE);
@@ -315,7 +316,7 @@ class DailyCollectionServiceTest {
     when(agentClient.triggerDailyCollection(captor.capture(), anyInt(), anyInt()))
         .thenReturn(agentResponse(List.of()));
     when(candidatePoolPersistenceService.saveAtomically(any(), any()))
-        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+        .thenReturn(CandidatePoolUpsertResult.of(0, 0, 0));
 
     dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
 
@@ -351,7 +352,7 @@ class DailyCollectionServiceTest {
     when(agentClient.triggerDailyCollection(captor.capture(), anyInt(), anyInt()))
         .thenReturn(agentResponse(List.of()));
     when(candidatePoolPersistenceService.saveAtomically(any(), any()))
-        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+        .thenReturn(CandidatePoolUpsertResult.of(0, 0, 0));
 
     dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
 
@@ -388,7 +389,7 @@ class DailyCollectionServiceTest {
     when(agentClient.triggerDailyCollection(captor.capture(), anyInt(), anyInt()))
         .thenReturn(agentResponse(List.of()));
     when(candidatePoolPersistenceService.saveAtomically(any(), any()))
-        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+        .thenReturn(CandidatePoolUpsertResult.of(0, 0, 0));
 
     dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
 
@@ -406,7 +407,7 @@ class DailyCollectionServiceTest {
     when(agentClient.triggerDailyCollection(any(), anyInt(), anyInt()))
         .thenReturn(agentResponse(List.of()));
     when(candidatePoolPersistenceService.saveAtomically(any(), any()))
-        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+        .thenReturn(CandidatePoolUpsertResult.of(0, 0, 0));
 
     DailyCollectionResult result =
         dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
@@ -438,7 +439,7 @@ class DailyCollectionServiceTest {
     when(agentClient.triggerDailyCollection(captor.capture(), anyInt(), anyInt()))
         .thenReturn(agentResponse(List.of()));
     when(candidatePoolPersistenceService.saveAtomically(any(), any()))
-        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+        .thenReturn(CandidatePoolUpsertResult.of(0, 0, 0));
 
     dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
 
@@ -472,7 +473,7 @@ class DailyCollectionServiceTest {
     when(agentClient.triggerDailyCollection(captor.capture(), anyInt(), anyInt()))
         .thenReturn(agentResponse(List.of()));
     when(candidatePoolPersistenceService.saveAtomically(any(), any()))
-        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+        .thenReturn(CandidatePoolUpsertResult.of(0, 0, 0));
 
     dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
 
@@ -499,7 +500,7 @@ class DailyCollectionServiceTest {
     when(agentClient.triggerDailyCollection(captor.capture(), anyInt(), anyInt()))
         .thenReturn(agentResponse(List.of()));
     when(candidatePoolPersistenceService.saveAtomically(any(), any()))
-        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+        .thenReturn(CandidatePoolUpsertResult.of(0, 0, 0));
 
     dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
 
@@ -534,7 +535,7 @@ class DailyCollectionServiceTest {
     when(agentClient.triggerDailyCollection(captor.capture(), anyInt(), anyInt()))
         .thenReturn(agentResponse(List.of()));
     when(candidatePoolPersistenceService.saveAtomically(any(), any()))
-        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+        .thenReturn(CandidatePoolUpsertResult.of(0, 0, 0));
 
     dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
 
@@ -567,7 +568,7 @@ class DailyCollectionServiceTest {
     when(agentClient.triggerDailyCollection(captor.capture(), anyInt(), anyInt()))
         .thenReturn(agentResponse(List.of()));
     when(candidatePoolPersistenceService.saveAtomically(any(), any()))
-        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+        .thenReturn(CandidatePoolUpsertResult.of(0, 0, 0));
 
     dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
 
@@ -602,7 +603,7 @@ class DailyCollectionServiceTest {
     when(agentClient.triggerDailyCollection(captor.capture(), anyInt(), anyInt()))
         .thenReturn(agentResponse(List.of()));
     when(candidatePoolPersistenceService.saveAtomically(any(), any()))
-        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+        .thenReturn(CandidatePoolUpsertResult.of(0, 0, 0));
 
     dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
 
@@ -635,7 +636,7 @@ class DailyCollectionServiceTest {
     when(agentClient.triggerDailyCollection(captor.capture(), anyInt(), anyInt()))
         .thenReturn(agentResponse(List.of()));
     when(candidatePoolPersistenceService.saveAtomically(any(), any()))
-        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+        .thenReturn(CandidatePoolUpsertResult.of(0, 0, 0));
 
     dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
 
@@ -664,7 +665,7 @@ class DailyCollectionServiceTest {
     when(agentClient.triggerDailyCollection(captor.capture(), anyInt(), anyInt()))
         .thenReturn(agentResponse(List.of()));
     when(candidatePoolPersistenceService.saveAtomically(any(), any()))
-        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+        .thenReturn(CandidatePoolUpsertResult.of(0, 0, 0));
 
     dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
 
@@ -683,7 +684,7 @@ class DailyCollectionServiceTest {
     when(agentClient.triggerDailyCollection(any(), anyInt(), anyInt()))
         .thenReturn(agentResponse(List.of()));
     when(candidatePoolPersistenceService.saveAtomically(any(), any()))
-        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+        .thenReturn(CandidatePoolUpsertResult.of(0, 0, 0));
 
     dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
 
@@ -718,7 +719,7 @@ class DailyCollectionServiceTest {
     when(agentClient.triggerDailyCollection(captor.capture(), anyInt(), anyInt()))
         .thenReturn(agentResponse(List.of()));
     when(candidatePoolPersistenceService.saveAtomically(any(), any()))
-        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+        .thenReturn(CandidatePoolUpsertResult.of(0, 0, 0));
 
     dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
 
@@ -758,7 +759,7 @@ class DailyCollectionServiceTest {
     when(agentClient.triggerDailyCollection(captor.capture(), anyInt(), anyInt()))
         .thenReturn(agentResponse(List.of()));
     when(candidatePoolPersistenceService.saveAtomically(any(), any()))
-        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+        .thenReturn(CandidatePoolUpsertResult.of(0, 0, 0));
 
     dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
 
@@ -794,7 +795,7 @@ class DailyCollectionServiceTest {
     when(agentClient.triggerDailyCollection(captor.capture(), anyInt(), anyInt()))
         .thenReturn(agentResponse(List.of()));
     when(candidatePoolPersistenceService.saveAtomically(any(), any()))
-        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+        .thenReturn(CandidatePoolUpsertResult.of(0, 0, 0));
 
     dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
 
@@ -828,7 +829,7 @@ class DailyCollectionServiceTest {
     when(agentClient.triggerDailyCollection(captor.capture(), anyInt(), anyInt()))
         .thenReturn(agentResponse(List.of()));
     when(candidatePoolPersistenceService.saveAtomically(any(), any()))
-        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+        .thenReturn(CandidatePoolUpsertResult.of(0, 0, 0));
 
     dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
 
@@ -868,7 +869,7 @@ class DailyCollectionServiceTest {
     when(agentClient.triggerDailyCollection(captor.capture(), anyInt(), anyInt()))
         .thenReturn(agentResponse(List.of()));
     when(candidatePoolPersistenceService.saveAtomically(any(), any()))
-        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+        .thenReturn(CandidatePoolUpsertResult.of(0, 0, 0));
 
     dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
 
@@ -889,7 +890,7 @@ class DailyCollectionServiceTest {
     when(agentClient.triggerDailyCollection(any(), anyInt(), anyInt()))
         .thenReturn(agentResponse(List.of()));
     when(candidatePoolPersistenceService.saveAtomically(any(), any()))
-        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+        .thenReturn(CandidatePoolUpsertResult.of(0, 0, 0));
 
     dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
 
@@ -924,7 +925,7 @@ class DailyCollectionServiceTest {
     when(agentClient.triggerDailyCollection(captor.capture(), anyInt(), anyInt()))
         .thenReturn(agentResponse(List.of()));
     when(candidatePoolPersistenceService.saveAtomically(any(), any()))
-        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+        .thenReturn(CandidatePoolUpsertResult.of(0, 0, 0));
 
     svc.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
 
@@ -956,7 +957,7 @@ class DailyCollectionServiceTest {
             List.of("warn1"));
     when(agentClient.triggerDailyCollection(any(), anyInt(), anyInt())).thenReturn(resp);
     when(candidatePoolPersistenceService.saveAtomically(any(), any()))
-        .thenReturn(new CandidatePoolUpsertResult(20, 20, 8));
+        .thenReturn(CandidatePoolUpsertResult.of(20, 20, 8));
 
     DailyCollectionResult result =
         dailyCollectionService.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));

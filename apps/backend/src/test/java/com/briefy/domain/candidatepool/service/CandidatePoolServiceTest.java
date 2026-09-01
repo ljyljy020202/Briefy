@@ -2,6 +2,7 @@ package com.briefy.domain.candidatepool.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -10,15 +11,18 @@ import static org.mockito.Mockito.when;
 import com.briefy.domain.candidatepool.dto.CandidatePoolUpsertResult;
 import com.briefy.domain.candidatepool.dto.CollectedJobPostingData;
 import com.briefy.domain.candidatepool.entity.JobPosting;
+import com.briefy.domain.candidatepool.entity.JobPostingAnalysis;
 import com.briefy.domain.candidatepool.entity.JobPostingSource;
+import com.briefy.domain.candidatepool.entity.analysis.ClassificationStatus;
+import com.briefy.domain.candidatepool.repository.JobPostingAnalysisRepository;
 import com.briefy.domain.candidatepool.repository.JobPostingRepository;
 import com.briefy.domain.candidatepool.repository.JobPostingSourceRepository;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -27,10 +31,27 @@ class CandidatePoolServiceTest {
 
   @Mock private JobPostingRepository jobPostingRepository;
   @Mock private JobPostingSourceRepository jobPostingSourceRepository;
+  @Mock private JobPostingAnalysisRepository jobPostingAnalysisRepository;
 
-  @InjectMocks private CandidatePoolService candidatePoolService;
+  private CandidatePoolService candidatePoolService;
 
   private static final LocalDate COLLECTED_DATE = LocalDate.of(2026, 6, 30);
+  private static final String CLASSIFIER_VERSION = "1.0.0";
+
+  @BeforeEach
+  void setUp() {
+    candidatePoolService =
+        new CandidatePoolService(
+            jobPostingRepository, jobPostingSourceRepository,
+            jobPostingAnalysisRepository, CLASSIFIER_VERSION);
+    // 분석 관련 기본 stub — 기존 테스트에서 분석 로직을 무시할 수 있도록 lenient 설정
+    lenient()
+        .when(jobPostingAnalysisRepository.findByJobPostingId(any()))
+        .thenReturn(Optional.empty());
+    lenient()
+        .when(jobPostingAnalysisRepository.save(any(JobPostingAnalysis.class)))
+        .thenAnswer(inv -> inv.getArgument(0));
+  }
 
   /** Creates CollectedJobPostingData with no Agent-provided keys (all null). */
   private CollectedJobPostingData data(String url, String contentHash) {
@@ -47,6 +68,7 @@ class CandidatePoolServiceTest {
         "정규직",
         "신입",
         contentHash,
+        null,
         null,
         null,
         null,
@@ -85,6 +107,8 @@ class CandidatePoolServiceTest {
     assertThat(result.collectedCount()).isEqualTo(1);
     assertThat(result.savedCount()).isEqualTo(1);
     assertThat(result.duplicateCount()).isEqualTo(0);
+    assertThat(result.newIds()).hasSize(1);
+    assertThat(result.updatedIds()).isEmpty();
     verify(jobPostingRepository).save(any(JobPosting.class));
   }
 
@@ -125,6 +149,7 @@ class CandidatePoolServiceTest {
             null,
             null,
             "newhash",
+            null,
             null,
             null,
             null,
@@ -174,7 +199,8 @@ class CandidatePoolServiceTest {
             null,
             null,
             null,
-            canonicalFingerprint);
+            canonicalFingerprint,
+            null);
 
     CandidatePoolUpsertResult result =
         candidatePoolService.upsertJobPostings(List.of(incoming), COLLECTED_DATE);
@@ -187,16 +213,13 @@ class CandidatePoolServiceTest {
 
   @Test
   void upsertJobPostings_nullCanonicalFingerprint_skipsFingerprintLookup() {
-    // When canonicalFingerprint is null, the fingerprint lookup step is skipped entirely;
-    // only URL-based canonical matching runs.
     String url = "https://example.com/job/4b";
     JobPosting existing = existingPosting(url);
 
     stubSourceNotFound("원티드", url);
-    // findFirstByCanonicalFingerprint must NOT be called (no stub → strict mode would catch it)
     when(jobPostingRepository.findFirstByUrl(url)).thenReturn(Optional.of(existing));
 
-    CollectedJobPostingData incoming = data(url, "somehash"); // canonicalFingerprint = null
+    CollectedJobPostingData incoming = data(url, "somehash");
 
     CandidatePoolUpsertResult result =
         candidatePoolService.upsertJobPostings(List.of(incoming), COLLECTED_DATE);
@@ -223,7 +246,8 @@ class CandidatePoolServiceTest {
             null,
             "hash5a",
             null,
-            agentKey, // Agent-provided key used directly
+            agentKey,
+            null,
             null,
             null);
 
@@ -234,7 +258,6 @@ class CandidatePoolServiceTest {
 
     candidatePoolService.upsertJobPostings(List.of(incoming), COLLECTED_DATE);
 
-    // The Agent-provided key (not a recomputed one) must be passed to the repository lookup.
     verify(jobPostingSourceRepository).findBySourceRecordKey(agentKey);
   }
 
@@ -243,7 +266,6 @@ class CandidatePoolServiceTest {
     CollectedJobPostingData newPosting = data("https://example.com/job/5", "hash5");
     CollectedJobPostingData sourceDup = data("https://example.com/job/6", "hash6");
 
-    // fingerprintDup has an explicit canonicalFingerprint so the fingerprint lookup fires.
     CollectedJobPostingData fingerprintDup =
         new CollectedJobPostingData(
             "백엔드 개발자",
@@ -261,21 +283,19 @@ class CandidatePoolServiceTest {
             null,
             null,
             null,
-            "fingerprint7");
+            "fingerprint7",
+            null);
 
-    // new posting: no source, no canonical
     stubSourceNotFound("원티드", "https://example.com/job/5");
     when(jobPostingRepository.findFirstByUrl("https://example.com/job/5"))
         .thenReturn(Optional.empty());
     when(jobPostingRepository.save(any(JobPosting.class))).thenAnswer(inv -> inv.getArgument(0));
 
-    // source dup: exact source record found
     String sourceKey6 =
         CandidatePoolService.buildSourceRecordKey("원티드", null, "https://example.com/job/6");
     when(jobPostingSourceRepository.findBySourceRecordKey(sourceKey6))
         .thenReturn(Optional.of(buildMockSource()));
 
-    // fingerprint dup: no source record, but canonical by canonicalFingerprint
     stubSourceNotFound("원티드", "https://example.com/job/7");
     when(jobPostingRepository.findFirstByCanonicalFingerprint("fingerprint7"))
         .thenReturn(Optional.of(existingPosting("https://example.com/other")));
@@ -298,6 +318,9 @@ class CandidatePoolServiceTest {
     assertThat(result.collectedCount()).isEqualTo(0);
     assertThat(result.savedCount()).isEqualTo(0);
     assertThat(result.duplicateCount()).isEqualTo(0);
+    assertThat(result.newIds()).isEmpty();
+    assertThat(result.updatedIds()).isEmpty();
+    assertThat(result.touchedIds()).isEmpty();
     verify(jobPostingRepository, never()).save(any());
   }
 
@@ -320,9 +343,9 @@ class CandidatePoolServiceTest {
             null,
             null,
             null,
+            null,
             null);
 
-    // No source or fingerprint lookup when both url and sourceRecordKey are null
     when(jobPostingRepository.save(any(JobPosting.class))).thenAnswer(inv -> inv.getArgument(0));
 
     CandidatePoolUpsertResult result =
@@ -359,7 +382,6 @@ class CandidatePoolServiceTest {
 
     assertThat(result).hasSize(1);
     assertThat(result.get(0).getCompany()).isEqualTo("카카오");
-    // fixture sources are excluded; collected_date window is NOT passed
     verify(jobPostingRepository)
         .findEligibleJobPostingsForBriefing(COLLECTED_DATE, List.of("fixture"));
   }
@@ -455,6 +477,7 @@ class CandidatePoolServiceTest {
         null,
         null,
         null,
+        null,
         null);
   }
 
@@ -464,13 +487,13 @@ class CandidatePoolServiceTest {
         "네이버",
         "원티드",
         url,
-        null, // location null
+        null,
         null,
         "기존 설명",
-        null, // roles null
         null,
-        null, // employmentType null
-        null, // experienceLevel null
+        null,
+        null,
+        null,
         "oldhash",
         LocalDate.of(2026, 6, 1),
         null);
@@ -498,9 +521,8 @@ class CandidatePoolServiceTest {
   @Test
   void upsertJobPostings_canonicalByUrl_doesNotOverwriteExistingRolesWithNull() {
     String url = "https://example.com/job/enrich2";
-    JobPosting existing = existingPosting(url); // has "기존 설명" but no roles
+    JobPosting existing = existingPosting(url);
 
-    // Override: set existing roles to a real value
     CollectedJobPostingData seedData =
         dataWithMetadata(url, "hash_seed", "[\"Backend\"]", "신입", "정규직", "서울");
     stubSourceNotFound("원티드", url);
@@ -508,7 +530,6 @@ class CandidatePoolServiceTest {
     candidatePoolService.upsertJobPostings(List.of(seedData), COLLECTED_DATE);
     assertThat(existing.getRoles()).isEqualTo("[\"Backend\"]");
 
-    // Now re-collect with null roles — existing roles must survive
     CollectedJobPostingData nullRoles = dataWithMetadata(url, "hash2", null, null, null, null);
     when(jobPostingSourceRepository.findBySourceRecordKey(any())).thenReturn(Optional.empty());
     when(jobPostingRepository.findFirstByUrl(url)).thenReturn(Optional.of(existing));
@@ -519,7 +540,6 @@ class CandidatePoolServiceTest {
 
   @Test
   void upsertJobPostings_sameContentHash_stillEnrichesMetadata() {
-    // Even if contentHash is same, metadata should be enriched when null
     String url = "https://example.com/job/enrich3";
     JobPosting existing = postingWithNullMetadata(url);
 
@@ -545,9 +565,6 @@ class CandidatePoolServiceTest {
   }
 
   // ── Cross-language hash fixture ────────────────────────────────────────────
-  // These constants mirror test_identifiers.py::_CROSS_LANG_FIXTURE_*.
-  // Algorithm: SHA-256("{source}|{canonicalized_identifier}", UTF-8) → 64-char hex.
-  // Changing either side without updating the other breaks cross-service dedup.
 
   private static final String CROSS_LANG_URL_KEY =
       "dfcbdeefa29fe693c628dbe93941ba2b10bc58cf8a6ff16f4675577b390ed00e";
@@ -566,6 +583,299 @@ class CandidatePoolServiceTest {
     assertThat(CandidatePoolService.buildSourceRecordKey("점핏", "EXT-007", "https://jumpit.com/j/1"))
         .isEqualTo(CROSS_LANG_EXT_KEY);
   }
+
+  // ── Stage 2: 변경 감지 및 분류 대상 등록 ─────────────────────────────────────
+
+  @Test
+  void sameSource_contentHashChanged_callsUpdateFromSameSource_marksUpdated() {
+    String url = "https://example.com/job/change1";
+    String sourceKey = CandidatePoolService.buildSourceRecordKey("원티드", null, url);
+
+    // 기존 소스: sourceContentHash = "oldhash"
+    JobPosting existingPost = existingPosting(url); // roles=null
+    JobPostingSource existingSource =
+        JobPostingSource.create(
+            existingPost,
+            "원티드",
+            null,
+            url,
+            sourceKey,
+            "oldhash",
+            null,
+            COLLECTED_DATE.minusDays(1));
+    when(jobPostingSourceRepository.findBySourceRecordKey(sourceKey))
+        .thenReturn(Optional.of(existingSource));
+
+    // 수신 데이터: contentHash="newhash", roles 포함
+    CollectedJobPostingData incoming =
+        new CollectedJobPostingData(
+            "백엔드 개발자",
+            "네이버",
+            "원티드",
+            url,
+            "서울",
+            LocalDate.of(2026, 8, 1),
+            "새 공고 설명",
+            "[\"Backend\"]",
+            null,
+            "정규직",
+            "3년 이상",
+            "newhash",
+            null,
+            null,
+            null,
+            null,
+            null);
+
+    // 기존 분석 행 없음 → 새로 PENDING 생성
+    when(jobPostingAnalysisRepository.findByJobPostingId(any())).thenReturn(Optional.empty());
+
+    CandidatePoolUpsertResult result =
+        candidatePoolService.upsertJobPostings(List.of(incoming), COLLECTED_DATE);
+
+    // contentHash 변경 → updateFromSameSource() 경로 → roles 갱신
+    assertThat(existingPost.getRoles()).isEqualTo("[\"Backend\"]");
+    assertThat(existingPost.getExperienceLevel()).isEqualTo("3년 이상");
+    assertThat(existingPost.getContentHash()).isEqualTo("newhash");
+    // 저장 카운트는 duplicate (Step 1 경로)
+    assertThat(result.duplicateCount()).isEqualTo(1);
+    assertThat(result.savedCount()).isEqualTo(0);
+    // 분석 PENDING 생성 확인
+    verify(jobPostingAnalysisRepository).save(any(JobPostingAnalysis.class));
+  }
+
+  @Test
+  void sameSource_contentHashUnchanged_preservesExistingRoles() {
+    String url = "https://example.com/job/change2";
+    String sourceKey = CandidatePoolService.buildSourceRecordKey("원티드", null, url);
+
+    // 기존 소스: sourceContentHash = "samehash"
+    JobPosting existingPost =
+        JobPosting.create(
+            "백엔드 개발자",
+            "네이버",
+            "원티드",
+            url,
+            "서울",
+            null,
+            "기존 설명",
+            "[\"Backend\"]",
+            null,
+            "정규직",
+            "3년 이상",
+            "samehash",
+            COLLECTED_DATE.minusDays(1),
+            null);
+    JobPostingSource existingSource =
+        JobPostingSource.create(
+            existingPost,
+            "원티드",
+            null,
+            url,
+            sourceKey,
+            "samehash",
+            null,
+            COLLECTED_DATE.minusDays(1));
+    when(jobPostingSourceRepository.findBySourceRecordKey(sourceKey))
+        .thenReturn(Optional.of(existingSource));
+
+    // 수신 데이터: contentHash="samehash", roles=null (추출 실패)
+    CollectedJobPostingData incoming =
+        new CollectedJobPostingData(
+            "백엔드 개발자",
+            "네이버",
+            "원티드",
+            url,
+            "서울",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "samehash",
+            null,
+            null,
+            null,
+            null,
+            null);
+
+    candidatePoolService.upsertJobPostings(List.of(incoming), COLLECTED_DATE);
+
+    // null 값으로 기존 유효 roles 덮어쓰지 않음
+    assertThat(existingPost.getRoles()).isEqualTo("[\"Backend\"]");
+  }
+
+  @Test
+  void sameSource_nullDescription_preservesExistingDescription() {
+    String url = "https://example.com/job/desc1";
+    String sourceKey = CandidatePoolService.buildSourceRecordKey("원티드", null, url);
+
+    JobPosting existingPost =
+        JobPosting.create(
+            "백엔드 개발자",
+            "네이버",
+            "원티드",
+            url,
+            "서울",
+            null,
+            "기존 상세 설명",
+            null,
+            null,
+            null,
+            null,
+            "oldhash",
+            COLLECTED_DATE.minusDays(1),
+            null);
+    JobPostingSource existingSource =
+        JobPostingSource.create(
+            existingPost,
+            "원티드",
+            null,
+            url,
+            sourceKey,
+            "oldhash",
+            null,
+            COLLECTED_DATE.minusDays(1));
+    when(jobPostingSourceRepository.findBySourceRecordKey(sourceKey))
+        .thenReturn(Optional.of(existingSource));
+
+    // 수신 데이터: contentHash 변경, description=null (추출 실패)
+    CollectedJobPostingData incoming =
+        new CollectedJobPostingData(
+            "백엔드 개발자", "네이버", "원티드", url, "서울", null, null, null, null, null, null, "newhash", null,
+            null, null, null, null);
+
+    candidatePoolService.upsertJobPostings(List.of(incoming), COLLECTED_DATE);
+
+    // null description으로 기존 설명 덮어쓰지 않음
+    assertThat(existingPost.getDescription()).isEqualTo("기존 상세 설명");
+  }
+
+  @Test
+  void analysisInputHashChanged_triggersReclassification() {
+    String url = "https://example.com/job/analysis1";
+    String sourceKey = CandidatePoolService.buildSourceRecordKey("원티드", null, url);
+
+    JobPosting existingPost =
+        JobPosting.create(
+            "백엔드 개발자",
+            "네이버",
+            "원티드",
+            url,
+            "서울",
+            null,
+            "기존 설명",
+            null,
+            null,
+            null,
+            null,
+            "oldhash",
+            COLLECTED_DATE.minusDays(1),
+            null);
+    JobPostingSource existingSource =
+        JobPostingSource.create(
+            existingPost,
+            "원티드",
+            null,
+            url,
+            sourceKey,
+            "oldhash",
+            null,
+            COLLECTED_DATE.minusDays(1));
+    when(jobPostingSourceRepository.findBySourceRecordKey(sourceKey))
+        .thenReturn(Optional.of(existingSource));
+
+    // 기존 분석 행: 다른 hash로 SUCCEEDED 상태
+    JobPostingAnalysis existingAnalysis =
+        JobPostingAnalysis.pending(null, "old_analysis_hash", CLASSIFIER_VERSION);
+    when(jobPostingAnalysisRepository.findByJobPostingId(any()))
+        .thenReturn(Optional.of(existingAnalysis));
+
+    // 수신 데이터: contentHash 변경, 새 경력 정보 포함 → analysisInputHash 변경 예상
+    CollectedJobPostingData incoming =
+        new CollectedJobPostingData(
+            "백엔드 개발자",
+            "네이버",
+            "원티드",
+            url,
+            "서울",
+            null,
+            "기존 설명",
+            "[\"Backend\"]",
+            null,
+            null,
+            "5년 이상",
+            "newhash",
+            null,
+            null,
+            null,
+            null,
+            null);
+
+    candidatePoolService.upsertJobPostings(List.of(incoming), COLLECTED_DATE);
+
+    // 분석 hash가 변경됨 → resetForNewInput 호출됨 → PENDING 상태 확인
+    assertThat(existingAnalysis.getClassificationStatus()).isEqualTo(ClassificationStatus.PENDING);
+    assertThat(existingAnalysis.getClaimToken()).isNull();
+  }
+
+  @Test
+  void newPosting_registeredAsPending_inNewIds() {
+    CollectedJobPostingData posting = data("https://example.com/job/new1", "hash_new");
+    stubSourceNotFound("원티드", "https://example.com/job/new1");
+    when(jobPostingRepository.findFirstByUrl("https://example.com/job/new1"))
+        .thenReturn(Optional.empty());
+    when(jobPostingRepository.save(any(JobPosting.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    CandidatePoolUpsertResult result =
+        candidatePoolService.upsertJobPostings(List.of(posting), COLLECTED_DATE);
+
+    assertThat(result.newIds()).hasSize(1);
+    assertThat(result.updatedIds()).isEmpty();
+    assertThat(result.touchedIds()).hasSize(1);
+    verify(jobPostingAnalysisRepository).save(any(JobPostingAnalysis.class));
+  }
+
+  @Test
+  void crossSource_nullRoles_doesNotOverwriteExistingRoles() {
+    String originalUrl = "https://wanted.co.kr/job/cross1";
+    String newUrl = "https://jumpit.com/job/cross1";
+    String fp = "fingerprint_cross1";
+
+    JobPosting existingPost =
+        JobPosting.create(
+            "백엔드 개발자",
+            "네이버",
+            "원티드",
+            originalUrl,
+            "서울",
+            null,
+            "기존 설명",
+            "[\"Backend\"]",
+            null,
+            "정규직",
+            "3년 이상",
+            "hash1",
+            COLLECTED_DATE.minusDays(1),
+            null);
+
+    stubSourceNotFound("점핏", newUrl);
+    when(jobPostingRepository.findFirstByCanonicalFingerprint(fp))
+        .thenReturn(Optional.of(existingPost));
+
+    CollectedJobPostingData crossSource =
+        new CollectedJobPostingData(
+            "백엔드 개발자", "네이버", "점핏", newUrl, null, null, null, null, null, null, null, "hash2", null,
+            null, null, fp, null);
+
+    candidatePoolService.upsertJobPostings(List.of(crossSource), COLLECTED_DATE);
+
+    // 교차 소스의 null roles → 기존 roles 보존
+    assertThat(existingPost.getRoles()).isEqualTo("[\"Backend\"]");
+  }
+
+  // ── Cross-language hash fixture ────────────────────────────────────────────
 
   private void stubSourceNotFound(String source, String url) {
     String key = CandidatePoolService.buildSourceRecordKey(source, null, url);

@@ -60,6 +60,13 @@ public enum ErrorCode {
   SOURCE_ALREADY_ACTIVE(HttpStatus.CONFLICT, "Source is already ACTIVE"),
   COMPANY_INACTIVE(HttpStatus.UNPROCESSABLE_ENTITY, "Company is not active"),
 
+  // Classification
+  CLASSIFICATION_CONFLICT(HttpStatus.CONFLICT, "분류 결과가 현재 입력 hash와 충돌합니다. CONFLICT 상태로 저장됩니다."),
+  CLASSIFICATION_STALE_CLAIM(HttpStatus.CONFLICT, "이미 만료되었거나 갱신된 claim token으로 결과를 저장하려 했습니다."),
+  CLASSIFICATION_CONTRACT_VIOLATION(HttpStatus.UNPROCESSABLE_ENTITY, "Agent 분류 응답이 계약을 위반했습니다."),
+  CLASSIFICATION_BACKFILL_LIMIT_EXCEEDED(
+      HttpStatus.BAD_REQUEST, "backfill limit은 1~1000 사이여야 합니다."),
+
   // External
   AGENT_SERVER_ERROR(HttpStatus.BAD_GATEWAY, "Agent server error"),
   DELIVERY_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "Email delivery failed"),
