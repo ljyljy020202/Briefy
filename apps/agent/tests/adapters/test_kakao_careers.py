@@ -52,9 +52,7 @@ _SENIOR_ENG = {
     "locationCodeId": "PANGYO",
     "jobPartName": "테크",
     "jobPart": "TECHNOLOGY",
-    "skillSetList": [
-        {"skillSetType": "Algorithm_ML", "skillSetName": "Algorithm/ML"}
-    ],
+    "skillSetList": [{"skillSetType": "Algorithm_ML", "skillSetName": "Algorithm/ML"}],
     "endDate": None,
     "resumeSubmissionEndDatetime": None,
     "regDate": "2026-08-05T09:46:52",
@@ -111,9 +109,7 @@ _NEWCOMER_CAREER = {
     "locationName": "판교",
     "locationCodeId": "PANGYO",
     "jobPartName": "테크",
-    "skillSetList": [
-        {"skillSetType": "Algorithm_ML", "skillSetName": "Algorithm/ML"}
-    ],
+    "skillSetList": [{"skillSetType": "Algorithm_ML", "skillSetName": "Algorithm/ML"}],
     "endDate": None,
     "resumeSubmissionEndDatetime": None,
     "regDate": "2026-08-01T00:00:00",
@@ -625,15 +621,12 @@ def _source(config_json: str | None = None) -> OfficialCompanySource:
         source_type="OFFICIAL_CAREER",
         source_url="https://careers.kakao.com/jobs",
         adapter_type="CUSTOM",
-        config_json=config_json
-        or '{"parser_key":"KAKAO_CAREERS","max_items":50}',
+        config_json=config_json or '{"parser_key":"KAKAO_CAREERS","max_items":50}',
     )
 
 
 def _profile() -> CompanyProfile:
-    return CompanyProfile(
-        id=4, canonical_name="카카오", normalized_name="카카오"
-    )
+    return CompanyProfile(id=4, canonical_name="카카오", normalized_name="카카오")
 
 
 def _options() -> CollectionOptions:
@@ -894,9 +887,7 @@ def test_parser_registered():
     from app.adapters.official_company import _CUSTOM_REGISTRY_BY_KEY
 
     assert "KAKAO_CAREERS" in _CUSTOM_REGISTRY_BY_KEY
-    assert isinstance(
-        _CUSTOM_REGISTRY_BY_KEY["KAKAO_CAREERS"], KakaoCareersParser
-    )
+    assert isinstance(_CUSTOM_REGISTRY_BY_KEY["KAKAO_CAREERS"], KakaoCareersParser)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -923,13 +914,9 @@ async def test_kakao_live_smoke():
         adapter_type="CUSTOM",
         config_json='{"parser_key":"KAKAO_CAREERS","max_items":5}',
     )
-    profile = CompanyProfile(
-        id=4, canonical_name="카카오", normalized_name="카카오"
-    )
+    profile = CompanyProfile(id=4, canonical_name="카카오", normalized_name="카카오")
 
-    result = await KakaoCareersParser().fetch(
-        src, profile, _options(), _COLLECT_DATE
-    )
+    result = await KakaoCareersParser().fetch(src, profile, _options(), _COLLECT_DATE)
 
     for w in result.warnings:
         print(f"  WARN: {w}")
@@ -949,13 +936,11 @@ async def test_kakao_live_smoke():
             f" | roles={p.roles}"
         )
 
-    assert len(postings) > 0, (
-        f"No postings returned. Warnings: {result.warnings}"
-    )
+    assert len(postings) > 0, f"No postings returned. Warnings: {result.warnings}"
     for p in postings:
-        assert p.source_external_id.startswith("P-"), (
-            f"Affiliate S-id leaked: {p.source_external_id}"
-        )
+        assert p.source_external_id.startswith(
+            "P-"
+        ), f"Affiliate S-id leaked: {p.source_external_id}"
         assert p.title.strip(), "Empty title"
         assert p.source_url.startswith(
             "https://careers.kakao.com/jobs/P-"

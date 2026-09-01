@@ -201,7 +201,8 @@ class BriefingServiceContractTest {
             List.of(),
             List.of(),
             List.of(),
-            List.of());
+            List.of(),
+            null);
 
     AgentCandidateJobPosting posting =
         new AgentCandidateJobPosting(
@@ -320,6 +321,7 @@ class BriefingServiceContractTest {
 
   private AgentMatchEvidence emptyEvidence() {
     return new AgentMatchEvidence(
-        List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of());
+        List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
+        null);
   }
 }

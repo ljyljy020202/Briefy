@@ -117,9 +117,9 @@ async def test_greeting_live_smoke(site: dict) -> None:
 
     # At least the first posting should have structured metadata
     first = postings[0]
-    assert isinstance(first.title, str) and first.title.strip(), (
-        f"{site['company']}: first posting title is empty"
-    )
+    assert (
+        isinstance(first.title, str) and first.title.strip()
+    ), f"{site['company']}: first posting title is empty"
     assert first.roles, (
         f"{site['company']}: first posting has no roles — "
         f"title={first.title!r}, url={first.source_url}"
@@ -133,8 +133,7 @@ async def test_greeting_live_smoke(site: dict) -> None:
         f"title={first.title!r}"
     )
     assert first.location is not None, (
-        f"{site['company']}: first posting has no location — "
-        f"title={first.title!r}"
+        f"{site['company']}: first posting has no location — " f"title={first.title!r}"
     )
 
 

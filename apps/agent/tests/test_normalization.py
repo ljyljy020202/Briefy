@@ -37,12 +37,14 @@ def test_normalize_collapses_internal_whitespace():
 
 
 def test_normalize_trims_optional_string_fields():
-    result = normalize(_raw(
-        employment_type="  정규직  ",
-        experience_level="  신입  ",
-        location="  서울  ",
-        description="  채용합니다.  ",
-    ))
+    result = normalize(
+        _raw(
+            employment_type="  정규직  ",
+            experience_level="  신입  ",
+            location="  서울  ",
+            description="  채용합니다.  ",
+        )
+    )
     assert result.employment_type == "정규직"
     assert result.experience_level == "신입"
     assert result.location == "서울"
@@ -53,12 +55,14 @@ def test_normalize_trims_optional_string_fields():
 
 
 def test_normalize_none_optional_string_fields_stay_none():
-    result = normalize(_raw(
-        employment_type=None,
-        experience_level=None,
-        location=None,
-        description=None,
-    ))
+    result = normalize(
+        _raw(
+            employment_type=None,
+            experience_level=None,
+            location=None,
+            description=None,
+        )
+    )
     assert result.employment_type is None
     assert result.experience_level is None
     assert result.location is None
@@ -275,29 +279,35 @@ def test_normalize_adapter_roles_take_precedence_over_title():
 
 
 def test_normalize_experience_extracted_from_description():
-    result = normalize(_raw(
-        title="백엔드 개발자",
-        experience_level=None,
-        description="백엔드 개발자를 채용합니다. 5년 이상 경력 필수.",
-    ))
+    result = normalize(
+        _raw(
+            title="백엔드 개발자",
+            experience_level=None,
+            description="백엔드 개발자를 채용합니다. 5년 이상 경력 필수.",
+        )
+    )
     assert result.experience_level == "5년 이상"
 
 
 def test_normalize_adapter_experience_takes_precedence_over_description():
-    result = normalize(_raw(
-        experience_level="3년 이상",
-        description="10년 이상 필수.",
-    ))
+    result = normalize(
+        _raw(
+            experience_level="3년 이상",
+            description="10년 이상 필수.",
+        )
+    )
     assert result.experience_level == "3년 이상"
 
 
 def test_normalize_intern_in_experience_level_moves_to_employment_type():
     # Some adapters put "인턴" in experience_level; it should move to employment_type
-    result = normalize(_raw(
-        title="백엔드 인턴",
-        experience_level="인턴",
-        employment_type=None,
-    ))
+    result = normalize(
+        _raw(
+            title="백엔드 인턴",
+            experience_level="인턴",
+            employment_type=None,
+        )
+    )
     assert result.employment_type == "인턴"
     # experience_level should not contain "인턴"
     assert result.experience_level != "인턴"

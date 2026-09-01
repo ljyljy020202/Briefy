@@ -11,6 +11,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.briefy.config.BriefingProperties;
+import com.briefy.config.ClassificationMode;
+import com.briefy.config.ClassificationProperties;
 import com.briefy.domain.briefing.dto.BriefingDetailResponse;
 import com.briefy.domain.briefing.dto.BriefingListItem;
 import com.briefy.domain.briefing.dto.GenerateResult;
@@ -20,6 +22,7 @@ import com.briefy.domain.briefing.repository.BriefingArticleRepository;
 import com.briefy.domain.briefing.repository.BriefingJobRepository;
 import com.briefy.domain.briefing.repository.BriefingReportRepository;
 import com.briefy.domain.candidatepool.entity.JobPosting;
+import com.briefy.domain.candidatepool.repository.JobPostingAnalysisRepository;
 import com.briefy.domain.candidatepool.service.CandidatePoolService;
 import com.briefy.domain.company.entity.Company;
 import com.briefy.domain.preference.entity.BriefingCategory;
@@ -43,8 +46,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
@@ -66,14 +69,37 @@ class BriefingServiceTest {
   @Mock private UserRepository userRepository;
   @Mock private BriefingJobPersistenceService briefingJobPersistenceService;
   @Mock private BriefingProperties briefingProperties;
+  @Mock private JobPostingAnalysisRepository jobPostingAnalysisRepository;
 
-  @InjectMocks private BriefingService briefingService;
+  @Spy
+  private ClassificationProperties classificationProperties =
+      new ClassificationProperties(
+          ClassificationMode.OFF,
+          "1.0.0",
+          new ClassificationProperties.Worker(60000, 100, 600, 5, 2, 90, 700, 5, 60));
+
+  private BriefingService briefingService;
 
   private UserBriefingPreference mockPref;
   private AgentBriefingResponse mockAgentResponse;
 
   @BeforeEach
   void setUp() {
+    briefingService =
+        new BriefingService(
+            briefingJobRepository,
+            briefingReportRepository,
+            briefingArticleRepository,
+            userBriefingPreferenceRepository,
+            agentClient,
+            candidatePoolService,
+            userRepository,
+            briefingJobPersistenceService,
+            briefingProperties,
+            jobPostingAnalysisRepository,
+            classificationProperties);
+
+    when(jobPostingAnalysisRepository.findAllByJobPostingIdIn(any())).thenReturn(List.of());
     when(briefingArticleRepository.findRecentExposuresByUserId(any(), any())).thenReturn(List.of());
 
     // 기본값: 오늘 브리핑 없음, Job 생성 성공, claimForProcessing 성공

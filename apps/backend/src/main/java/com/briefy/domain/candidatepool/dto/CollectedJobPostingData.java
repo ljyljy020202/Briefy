@@ -19,4 +19,5 @@ public record CollectedJobPostingData(
     LocalDateTime publishedAt,
     String sourceRecordKey,
     String sourceExternalId,
-    String canonicalFingerprint) {}
+    String canonicalFingerprint,
+    Boolean descriptionTruncated) {}

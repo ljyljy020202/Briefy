@@ -80,7 +80,8 @@ def _source(config_json: str | None = None) -> OfficialCompanySource:
         source_type="OFFICIAL_CAREER",
         source_url="https://recruit.navercorp.com/rcrt/list.do",
         adapter_type="CUSTOM",
-        config_json=config_json or json.dumps(
+        config_json=config_json
+        or json.dumps(
             {"parser_key": "NAVER_CAREERS", "max_discover": 50, "max_fetch": 20}
         ),
     )
@@ -99,6 +100,7 @@ def _options() -> CollectionOptions:
 
 
 # ── Mock HTTP client ──────────────────────────────────────────────────────────
+
 
 class _MockClient:
     """URL-dispatching mock for httpx.AsyncClient.
@@ -175,6 +177,7 @@ def test_naver_careers_registered():
 
 def test_greeting_still_registered():
     import app.adapters.official.greeting  # noqa: F401
+
     assert "GREETING" in _CUSTOM_REGISTRY_BY_KEY
 
 
@@ -271,7 +274,9 @@ def test_parse_list_item_normal():
     assert item.employment_type == "정규직"
     assert item.location == "분당"
     assert item.deadline == date(2026, 8, 31)
-    assert item.detail_url == "https://recruit.navercorp.com/rcrt/view.do?annoId=30000001"
+    assert (
+        item.detail_url == "https://recruit.navercorp.com/rcrt/view.do?annoId=30000001"
+    )
 
 
 def test_parse_list_item_shinip():
@@ -437,6 +442,7 @@ def test_source_record_key_different_for_different_anno_ids():
 
 def test_normalize_naver_tech_backend():
     from app.adapters.base import RawJobPosting
+
     raw = RawJobPosting(
         source="company_1_custom_naver_careers",
         source_url="https://recruit.navercorp.com/rcrt/view.do?annoId=30000001",
@@ -462,6 +468,7 @@ def test_normalize_naver_tech_backend():
 def test_normalize_intern_from_title():
     """Title contains 인턴 → employment_type becomes 인턴 via normalization."""
     from app.adapters.base import RawJobPosting
+
     raw = RawJobPosting(
         source="company_1_custom_naver_careers",
         source_url="https://recruit.navercorp.com/rcrt/view.do?annoId=30000006",
@@ -479,6 +486,7 @@ def test_normalize_intern_from_title():
 
 def test_normalize_moogwan():
     from app.adapters.base import RawJobPosting
+
     raw = RawJobPosting(
         source="company_1_custom_naver_careers",
         source_url="https://recruit.navercorp.com/rcrt/view.do?annoId=30000003",

@@ -117,7 +117,7 @@ class CollectionJobRetryTest {
     when(agentClient.triggerDailyCollection(any(), anyInt(), anyInt()))
         .thenReturn(successResponse());
     when(candidatePoolPersistenceService.saveAtomically(any(), any()))
-        .thenReturn(new CandidatePoolUpsertResult(0, 0, 0));
+        .thenReturn(CandidatePoolUpsertResult.of(0, 0, 0));
 
     DailyCollectionResult result = svc.retryCollectionJob(JOB_ID);
 

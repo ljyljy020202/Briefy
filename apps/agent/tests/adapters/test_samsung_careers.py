@@ -1013,14 +1013,14 @@ class TestNewSamsungSourceCodes:
         profile = _make_profile(profile_name)
         outer, inner = _make_clients(list_html, *detail_dicts)
         with patch(_PATCH, side_effect=_factory(outer, inner)):
-            return await SamsungCareersParser().fetch(
-                source, profile, _make_options()
-            )
+            return await SamsungCareersParser().fetch(source, profile, _make_options())
 
     async def test_c90_display_happy_path(self) -> None:
         result = await self._fetch(
-            "C90", "삼성디스플레이",
-            _LIST_HTML_DISPLAY, _DETAIL_DISPLAY,
+            "C90",
+            "삼성디스플레이",
+            _LIST_HTML_DISPLAY,
+            _DETAIL_DISPLAY,
         )
         assert len(result.postings) == 1
         p = result.postings[0]
@@ -1030,8 +1030,10 @@ class TestNewSamsungSourceCodes:
 
     async def test_c90_display_roles_preserved(self) -> None:
         result = await self._fetch(
-            "C90", "삼성디스플레이",
-            _LIST_HTML_DISPLAY, _DETAIL_DISPLAY,
+            "C90",
+            "삼성디스플레이",
+            _LIST_HTML_DISPLAY,
+            _DETAIL_DISPLAY,
         )
         roles = result.postings[0].roles
         assert "패널설계" in roles
@@ -1039,17 +1041,17 @@ class TestNewSamsungSourceCodes:
 
     async def test_c90_display_experience_career(self) -> None:
         result = await self._fetch(
-            "C90", "삼성디스플레이",
-            _LIST_HTML_DISPLAY, _DETAIL_DISPLAY,
+            "C90",
+            "삼성디스플레이",
+            _LIST_HTML_DISPLAY,
+            _DETAIL_DISPLAY,
         )
         assert result.postings[0].experience_level == "경력"
 
     async def test_c31_sdi_happy_path(self) -> None:
         list_html = _LIST_HTML_ONE_CARD  # existing fixture, has seq=22828
         detail = {**_DETAIL_SDI_C31}
-        result = await self._fetch(
-            "C31", "삼성SDI", list_html, detail
-        )
+        result = await self._fetch("C31", "삼성SDI", list_html, detail)
         assert len(result.postings) == 1
         p = result.postings[0]
         assert p.company_name == "삼성SDI"
@@ -1058,19 +1060,20 @@ class TestNewSamsungSourceCodes:
     async def test_c31_sdi_dev_role(self) -> None:
         list_html = _LIST_HTML_ONE_CARD
         detail = {**_DETAIL_SDI_C31}
-        result = await self._fetch(
-            "C31", "삼성SDI", list_html, detail
-        )
+        result = await self._fetch("C31", "삼성SDI", list_html, detail)
         # _LIST_HTML_ONE_CARD has role_flag "AI Agent 및 Service Platform 개발"
         roles = result.postings[0].roles
         assert any("AI Agent" in r for r in roles)
 
-    @pytest.mark.parametrize("code,profile_name,exp_comp", [
-        ("E11", "삼성생명", "삼성생명"),
-        ("E21", "삼성화재", "삼성화재"),
-        ("E31", "삼성카드", "삼성카드"),
-        ("E40", "삼성증권", "삼성증권"),
-    ])
+    @pytest.mark.parametrize(
+        "code,profile_name,exp_comp",
+        [
+            ("E11", "삼성생명", "삼성생명"),
+            ("E21", "삼성화재", "삼성화재"),
+            ("E31", "삼성카드", "삼성카드"),
+            ("E40", "삼성증권", "삼성증권"),
+        ],
+    )
     async def test_financial_empty_is_valid(
         self, code: str, profile_name: str, exp_comp: str
     ) -> None:
@@ -1080,9 +1083,7 @@ class TestNewSamsungSourceCodes:
         outer = MagicMock()
         outer.__aenter__ = AsyncMock(return_value=outer)
         outer.__aexit__ = AsyncMock(return_value=False)
-        outer.post = AsyncMock(
-            return_value=_list_response(_LIST_HTML_FINANCE_EMPTY)
-        )
+        outer.post = AsyncMock(return_value=_list_response(_LIST_HTML_FINANCE_EMPTY))
         with patch(_PATCH, return_value=outer):
             result = await SamsungCareersParser().fetch(
                 source, profile, _make_options()
@@ -1115,9 +1116,7 @@ class TestNewSamsungSourceCodes:
     </div>
   </li>
 </ul>"""
-        result = await self._fetch(
-            "E11", "삼성생명", html, _DETAIL_FINANCE_E11
-        )
+        result = await self._fetch("E11", "삼성생명", html, _DETAIL_FINANCE_E11)
         assert len(result.postings) == 1
         p = result.postings[0]
         assert p.company_name == "삼성생명"
@@ -1163,8 +1162,10 @@ class TestNewSamsungSourceCodes:
         # Request C90 but detail returns C31
         detail_wrong = {**_DETAIL_DISPLAY, "compCd": "C31"}
         result = await self._fetch(
-            "C90", "삼성디스플레이",
-            _LIST_HTML_DISPLAY, detail_wrong,
+            "C90",
+            "삼성디스플레이",
+            _LIST_HTML_DISPLAY,
+            detail_wrong,
         )
         assert result.postings == []
         assert any("compCd mismatch" in w for w in result.warnings)
@@ -1196,9 +1197,7 @@ class TestDuplicateSeqnoDedup:
         outer = MagicMock()
         outer.__aenter__ = AsyncMock(return_value=outer)
         outer.__aexit__ = AsyncMock(return_value=False)
-        outer.post = AsyncMock(
-            return_value=_list_response(_LIST_HTML_TWO_SAME_SEQ)
-        )
+        outer.post = AsyncMock(return_value=_list_response(_LIST_HTML_TWO_SAME_SEQ))
 
         inner = MagicMock()
         inner.__aenter__ = AsyncMock(return_value=inner)
@@ -1240,9 +1239,7 @@ class TestPartialDetailFailure:
         outer = MagicMock()
         outer.__aenter__ = AsyncMock(return_value=outer)
         outer.__aexit__ = AsyncMock(return_value=False)
-        outer.post = AsyncMock(
-            return_value=_list_response(_LIST_HTML_TWO_DIFF_SEQ)
-        )
+        outer.post = AsyncMock(return_value=_list_response(_LIST_HTML_TWO_DIFF_SEQ))
 
         inner = MagicMock()
         inner.__aenter__ = AsyncMock(return_value=inner)
@@ -1325,9 +1322,7 @@ class TestSamsungNewSourcesLive:
     async def _run(self, code: str, company: str):
         source = _make_source([code], max_discover=50, max_fetch=2)
         profile = _make_profile(company)
-        result = await SamsungCareersParser().fetch(
-            source, profile, _make_options()
-        )
+        result = await SamsungCareersParser().fetch(source, profile, _make_options())
         print(
             f"\n[{code}] {company}: discovered="
             f"{result.source_stats.discovered if result.source_stats else 0}"
@@ -1344,32 +1339,27 @@ class TestSamsungNewSourcesLive:
         result = await self._run("C90", "삼성디스플레이")
         # API must return HTTP 200 with valid structure (0 postings is OK)
         assert result.source_stats is not None
-        list_fails = [
-            w for w in result.warnings if "listing" in w or "HTTP" in w
-        ]
+        list_fails = [w for w in result.warnings if "listing" in w or "HTTP" in w]
         assert not list_fails, f"C90 list error: {list_fails}"
 
     async def test_live_new_c31_sdi(self) -> None:
         result = await self._run("C31", "삼성SDI")
         assert result.source_stats is not None
-        list_fails = [
-            w for w in result.warnings if "listing" in w or "HTTP" in w
-        ]
+        list_fails = [w for w in result.warnings if "listing" in w or "HTTP" in w]
         assert not list_fails, f"C31 list error: {list_fails}"
 
-    @pytest.mark.parametrize("code,company", [
-        ("E11", "삼성생명"),
-        ("E21", "삼성화재"),
-        ("E31", "삼성카드"),
-        ("E40", "삼성증권"),
-    ])
-    async def test_live_financial_valid_empty(
-        self, code: str, company: str
-    ) -> None:
+    @pytest.mark.parametrize(
+        "code,company",
+        [
+            ("E11", "삼성생명"),
+            ("E21", "삼성화재"),
+            ("E31", "삼성카드"),
+            ("E40", "삼성증권"),
+        ],
+    )
+    async def test_live_financial_valid_empty(self, code: str, company: str) -> None:
         """금융사 0건 응답 = 유효한 빈 응답 (HTTP 오류 아님)."""
         result = await self._run(code, company)
         assert result.source_stats is not None
-        list_fails = [
-            w for w in result.warnings if "listing" in w or "HTTP" in w
-        ]
+        list_fails = [w for w in result.warnings if "listing" in w or "HTTP" in w]
         assert not list_fails, f"{code} list error: {list_fails}"

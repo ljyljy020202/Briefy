@@ -86,6 +86,7 @@ def _make_options() -> CollectionOptions:
 # LG API response builders
 # ---------------------------------------------------------------------------
 
+
 def _list_item(
     job_id: int,
     company_code: str,
@@ -132,11 +133,13 @@ def _detail_data(
 def _recs(
     job_id: int, group_name: str, location: str | None = "서울"
 ) -> list[dict[str, Any]]:
-    return [{
-        "jobNoticeId": job_id,
-        "jobGroupName": group_name,
-        "locationName": location or "",
-    }]
+    return [
+        {
+            "jobNoticeId": job_id,
+            "jobGroupName": group_name,
+            "locationName": location or "",
+        }
+    ]
 
 
 def _list_resp(jobs: list[dict[str, Any]]) -> MagicMock:
@@ -266,7 +269,8 @@ class TestBuildPosting:
 
     def test_title_fallback_to_list_item(self) -> None:
         detail = {
-            k: v for k, v in _detail_data(9001, "LGE", "LG전자").items()
+            k: v
+            for k, v in _detail_data(9001, "LGE", "LG전자").items()
             if k != "jobNoticeName"
         }
         p = _build_posting(9001, {"jobNoticeName": "목록 직함"}, detail, [], "LG전자")
@@ -280,14 +284,20 @@ class TestBuildPosting:
         assert "클라우드 엔지니어" in p.roles
 
     def test_broad_categories_excluded_from_roles(self) -> None:
-        recs = _parse_rec_list([
-            {"jobNoticeId": 9001, "jobGroupName": "IT서비스", "locationName": "서울"},
-            {
-                "jobNoticeId": 9001,
-                "jobGroupName": "데이터 엔지니어",
-                "locationName": "서울",
-            },
-        ])
+        recs = _parse_rec_list(
+            [
+                {
+                    "jobNoticeId": 9001,
+                    "jobGroupName": "IT서비스",
+                    "locationName": "서울",
+                },
+                {
+                    "jobNoticeId": 9001,
+                    "jobGroupName": "데이터 엔지니어",
+                    "locationName": "서울",
+                },
+            ]
+        )
         p = _build_posting(
             9001, {}, _detail_data(9001, "LGE", "LG전자"), recs, "LG전자"
         )
@@ -302,10 +312,12 @@ class TestBuildPosting:
         assert p.location == "마곡 및 기타"
 
     def test_multiple_locations_first_wins(self) -> None:
-        recs = _parse_rec_list([
-            {"jobNoticeId": 9001, "jobGroupName": "역할A", "locationName": "서울"},
-            {"jobNoticeId": 9001, "jobGroupName": "역할B", "locationName": "부산"},
-        ])
+        recs = _parse_rec_list(
+            [
+                {"jobNoticeId": 9001, "jobGroupName": "역할A", "locationName": "서울"},
+                {"jobNoticeId": 9001, "jobGroupName": "역할B", "locationName": "부산"},
+            ]
+        )
         p = _build_posting(
             9001, {}, _detail_data(9001, "LGE", "LG전자"), recs, "LG전자"
         )
@@ -355,13 +367,16 @@ class TestBuildPosting:
     def test_experience_years_in_description_not_experience_level(self) -> None:
         # qualForAppInfo에 경력 연수가 언급되어도 experience_level에는 반영 금지
         detail = _detail_data(
-            9001, "LGE", "LG전자",
-            career_code="B", career_name="경력",
+            9001,
+            "LGE",
+            "LG전자",
+            career_code="B",
+            career_name="경력",
             qual="클라우드 개발 경력 5년 이상 필수\n우대: 7년 이상",
         )
         p = _build_posting(9001, {}, detail, [], "LG전자")
-        assert p.experience_level == "경력"         # careerTypeCode 기준
-        assert "5년 이상" in (p.description or "")   # 본문에는 포함
+        assert p.experience_level == "경력"  # careerTypeCode 기준
+        assert "5년 이상" in (p.description or "")  # 본문에는 포함
 
     def test_no_description_when_qual_empty(self) -> None:
         detail = _detail_data(9001, "LGE", "LG전자", qual="")
@@ -407,16 +422,18 @@ class TestBuildPosting:
 
 
 class TestLgCareersParserFetch:
-
     # ── happy path: 4개 company_code ─────────────────────────────────────────
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("code,company", [
-        ("LGE", "LG전자"),
-        ("LGU", "LG유플러스"),
-        ("LGES", "LG에너지솔루션"),
-        ("LGIT", "LG이노텍"),
-    ])
+    @pytest.mark.parametrize(
+        "code,company",
+        [
+            ("LGE", "LG전자"),
+            ("LGU", "LG유플러스"),
+            ("LGES", "LG에너지솔루션"),
+            ("LGIT", "LG이노텍"),
+        ],
+    )
     async def test_happy_path_per_company_code(self, code: str, company: str) -> None:
         item = _list_item(9001, code, company)
         detail = _detail_data(9001, code, company, qual="관련 업무 경력자")
@@ -485,17 +502,26 @@ class TestLgCareersParserFetch:
     # ── 경험 레벨 ────────────────────────────────────────────────────────────
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("code,expected", [
-        ("A", "신입"),
-        ("B", "경력"),
-        ("C", "인턴"),
-        ("D", "신입·경력"),
-        ("E", "산학장학생"),
-        ("F", "경력 무관"),  # 미지정 코드 → careerTypeName fallback
-    ])
+    @pytest.mark.parametrize(
+        "code,expected",
+        [
+            ("A", "신입"),
+            ("B", "경력"),
+            ("C", "인턴"),
+            ("D", "신입·경력"),
+            ("E", "산학장학생"),
+            ("F", "경력 무관"),  # 미지정 코드 → careerTypeName fallback
+        ],
+    )
     async def test_experience_levels(self, code: str, expected: str) -> None:
-        career_name = {"A": "신입", "B": "경력", "C": "인턴", "D": "신입/경력",
-                       "E": "산학장학생", "F": "경력 무관"}[code]
+        career_name = {
+            "A": "신입",
+            "B": "경력",
+            "C": "인턴",
+            "D": "신입/경력",
+            "E": "산학장학생",
+            "F": "경력 무관",
+        }[code]
         item = _list_item(
             9001, "LGE", "LG전자", career_code=code, career_name=career_name
         )
@@ -519,8 +545,11 @@ class TestLgCareersParserFetch:
         """본문에 경력 연수가 있어도 experience_level은 careerTypeCode 기준 유지."""
         item = _list_item(9001, "LGE", "LG전자", career_code="B", career_name="경력")
         detail = _detail_data(
-            9001, "LGE", "LG전자",
-            career_code="B", career_name="경력",
+            9001,
+            "LGE",
+            "LG전자",
+            career_code="B",
+            career_name="경력",
             qual="관련 개발 경력 5년 이상 필수\n우대: MSA 아키텍처 경험 3년 이상",
         )
         source = _make_source("LGE", "LG전자")
@@ -540,16 +569,19 @@ class TestLgCareersParserFetch:
     # ── 고용 형태 ─────────────────────────────────────────────────────────────
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("career_code,expected_type", [
-        ("C", "인턴"),
-        ("B", "정규직"),
-        ("A", "정규직"),
-        ("D", "정규직"),
-    ])
+    @pytest.mark.parametrize(
+        "career_code,expected_type",
+        [
+            ("C", "인턴"),
+            ("B", "정규직"),
+            ("A", "정규직"),
+            ("D", "정규직"),
+        ],
+    )
     async def test_employment_types(self, career_code: str, expected_type: str) -> None:
-        career_name = {
-            "C": "인턴", "B": "경력", "A": "신입", "D": "신입/경력"
-        }[career_code]
+        career_name = {"C": "인턴", "B": "경력", "A": "신입", "D": "신입/경력"}[
+            career_code
+        ]
         item = _list_item(
             9001, "LGE", "LG전자", career_code=career_code, career_name=career_name
         )
@@ -802,7 +834,7 @@ class TestLgCareersParserFetch:
         with patch(_PATCH) as MockClient:
             inst = _mock_client(
                 _list_resp([item1, item2]),
-                _error_resp(500),        # detail for 9001 fails
+                _error_resp(500),  # detail for 9001 fails
                 _detail_resp(detail2, []),  # detail for 9002 succeeds
             )
             MockClient.return_value = inst
@@ -895,7 +927,10 @@ class TestLgCareersParserFetch:
             inst = _mock_client(_list_resp([item]), _detail_resp(detail, []))
             MockClient.return_value = inst
             result = await LgCareersParser().fetch(
-                source, None, _make_options(), _COLLECT_DATE  # None profile
+                source,
+                None,
+                _make_options(),
+                _COLLECT_DATE,  # None profile
             )
 
         assert len(result.postings) == 1
@@ -999,6 +1034,7 @@ class TestLgCnsCareersRegression:
 
             parser = LgCnsCareersParser()
             from app.schemas.collection import SeedKeywords
+
             result = await parser.fetch(
                 cns_source, cns_profile, SeedKeywords(), _make_options()
             )
@@ -1026,12 +1062,15 @@ class TestLgCareersLive:
     @pytest.mark.skipif(
         True, reason="live — 수동 실행: poetry run pytest -k live -v -s"
     )
-    @pytest.mark.parametrize("code,company", [
-        ("LGE", "LG전자"),
-        ("LGU", "LG유플러스"),
-        ("LGES", "LG에너지솔루션"),
-        ("LGIT", "LG이노텍"),
-    ])
+    @pytest.mark.parametrize(
+        "code,company",
+        [
+            ("LGE", "LG전자"),
+            ("LGU", "LG유플러스"),
+            ("LGES", "LG에너지솔루션"),
+            ("LGIT", "LG이노텍"),
+        ],
+    )
     async def test_live_per_company(self, code: str, company: str) -> None:
         source = _make_source(code, company, max_discover=50, max_fetch=2)
         profile = _make_profile(company)
@@ -1042,8 +1081,7 @@ class TestLgCareersLive:
 
         # HTTP/JSON 오류 없는지 확인
         list_failures = [
-            w for w in result.warnings
-            if "list failed" in w or "JSON parse failed" in w
+            w for w in result.warnings if "list failed" in w or "JSON parse failed" in w
         ]
         assert not list_failures, f"[{code}] List API error: {list_failures}"
 

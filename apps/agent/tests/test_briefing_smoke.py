@@ -61,18 +61,27 @@ _POOL_10 = [
         "isNew": True,
         "isUrgent": False,
         "scoreBreakdown": {
-            "roleScore": 30, "companyScore": 25, "skillScore": 15,
-            "experienceScore": 15, "industryScore": 0, "locationScore": 10,
-            "employmentTypeScore": 10, "companySizeScore": 0,
-            "relevanceScore": 105, "exposurePenalty": 25, "adjustedScore": 80,
+            "roleScore": 30,
+            "companyScore": 25,
+            "skillScore": 15,
+            "experienceScore": 15,
+            "industryScore": 0,
+            "locationScore": 10,
+            "employmentTypeScore": 10,
+            "companySizeScore": 0,
+            "relevanceScore": 105,
+            "exposurePenalty": 25,
+            "adjustedScore": 80,
         },
         "matchEvidence": {
-            "matchedRoles": ["백엔드 개발자"], "matchedCompanies": ["네이버"],
+            "matchedRoles": ["백엔드 개발자"],
+            "matchedCompanies": ["네이버"],
             "matchedSkills": ["Java", "Spring Boot", "MySQL"],
             "matchedLocations": ["성남"],
             "matchedExperienceLevels": ["신입"],
             "matchedEmploymentTypes": ["정규직"],
-            "matchedIndustries": [], "matchedCompanySizes": [],
+            "matchedIndustries": [],
+            "matchedCompanySizes": [],
         },
     },
     {
@@ -94,18 +103,27 @@ _POOL_10 = [
         "isNew": True,
         "isUrgent": False,
         "scoreBreakdown": {
-            "roleScore": 30, "companyScore": 25, "skillScore": 10,
-            "experienceScore": 15, "industryScore": 0, "locationScore": 10,
-            "employmentTypeScore": 10, "companySizeScore": 0,
-            "relevanceScore": 100, "exposurePenalty": 15, "adjustedScore": 85,
+            "roleScore": 30,
+            "companyScore": 25,
+            "skillScore": 10,
+            "experienceScore": 15,
+            "industryScore": 0,
+            "locationScore": 10,
+            "employmentTypeScore": 10,
+            "companySizeScore": 0,
+            "relevanceScore": 100,
+            "exposurePenalty": 15,
+            "adjustedScore": 85,
         },
         "matchEvidence": {
-            "matchedRoles": ["백엔드 개발자"], "matchedCompanies": ["카카오"],
+            "matchedRoles": ["백엔드 개발자"],
+            "matchedCompanies": ["카카오"],
             "matchedSkills": ["Kotlin", "Spring Boot"],
             "matchedLocations": ["판교"],
             "matchedExperienceLevels": ["3년 이상"],
             "matchedEmploymentTypes": ["정규직"],
-            "matchedIndustries": [], "matchedCompanySizes": [],
+            "matchedIndustries": [],
+            "matchedCompanySizes": [],
         },
     },
     {
@@ -127,18 +145,27 @@ _POOL_10 = [
         "isNew": True,
         "isUrgent": False,
         "scoreBreakdown": {
-            "roleScore": 30, "companyScore": 25, "skillScore": 5,
-            "experienceScore": 15, "industryScore": 0, "locationScore": 10,
-            "employmentTypeScore": 10, "companySizeScore": 0,
-            "relevanceScore": 95, "exposurePenalty": 15, "adjustedScore": 80,
+            "roleScore": 30,
+            "companyScore": 25,
+            "skillScore": 5,
+            "experienceScore": 15,
+            "industryScore": 0,
+            "locationScore": 10,
+            "employmentTypeScore": 10,
+            "companySizeScore": 0,
+            "relevanceScore": 95,
+            "exposurePenalty": 15,
+            "adjustedScore": 80,
         },
         "matchEvidence": {
-            "matchedRoles": ["풀스택 개발자"], "matchedCompanies": ["라인"],
+            "matchedRoles": ["풀스택 개발자"],
+            "matchedCompanies": ["라인"],
             "matchedSkills": ["Java"],
             "matchedLocations": ["서울"],
             "matchedExperienceLevels": ["3년 이상"],
             "matchedEmploymentTypes": ["정규직"],
-            "matchedIndustries": [], "matchedCompanySizes": [],
+            "matchedIndustries": [],
+            "matchedCompanySizes": [],
         },
     },
     {
@@ -160,18 +187,27 @@ _POOL_10 = [
         "isNew": False,
         "isUrgent": False,
         "scoreBreakdown": {
-            "roleScore": 30, "companyScore": 0, "skillScore": 10,
-            "experienceScore": 15, "industryScore": 0, "locationScore": 10,
-            "employmentTypeScore": 10, "companySizeScore": 0,
-            "relevanceScore": 75, "exposurePenalty": 10, "adjustedScore": 65,
+            "roleScore": 30,
+            "companyScore": 0,
+            "skillScore": 10,
+            "experienceScore": 15,
+            "industryScore": 0,
+            "locationScore": 10,
+            "employmentTypeScore": 10,
+            "companySizeScore": 0,
+            "relevanceScore": 75,
+            "exposurePenalty": 10,
+            "adjustedScore": 65,
         },
         "matchEvidence": {
-            "matchedRoles": ["백엔드 개발자"], "matchedCompanies": [],
+            "matchedRoles": ["백엔드 개발자"],
+            "matchedCompanies": [],
             "matchedSkills": ["Java", "Spring Boot"],
             "matchedLocations": ["서울"],
             "matchedExperienceLevels": ["3년 이상"],
             "matchedEmploymentTypes": ["정규직"],
-            "matchedIndustries": [], "matchedCompanySizes": [],
+            "matchedIndustries": [],
+            "matchedCompanySizes": [],
         },
     },
     {
@@ -193,18 +229,27 @@ _POOL_10 = [
         "isNew": True,
         "isUrgent": False,
         "scoreBreakdown": {
-            "roleScore": 30, "companyScore": 25, "skillScore": 10,
-            "experienceScore": 15, "industryScore": 0, "locationScore": 10,
-            "employmentTypeScore": 10, "companySizeScore": 0,
-            "relevanceScore": 100, "exposurePenalty": 25, "adjustedScore": 75,
+            "roleScore": 30,
+            "companyScore": 25,
+            "skillScore": 10,
+            "experienceScore": 15,
+            "industryScore": 0,
+            "locationScore": 10,
+            "employmentTypeScore": 10,
+            "companySizeScore": 0,
+            "relevanceScore": 100,
+            "exposurePenalty": 25,
+            "adjustedScore": 75,
         },
         "matchEvidence": {
-            "matchedRoles": ["백엔드 개발자"], "matchedCompanies": ["토스"],
+            "matchedRoles": ["백엔드 개발자"],
+            "matchedCompanies": ["토스"],
             "matchedSkills": ["Kotlin", "Spring Boot", "MySQL"],
             "matchedLocations": ["서울"],
             "matchedExperienceLevels": ["신입"],
             "matchedEmploymentTypes": ["정규직"],
-            "matchedIndustries": [], "matchedCompanySizes": [],
+            "matchedIndustries": [],
+            "matchedCompanySizes": [],
         },
     },
     {
@@ -226,18 +271,27 @@ _POOL_10 = [
         "isNew": False,
         "isUrgent": False,
         "scoreBreakdown": {
-            "roleScore": 30, "companyScore": 0, "skillScore": 0,
-            "experienceScore": 15, "industryScore": 0, "locationScore": 10,
-            "employmentTypeScore": 10, "companySizeScore": 0,
-            "relevanceScore": 65, "exposurePenalty": 10, "adjustedScore": 55,
+            "roleScore": 30,
+            "companyScore": 0,
+            "skillScore": 0,
+            "experienceScore": 15,
+            "industryScore": 0,
+            "locationScore": 10,
+            "employmentTypeScore": 10,
+            "companySizeScore": 0,
+            "relevanceScore": 65,
+            "exposurePenalty": 10,
+            "adjustedScore": 55,
         },
         "matchEvidence": {
-            "matchedRoles": [], "matchedCompanies": [],
+            "matchedRoles": [],
+            "matchedCompanies": [],
             "matchedSkills": [],
             "matchedLocations": ["서울"],
             "matchedExperienceLevels": ["3년 이상"],
             "matchedEmploymentTypes": ["정규직"],
-            "matchedIndustries": [], "matchedCompanySizes": [],
+            "matchedIndustries": [],
+            "matchedCompanySizes": [],
         },
     },
     {
@@ -259,18 +313,27 @@ _POOL_10 = [
         "isNew": False,
         "isUrgent": False,
         "scoreBreakdown": {
-            "roleScore": 30, "companyScore": 0, "skillScore": 10,
-            "experienceScore": 15, "industryScore": 0, "locationScore": 10,
-            "employmentTypeScore": 10, "companySizeScore": 0,
-            "relevanceScore": 75, "exposurePenalty": 10, "adjustedScore": 65,
+            "roleScore": 30,
+            "companyScore": 0,
+            "skillScore": 10,
+            "experienceScore": 15,
+            "industryScore": 0,
+            "locationScore": 10,
+            "employmentTypeScore": 10,
+            "companySizeScore": 0,
+            "relevanceScore": 75,
+            "exposurePenalty": 10,
+            "adjustedScore": 65,
         },
         "matchEvidence": {
-            "matchedRoles": ["서버 개발자"], "matchedCompanies": [],
+            "matchedRoles": ["서버 개발자"],
+            "matchedCompanies": [],
             "matchedSkills": ["Java", "Spring Boot"],
             "matchedLocations": ["서울"],
             "matchedExperienceLevels": ["신입"],
             "matchedEmploymentTypes": ["정규직"],
-            "matchedIndustries": [], "matchedCompanySizes": [],
+            "matchedIndustries": [],
+            "matchedCompanySizes": [],
         },
     },
 ]
@@ -379,16 +442,27 @@ _REQUEST_PAST_DEADLINE = {
                 "isNew": True,
                 "isUrgent": False,
                 "scoreBreakdown": {
-                    "roleScore": 30, "companyScore": 0, "skillScore": 10,
-                    "experienceScore": 0, "industryScore": 0, "locationScore": 10,
-                    "employmentTypeScore": 0, "companySizeScore": 0,
-                    "relevanceScore": 50, "exposurePenalty": 0, "adjustedScore": 50,
+                    "roleScore": 30,
+                    "companyScore": 0,
+                    "skillScore": 10,
+                    "experienceScore": 0,
+                    "industryScore": 0,
+                    "locationScore": 10,
+                    "employmentTypeScore": 0,
+                    "companySizeScore": 0,
+                    "relevanceScore": 50,
+                    "exposurePenalty": 0,
+                    "adjustedScore": 50,
                 },
                 "matchEvidence": {
-                    "matchedRoles": ["백엔드 개발자"], "matchedCompanies": [],
-                    "matchedSkills": ["Java"], "matchedLocations": ["서울"],
-                    "matchedExperienceLevels": [], "matchedEmploymentTypes": [],
-                    "matchedIndustries": [], "matchedCompanySizes": [],
+                    "matchedRoles": ["백엔드 개발자"],
+                    "matchedCompanies": [],
+                    "matchedSkills": ["Java"],
+                    "matchedLocations": ["서울"],
+                    "matchedExperienceLevels": [],
+                    "matchedEmploymentTypes": [],
+                    "matchedIndustries": [],
+                    "matchedCompanySizes": [],
                 },
             },
         ],
@@ -436,9 +510,7 @@ _MOCK_SYNTHESIS_10 = {
 
 
 # ISO-8601 local datetime pattern Spring's LocalDateTime.parse() expects.
-_ISO_LOCAL_DATETIME_RE = re.compile(
-    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$"
-)
+_ISO_LOCAL_DATETIME_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$")
 
 _REQUIRED_SECTION_SUBSTRINGS = [
     "오늘의 핵심 요약",
@@ -461,52 +533,52 @@ def _check_report_contract(body: dict) -> None:
     assert body.get("content"), "content must be non-null and non-empty"
     assert isinstance(body["title"], str)
     assert isinstance(body["content"], str)
-    assert len(body["title"]) <= 255, (
-        f"title exceeds Spring column length=255: {len(body['title'])} chars"
-    )
+    assert (
+        len(body["title"]) <= 255
+    ), f"title exceeds Spring column length=255: {len(body['title'])} chars"
     if body.get("summary"):
         assert isinstance(body["summary"], str)
-        assert len(body["summary"]) <= 1000, (
-            f"summary exceeds Spring column length=1000: {len(body['summary'])} chars"
-        )
+        assert (
+            len(body["summary"]) <= 1000
+        ), f"summary exceeds Spring column length=1000: {len(body['summary'])} chars"
     token = body.get("tokenUsage", {})
-    assert isinstance(token.get("inputTokens"), int), (
-        "tokenUsage.inputTokens must be an integer (Spring Integer field)"
-    )
-    assert isinstance(token.get("outputTokens"), int), (
-        "tokenUsage.outputTokens must be an integer (Spring Integer field)"
-    )
+    assert isinstance(
+        token.get("inputTokens"), int
+    ), "tokenUsage.inputTokens must be an integer (Spring Integer field)"
+    assert isinstance(
+        token.get("outputTokens"), int
+    ), "tokenUsage.outputTokens must be an integer (Spring Integer field)"
 
 
 def _check_article_contract(article: dict) -> None:
     """Verify each article satisfies Spring BriefingArticle column constraints."""
     # title: nullable=false, length=500
-    assert article.get("title"), (
-        "article.title must be non-null (Spring nullable=false)"
-    )
+    assert article.get(
+        "title"
+    ), "article.title must be non-null (Spring nullable=false)"
     assert isinstance(article["title"], str)
-    assert len(article["title"]) <= 500, (
-        f"article.title exceeds Spring column length=500: {len(article['title'])} chars"
-    )
+    assert (
+        len(article["title"]) <= 500
+    ), f"article.title exceeds Spring column length=500: {len(article['title'])} chars"
     # source: length=255
     if article.get("source") is not None:
         assert isinstance(article["source"], str)
-        assert len(article["source"]) <= 255, (
-            "article.source exceeds Spring column length=255"
-        )
+        assert (
+            len(article["source"]) <= 255
+        ), "article.source exceeds Spring column length=255"
     # url: length=1000
     if article.get("url") is not None:
         assert isinstance(article["url"], str)
-        assert len(article["url"]) <= 1000, (
-            "article.url exceeds Spring column length=1000"
-        )
+        assert (
+            len(article["url"]) <= 1000
+        ), "article.url exceeds Spring column length=1000"
     # publishedAt: null or ISO datetime parseable by Spring's LocalDateTime.parse()
     pub = article.get("publishedAt")
     if pub is not None:
         assert isinstance(pub, str), "publishedAt must be a string or null"
-        assert _ISO_LOCAL_DATETIME_RE.match(pub), (
-            f"publishedAt not parseable as ISO LocalDateTime by Spring: {pub!r}"
-        )
+        assert _ISO_LOCAL_DATETIME_RE.match(
+            pub
+        ), f"publishedAt not parseable as ISO LocalDateTime by Spring: {pub!r}"
     # whyItMatters: TEXT column, maps to BriefingArticle.why_it_matters
     if article.get("whyItMatters") is not None:
         assert isinstance(article["whyItMatters"], str)
@@ -566,9 +638,9 @@ async def test_smoke_10_postings_prefers_interest_companies_in_articles(client):
     # Top-ranked postings should include interest companies (네이버·카카오·라인·토스)
     companies = {a.get("companyName") for a in articles}
     interest = {"네이버", "카카오", "라인", "토스"}
-    assert companies & interest, (
-        f"expected at least one interest company in articles; got {companies}"
-    )
+    assert (
+        companies & interest
+    ), f"expected at least one interest company in articles; got {companies}"
 
 
 # ---------------------------------------------------------------------------
@@ -582,16 +654,12 @@ async def test_smoke_empty_pool_returns_200(client):
 
 
 async def test_smoke_empty_pool_report_satisfies_spring_contract(client):
-    body = (
-        await client.post("/briefings/generate", json=_REQUEST_EMPTY_POOL)
-    ).json()
+    body = (await client.post("/briefings/generate", json=_REQUEST_EMPTY_POOL)).json()
     _check_report_contract(body)
 
 
 async def test_smoke_empty_pool_articles_is_empty_list(client):
-    body = (
-        await client.post("/briefings/generate", json=_REQUEST_EMPTY_POOL)
-    ).json()
+    body = (await client.post("/briefings/generate", json=_REQUEST_EMPTY_POOL)).json()
     assert body.get("articles") == []
 
 
@@ -676,9 +744,9 @@ async def test_smoke_llm_success_articles_satisfy_spring_contract(client):
                 (_MOCK_SYNTHESIS_10, LLMTokenUsage(50, 100, 150)),
             ]
         )
-        articles = (
-            await client.post("/briefings/generate", json=_REQUEST_10)
-        ).json()["articles"]
+        articles = (await client.post("/briefings/generate", json=_REQUEST_10)).json()[
+            "articles"
+        ]
     for article in articles:
         _check_article_contract(article)
 
@@ -705,10 +773,10 @@ async def test_smoke_llm_success_token_usage_accumulated(client):
                 (_MOCK_SYNTHESIS_10, LLMTokenUsage(50, 100, 150)),
             ]
         )
-        token = (
-            await client.post("/briefings/generate", json=_REQUEST_10)
-        ).json()["tokenUsage"]
-    assert token["inputTokens"] == 150   # 100 + 50
+        token = (await client.post("/briefings/generate", json=_REQUEST_10)).json()[
+            "tokenUsage"
+        ]
+    assert token["inputTokens"] == 150  # 100 + 50
     assert token["outputTokens"] == 300  # 200 + 100
 
 
@@ -721,9 +789,9 @@ async def test_smoke_llm_success_content_has_required_sections(client):
                 (_MOCK_SYNTHESIS_10, LLMTokenUsage(50, 100, 150)),
             ]
         )
-        content = (
-            await client.post("/briefings/generate", json=_REQUEST_10)
-        ).json()["content"]
+        content = (await client.post("/briefings/generate", json=_REQUEST_10)).json()[
+            "content"
+        ]
     for section in _REQUIRED_SECTION_SUBSTRINGS:
         assert section in content, f"LLM-path report missing section: {section!r}"
 
@@ -734,9 +802,7 @@ async def test_smoke_llm_success_content_has_required_sections(client):
 
 
 async def test_smoke_missing_optional_fields_returns_200(client):
-    response = await client.post(
-        "/briefings/generate", json=_REQUEST_MISSING_OPTIONAL
-    )
+    response = await client.post("/briefings/generate", json=_REQUEST_MISSING_OPTIONAL)
     assert response.status_code == 200
 
 
@@ -764,9 +830,9 @@ async def test_smoke_missing_optional_fields_articles_have_non_empty_title(clien
         await client.post("/briefings/generate", json=_REQUEST_MISSING_OPTIONAL)
     ).json()["articles"]
     for article in articles:
-        assert article.get("title"), (
-            "article.title must not be empty even if posting lacks optional fields"
-        )
+        assert article.get(
+            "title"
+        ), "article.title must not be empty even if posting lacks optional fields"
 
 
 # ---------------------------------------------------------------------------
@@ -785,9 +851,9 @@ async def test_smoke_past_deadline_posting_excluded_from_articles(client):
     articles = (
         await client.post("/briefings/generate", json=_REQUEST_PAST_DEADLINE)
     ).json()["articles"]
-    assert len(articles) == 1, (
-        "exactly the one valid posting sent by Backend should appear"
-    )
+    assert (
+        len(articles) == 1
+    ), "exactly the one valid posting sent by Backend should appear"
 
 
 async def test_smoke_past_deadline_valid_posting_included(client):

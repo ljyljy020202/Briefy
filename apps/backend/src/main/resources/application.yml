@@ -72,6 +72,21 @@ briefy:
     agent-retry-max-attempts: ${COLLECTION_AGENT_RETRY_MAX_ATTEMPTS:2}
     agent-retry-backoff-seconds: ${COLLECTION_AGENT_RETRY_BACKOFF_SECONDS:5}
     job-max-retry-count: ${COLLECTION_JOB_MAX_RETRY_COUNT:3}
+  classifier:
+    version: ${CLASSIFIER_VERSION:1.0.0}
+  classification:
+    mode: ${CLASSIFICATION_MODE:SHADOW}
+    classifier-version: ${CLASSIFIER_VERSION:1.0.0}
+    worker:
+      fixed-delay-ms: ${CLASSIFICATION_WORKER_FIXED_DELAY_MS:60000}
+      max-items-per-run: ${CLASSIFICATION_WORKER_MAX_ITEMS_PER_RUN:100}
+      budget-seconds: ${CLASSIFICATION_WORKER_BUDGET_SECONDS:600}
+      batch-size: ${CLASSIFICATION_WORKER_BATCH_SIZE:5}
+      max-concurrent-requests: ${CLASSIFICATION_WORKER_MAX_CONCURRENT_REQUESTS:2}
+      agent-timeout-seconds: ${CLASSIFICATION_WORKER_AGENT_TIMEOUT_SECONDS:90}
+      lease-seconds: ${CLASSIFICATION_WORKER_LEASE_SECONDS:700}
+      max-attempts: ${CLASSIFICATION_WORKER_MAX_ATTEMPTS:5}
+      backoff-base-seconds: ${CLASSIFICATION_WORKER_BACKOFF_BASE_SECONDS:60}
   scheduler:
     enabled: false
     daily-collection-cron: "0 0 6 * * *"

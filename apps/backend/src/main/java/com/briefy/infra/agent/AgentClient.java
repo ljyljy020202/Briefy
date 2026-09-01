@@ -5,6 +5,8 @@ import com.briefy.global.exception.BusinessException;
 import com.briefy.global.exception.ErrorCode;
 import com.briefy.infra.agent.dto.AgentBriefingRequest;
 import com.briefy.infra.agent.dto.AgentBriefingResponse;
+import com.briefy.infra.agent.dto.AgentClassifyRequest;
+import com.briefy.infra.agent.dto.AgentClassifyResponse;
 import com.briefy.infra.agent.dto.AgentCollectionRequest;
 import com.briefy.infra.agent.dto.AgentCollectionResponse;
 import com.briefy.infra.agent.dto.AgentSourcePreflightRequest;
@@ -229,6 +231,55 @@ public class AgentClient {
     } catch (Exception e) {
       log.error("Agent collection call failed: {}", e.getMessage());
       throw new BusinessException(ErrorCode.AGENT_SERVER_ERROR, "Agent server error");
+    }
+  }
+
+  /**
+   * Agent POST /collections/classify 를 호출한다.
+   *
+   * <p>HTTP 오류·타임아웃은 {@link BusinessException}으로 변환한다. 재시도 로직은 호출자({@code ClassificationWorker})가
+   * 담당하므로 여기서는 1회 시도만 한다.
+   *
+   * @param request 분류 요청
+   * @param timeoutSeconds Agent 응답 대기 최대 시간
+   */
+  public AgentClassifyResponse classify(AgentClassifyRequest request, int timeoutSeconds) {
+    log.info(
+        "Calling agent for classification, requestId={} postings={}",
+        request.requestId(),
+        request.postings() == null ? 0 : request.postings().size());
+    try {
+      AgentClassifyResponse response =
+          webClient
+              .post()
+              .uri("/collections/classify")
+              .contentType(MediaType.APPLICATION_JSON)
+              .bodyValue(request)
+              .retrieve()
+              .onStatus(
+                  HttpStatusCode::isError,
+                  resp ->
+                      resp.bodyToMono(String.class)
+                          .defaultIfEmpty("")
+                          .map(
+                              body ->
+                                  new BusinessException(
+                                      ErrorCode.AGENT_SERVER_ERROR,
+                                      "Agent classify returned "
+                                          + resp.statusCode()
+                                          + ": "
+                                          + body)))
+              .bodyToMono(AgentClassifyResponse.class)
+              .timeout(Duration.ofSeconds(timeoutSeconds))
+              .block();
+      log.info("Agent classification succeeded, requestId={}", request.requestId());
+      return response;
+    } catch (BusinessException e) {
+      throw e;
+    } catch (Exception e) {
+      log.error(
+          "Agent classify call failed, requestId={}: {}", request.requestId(), e.getMessage());
+      throw new BusinessException(ErrorCode.AGENT_SERVER_ERROR, "Agent classify error");
     }
   }
 

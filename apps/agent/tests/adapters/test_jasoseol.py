@@ -281,9 +281,11 @@ _BASE = "https://jasoseol.com"
 _SITEMAP_1 = f"{_BASE}/sitemap/employment_companies.xml"
 _SITEMAP_2 = f"{_BASE}/sitemap/intern_employment_companies.xml"
 _PAGE_URL = f"{_BASE}/recruit/104949"
-_VALID_HTML = _read("jasoseol_recruit_page.html") if (
-    _FIXTURES / "jasoseol_recruit_page.html"
-).exists() else ""
+_VALID_HTML = (
+    _read("jasoseol_recruit_page.html")
+    if (_FIXTURES / "jasoseol_recruit_page.html").exists()
+    else ""
+)
 
 _EMPTY_SITEMAP = (
     '<?xml version="1.0" encoding="UTF-8"?>'
@@ -704,8 +706,7 @@ def test_select_postings_all_fit_under_limit():
 
 def test_select_postings_caps_to_limit():
     entries = [
-        _entry(str(i), f"개발자 {i}", "회사", date(2026, 7, 1))
-        for i in range(20)
+        _entry(str(i), f"개발자 {i}", "회사", date(2026, 7, 1)) for i in range(20)
     ]
     result = _select_postings(entries, SeedKeywords(), limit=5)
     assert len(result) == 5

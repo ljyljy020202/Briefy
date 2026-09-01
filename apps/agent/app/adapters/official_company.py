@@ -271,9 +271,7 @@ def parse_sitemap_xml(xml_text: str, cutoff: date) -> list[tuple[date, str]]:
         if loc_el is None or not loc_el.text:
             continue
         loc = loc_el.text.strip()
-        lastmod = _parse_lastmod(
-            lastmod_el.text if lastmod_el is not None else None
-        )
+        lastmod = _parse_lastmod(lastmod_el.text if lastmod_el is not None else None)
         if lastmod is None or lastmod >= cutoff:
             results.append((lastmod or date.min, loc))
     return results
@@ -439,9 +437,7 @@ async def _handle_sitemap(
         )
         return AdapterResult(source_stats=AdapterSourceStats())
 
-    company_name = (
-        profile.canonical_name if profile else f"company_{source.company_id}"
-    )
+    company_name = profile.canonical_name if profile else f"company_{source.company_id}"
     config = _parse_sitemap_config(source.config_json)
     sid = _source_id(source)
     cutoff = collect_date - timedelta(days=options.lookback_days)
@@ -484,9 +480,7 @@ async def _handle_sitemap(
                 _fetch_page(client, url, company_name, sid, semaphore, warnings)
                 for _, url in to_fetch
             ]
-            postings = [
-                p for p in await asyncio.gather(*tasks) if p is not None
-            ]
+            postings = [p for p in await asyncio.gather(*tasks) if p is not None]
 
     except Exception as exc:
         msg = (
@@ -545,9 +539,7 @@ async def _handle_rss(
         )
         return AdapterResult(source_stats=AdapterSourceStats())
 
-    company_name = (
-        profile.canonical_name if profile else f"company_{source.company_id}"
-    )
+    company_name = profile.canonical_name if profile else f"company_{source.company_id}"
     config = _parse_rss_config(source.config_json)
     sid = _source_id(source)
 
@@ -565,8 +557,7 @@ async def _handle_rss(
                 )
             except TimeoutException:
                 warnings.append(
-                    f"official_company: RSS timeout"
-                    f" company_id={source.company_id}"
+                    f"official_company: RSS timeout" f" company_id={source.company_id}"
                 )
                 return AdapterResult(source_stats=AdapterSourceStats())
             except HTTPStatusError as exc:

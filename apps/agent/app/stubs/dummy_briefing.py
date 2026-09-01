@@ -147,8 +147,13 @@ def generate(request: BriefingGenerateRequest) -> BriefingGenerateResponse:
     primary_skill = skills[0] if skills else "개발"
 
     all_postings = _build_postings(
-        companies, roles, skills, exp_levels, emp_types,
-        request.user_id, request.briefing_date,
+        companies,
+        roles,
+        skills,
+        exp_levels,
+        emp_types,
+        request.user_id,
+        request.briefing_date,
     )
     new_postings = all_postings[:_NEW_COUNT]
     deadline_postings = all_postings[_NEW_COUNT:]

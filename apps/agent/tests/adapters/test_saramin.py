@@ -106,9 +106,7 @@ class _MockSaraminClient:
             raise response
         status, body = response
         if isinstance(body, dict):
-            return httpx.Response(
-                status, text=json.dumps(body), request=request
-            )
+            return httpx.Response(status, text=json.dumps(body), request=request)
         return httpx.Response(status, text=body, request=request)
 
 
@@ -357,9 +355,9 @@ def test_select_postings_exploration_quota_includes_non_seed():
     ]
     result = _select_postings(entries, seed, 3)
     urls = {p.source_url for p in result}
-    assert any("기타" in p.company_name for p in result), (
-        "exploration quota must include non-seed entry"
-    )
+    assert any(
+        "기타" in p.company_name for p in result
+    ), "exploration quota must include non-seed entry"
     assert len(urls) == len(result), "no duplicate URLs"
 
 
@@ -477,9 +475,8 @@ async def test_adapter_pagination_collects_multiple_pages(monkeypatch):
         for i in range(3)
     ]
     page2_jobs = [
-        _sample_job(
-            job_id=str(i + 3), url=f"https://saramin.co.kr/job/{i + 3}"
-        ) for i in range(2)
+        _sample_job(job_id=str(i + 3), url=f"https://saramin.co.kr/job/{i + 3}")
+        for i in range(2)
     ]
     page1 = {
         "jobs": {

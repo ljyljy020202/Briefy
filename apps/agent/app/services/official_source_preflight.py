@@ -729,9 +729,7 @@ async def _kakao_preflight(
             parser_registered=True,
             reachable=True,
             failure_code="CLOUDFLARE_SHELL",
-            failure_message=(
-                result.get("failure_message") or "HTML shell returned"
-            ),
+            failure_message=(result.get("failure_message") or "HTML shell returned"),
             warnings=warnings,
         )
 
@@ -751,9 +749,7 @@ async def _kakao_preflight(
             parser_registered=True,
             reachable=True,
             failure_code="NO_ITEMS_DISCOVERED",
-            failure_message=(
-                "No active Kakao Corp jobs found (company=KAKAO)"
-            ),
+            failure_message=("No active Kakao Corp jobs found (company=KAKAO)"),
             warnings=warnings,
         )
 

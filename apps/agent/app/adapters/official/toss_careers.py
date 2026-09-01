@@ -88,24 +88,28 @@ _EMP_TYPE_MAP: dict[str, str] = {
 
 # ── Experience section headings ───────────────────────────────────────────────
 
-_REQUIRED_HEADINGS: frozenset[str] = frozenset({
-    "이런 분과 함께하고 싶어요",
-    "이런 분을 찾고 있어요",
-    "이런 분이에요",
-    "지원 자격을 꼭 확인해주세요",
-    "지원 자격",
-    "자격 요건",
-    "필수 요건",
-    "필수 자격",
-})
+_REQUIRED_HEADINGS: frozenset[str] = frozenset(
+    {
+        "이런 분과 함께하고 싶어요",
+        "이런 분을 찾고 있어요",
+        "이런 분이에요",
+        "지원 자격을 꼭 확인해주세요",
+        "지원 자격",
+        "자격 요건",
+        "필수 요건",
+        "필수 자격",
+    }
+)
 
-_PREFERRED_HEADINGS: frozenset[str] = frozenset({
-    "이런 경험이 있다면 더 좋아요",
-    "이런 경험이 있으면 더 좋아요",
-    "우대사항",
-    "우대 사항",
-    "우대 조건",
-})
+_PREFERRED_HEADINGS: frozenset[str] = frozenset(
+    {
+        "이런 경험이 있다면 더 좋아요",
+        "이런 경험이 있으면 더 좋아요",
+        "우대사항",
+        "우대 사항",
+        "우대 조건",
+    }
+)
 
 # Regex patterns for experience year extraction
 _EXP_YEAR_RANGE_LABELED_RE = re.compile(r"경력\s*(\d+)\s*년\s*이상\s*(\d+)\s*년\s*이하")
@@ -199,9 +203,9 @@ def _parse_job_detail_html(html: str) -> dict | None:
         return None
 
     try:
-        queries = (
-            data["props"]["pageProps"]["prefetchResult"]["dehydratedState"]["queries"]
-        )
+        queries = data["props"]["pageProps"]["prefetchResult"]["dehydratedState"][
+            "queries"
+        ]
     except (KeyError, TypeError):
         return None
 
@@ -501,7 +505,7 @@ class TossCareersParser(CustomParser):
                 )
 
             discovered = min(len(job_ids), config.max_discover)
-            job_ids_to_fetch = job_ids[:config.max_items]
+            job_ids_to_fetch = job_ids[: config.max_items]
             log.info(
                 "toss_careers: sitemap discovered=%d, will_fetch=%d",
                 discovered,

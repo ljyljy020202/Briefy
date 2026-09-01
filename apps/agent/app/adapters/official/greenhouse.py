@@ -108,25 +108,29 @@ _EXP_TILDE_RANGE_RE = re.compile(r"(\d+)\s*[~～&]\s*(?:sim;)?(\d+)\s*년")
 _EXP_MIN_RE = re.compile(r"(\d+)\s*년\s*이상")
 
 # Headings that mark required-qualifications sections in job content.
-_REQUIRED_HEADINGS: frozenset[str] = frozenset({
-    "이런 분을 찾고 있어요",
-    "이런 분과 함께하고 싶어요",
-    "이런 분이에요",
-    "지원 자격",
-    "자격 요건",
-    "필수 요건",
-    "필요 역량",
-})
+_REQUIRED_HEADINGS: frozenset[str] = frozenset(
+    {
+        "이런 분을 찾고 있어요",
+        "이런 분과 함께하고 싶어요",
+        "이런 분이에요",
+        "지원 자격",
+        "자격 요건",
+        "필수 요건",
+        "필요 역량",
+    }
+)
 
 # Headings that mark preferred/nice-to-have sections — do NOT extract from these.
-_PREFERRED_HEADINGS: frozenset[str] = frozenset({
-    "이런 분이면 더 좋아요",
-    "이런 분이면 더 좋아요!",
-    "우대 사항",
-    "우대사항",
-    "우대 조건",
-    "이런 경험이 있으면 더 좋아요",
-})
+_PREFERRED_HEADINGS: frozenset[str] = frozenset(
+    {
+        "이런 분이면 더 좋아요",
+        "이런 분이면 더 좋아요!",
+        "우대 사항",
+        "우대사항",
+        "우대 조건",
+        "이런 경험이 있으면 더 좋아요",
+    }
+)
 
 
 def _extract_year_experience(text: str) -> str | None:

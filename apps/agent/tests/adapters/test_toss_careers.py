@@ -153,11 +153,13 @@ def _default_handler(sitemap_xml: str = _SITEMAP_XML, job_htmls: dict = _JOB_HTM
             return _ok(url, sitemap_xml, "application/xml")
         # Extract job_id from URL
         from urllib.parse import parse_qs, urlparse
+
         qs = parse_qs(urlparse(url).query)
         jid = (qs.get("job_id") or [""])[0]
         if jid in job_htmls:
             return _ok(url, job_htmls[jid])
         return _err(url, 404)
+
     return handler
 
 
@@ -175,6 +177,7 @@ def test_toss_careers_is_parser_instance():
 def test_regression_greenhouse_naver_unaffected():
     import app.adapters.official.greenhouse  # noqa: F401
     import app.adapters.official.naver_careers  # noqa: F401
+
     assert "GREENHOUSE" in _CUSTOM_REGISTRY_BY_KEY
     assert "DAANGN_CAREERS" in _CUSTOM_REGISTRY_BY_KEY
     assert "NAVER_CAREERS" in _CUSTOM_REGISTRY_BY_KEY
@@ -293,7 +296,7 @@ def test_parse_job_detail_html_missing_job_detail_query():
                                 "queryKey": ["@tossteam/iso-resource", "other"],
                                 "state": {"data": "{}"},
                             }
-                        ]
+                        ],
                     }
                 }
             }
@@ -581,6 +584,7 @@ async def test_full_fetch_all_jobs(monkeypatch):
 @pytest.mark.asyncio
 async def test_server_dev_fields(monkeypatch):
     """Server Developer → 경력 3년 이상, Engineering/Backend, 토스뱅크."""
+
     async def handler(url, kw):
         if "sitemap" in url:
             xml = (
@@ -614,6 +618,7 @@ async def test_server_dev_fields(monkeypatch):
 @pytest.mark.asyncio
 async def test_intern_fields(monkeypatch):
     """Intern job → 인턴, 마감일, roles."""
+
     async def handler(url, kw):
         if "sitemap" in url:
             xml = (
@@ -712,6 +717,7 @@ async def test_sitemap_malformed_xml(monkeypatch):
 @pytest.mark.asyncio
 async def test_sitemap_genuine_empty(monkeypatch):
     """Empty sitemap (0 job URLs) → 0 postings, no warnings."""
+
     async def handler(url, kw):
         xml = (
             '<?xml version="1.0"?>'
@@ -736,10 +742,12 @@ async def test_sitemap_genuine_empty(monkeypatch):
 @pytest.mark.asyncio
 async def test_detail_http_error_skips_job(monkeypatch):
     """HTTP error on one detail page → warning for that job, other jobs proceed."""
+
     async def handler(url, kw):
         if "sitemap" in url:
             return _ok(url, _SITEMAP_XML, "application/xml")
         from urllib.parse import parse_qs, urlparse
+
         jid = (parse_qs(urlparse(url).query).get("job_id") or [""])[0]
         if jid == "1001001003":
             return _err(url, 500)
@@ -763,6 +771,7 @@ async def test_detail_http_error_skips_job(monkeypatch):
 @pytest.mark.asyncio
 async def test_detail_missing_next_data_skips_job(monkeypatch):
     """Detail page without __NEXT_DATA__ → warning, skip, others proceed."""
+
     async def handler(url, kw):
         if "sitemap" in url:
             xml = (
@@ -774,6 +783,7 @@ async def test_detail_missing_next_data_skips_job(monkeypatch):
             )
             return _ok(url, xml, "application/xml")
         from urllib.parse import parse_qs, urlparse
+
         jid = (parse_qs(urlparse(url).query).get("job_id") or [""])[0]
         if jid == "1001001003":
             return _ok(url, "<html><body>no script</body></html>")
@@ -796,6 +806,7 @@ async def test_detail_missing_next_data_skips_job(monkeypatch):
 @pytest.mark.asyncio
 async def test_detail_timeout_skips_job(monkeypatch):
     """Timeout on one detail → warning, skip, other jobs proceed."""
+
     async def handler(url, kw):
         if "sitemap" in url:
             xml = (
@@ -807,6 +818,7 @@ async def test_detail_timeout_skips_job(monkeypatch):
             )
             return _ok(url, xml, "application/xml")
         from urllib.parse import parse_qs, urlparse
+
         jid = (parse_qs(urlparse(url).query).get("job_id") or [""])[0]
         if jid == "1001001003":
             raise httpx.TimeoutException("timed out")
@@ -829,6 +841,7 @@ async def test_detail_timeout_skips_job(monkeypatch):
 @pytest.mark.asyncio
 async def test_android_preferred_not_extracted(monkeypatch):
     """Android job: 3년 이상 from required, 10년 이상 from preferred → 경력 3년 이상."""
+
     async def handler(url, kw):
         if "sitemap" in url:
             xml = (

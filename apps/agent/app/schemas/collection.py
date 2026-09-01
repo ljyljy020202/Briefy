@@ -93,18 +93,20 @@ class CollectedJobPosting(BaseModel):
     source_record_key: str | None = None
     canonical_fingerprint: str | None = None
     source_refs: list[SourceRef] = []
+    # null=알 수 없음 (API 미제공 소스), false=완전 추출, true=MAX_LENGTH 초과 잘림
+    description_truncated: bool | None = None
 
 
 class CollectionStats(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
-    discovered_count: int = 0   # URLs/records discovered before fetch-budget
-    fetched_count: int = 0      # actual detail-page/API fetch attempts
-    parsed_count: int = 0       # pages that yielded a valid posting (pre-service-dedup)
-    duplicate_count: int = 0    # source-level + cross-source duplicates removed
-    filtered_count: int = 0     # expired + stale postings removed
-    truncated_count: int = 0    # valid candidates dropped by global budget cap
-    final_count: int = 0        # postings in jobPostings array
+    discovered_count: int = 0  # URLs/records discovered before fetch-budget
+    fetched_count: int = 0  # actual detail-page/API fetch attempts
+    parsed_count: int = 0  # pages that yielded a valid posting (pre-service-dedup)
+    duplicate_count: int = 0  # source-level + cross-source duplicates removed
+    filtered_count: int = 0  # expired + stale postings removed
+    truncated_count: int = 0  # valid candidates dropped by global budget cap
+    final_count: int = 0  # postings in jobPostings array
 
 
 class SourceOutcome(BaseModel):

@@ -7,11 +7,15 @@ import com.briefy.config.JpaConfig;
 import com.briefy.domain.candidatepool.dto.CandidatePoolUpsertResult;
 import com.briefy.domain.candidatepool.dto.CollectedJobPostingData;
 import com.briefy.domain.candidatepool.entity.JobPosting;
+import com.briefy.domain.candidatepool.entity.JobPostingAnalysis;
 import com.briefy.domain.candidatepool.entity.JobPostingSource;
+import com.briefy.domain.candidatepool.entity.analysis.ClassificationStatus;
+import com.briefy.domain.candidatepool.repository.JobPostingAnalysisRepository;
 import com.briefy.domain.candidatepool.repository.JobPostingRepository;
 import com.briefy.domain.candidatepool.repository.JobPostingSourceRepository;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
@@ -26,7 +30,8 @@ import org.springframework.transaction.annotation.Transactional;
     properties = {
       "spring.flyway.enabled=false",
       "spring.jpa.hibernate.ddl-auto=create-drop",
-      "spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.H2Dialect"
+      "spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.H2Dialect",
+      "briefy.classifier.version=1.0.0"
     })
 @Import({CandidatePoolService.class, JpaConfig.class})
 class CandidatePoolServiceIntegrationTest {
@@ -34,6 +39,7 @@ class CandidatePoolServiceIntegrationTest {
   @Autowired private CandidatePoolService candidatePoolService;
   @Autowired private JobPostingRepository jobPostingRepository;
   @Autowired private JobPostingSourceRepository jobPostingSourceRepository;
+  @Autowired private JobPostingAnalysisRepository jobPostingAnalysisRepository;
   @Autowired private TestEntityManager em;
 
   private static final LocalDate DATE_1 = LocalDate.of(2026, 7, 1);
@@ -59,7 +65,8 @@ class CandidatePoolServiceIntegrationTest {
         null,
         null,
         null,
-        null);
+        null,
+        null); // descriptionTruncated
   }
 
   private CollectedJobPostingData posting(String source, String url, String contentHash) {
@@ -84,7 +91,8 @@ class CandidatePoolServiceIntegrationTest {
         null,
         null,
         null,
-        null);
+        null,
+        null); // descriptionTruncated
   }
 
   private void persist(CollectedJobPostingData data, LocalDate collectedDate) {
@@ -181,7 +189,8 @@ class CandidatePoolServiceIntegrationTest {
             null,
             null,
             null,
-            "fingerprint1"); // canonicalFingerprint matches the existing DB row
+            "fingerprint1", // canonicalFingerprint matches the existing DB row
+            null); // descriptionTruncated
     CandidatePoolUpsertResult result =
         candidatePoolService.upsertJobPostings(List.of(jumpitPosting), DATE_2);
     em.flush();
@@ -220,7 +229,8 @@ class CandidatePoolServiceIntegrationTest {
             null,
             null,
             null,
-            null);
+            null,
+            null); // descriptionTruncated
 
     CandidatePoolUpsertResult result =
         candidatePoolService.upsertJobPostings(List.of(unknown), DATE_1);
@@ -246,7 +256,8 @@ class CandidatePoolServiceIntegrationTest {
         new CollectedJobPostingData(
             null, // NOT NULL title → constraint violation on flush
             "네이버", null, null, // null url → no source record, no url lookup, falls through to save
-            null, null, null, null, null, null, null, null, null, null, null, null);
+            null, null, null, null, null, null, null, null, null, null, null, null,
+            null); // descriptionTruncated
 
     assertThatThrownBy(() -> candidatePoolService.upsertJobPostings(List.of(good, bad), DATE_1))
         .isInstanceOf(Exception.class);
@@ -337,7 +348,8 @@ class CandidatePoolServiceIntegrationTest {
             null,
             null,
             null,
-            fp);
+            fp,
+            null); // descriptionTruncated
     persist(wantedData, DATE_1);
 
     CollectedJobPostingData jumpitData =
@@ -357,7 +369,8 @@ class CandidatePoolServiceIntegrationTest {
             null,
             null,
             null,
-            fp); // canonicalFingerprint = fp → matches DB
+            fp, // canonicalFingerprint = fp → matches DB
+            null); // descriptionTruncated
     persist(jumpitData, DATE_1);
 
     deactivateSourceFor("원티드", urlA); // deactivate only 원티드 source; 점핏 is still active
@@ -410,7 +423,8 @@ class CandidatePoolServiceIntegrationTest {
             null,
             null,
             null,
-            fp);
+            fp,
+            null); // descriptionTruncated
     CollectedJobPostingData src2 =
         new CollectedJobPostingData(
             "백엔드 개발자",
@@ -428,7 +442,8 @@ class CandidatePoolServiceIntegrationTest {
             null,
             null,
             null,
-            fp);
+            fp,
+            null); // descriptionTruncated
     persist(src1, DATE_1);
     persist(src2, DATE_1);
 
@@ -488,7 +503,8 @@ class CandidatePoolServiceIntegrationTest {
             null,
             null,
             null,
-            fp);
+            fp,
+            null); // descriptionTruncated
     persist(src1, DATE_1);
 
     // Same canonical fingerprint, different URL (new source) — must NOT change canonical URL
@@ -509,10 +525,81 @@ class CandidatePoolServiceIntegrationTest {
             null,
             null,
             null,
-            fp); // canonicalFingerprint = fp → finds existing
+            fp, // canonicalFingerprint = fp → finds existing
+            null); // descriptionTruncated
     persist(src2, DATE_2);
 
     JobPosting canonical = jobPostingRepository.findFirstByCanonicalFingerprint(fp).orElseThrow();
     assertThat(canonical.getUrl()).isEqualTo(originalUrl);
+  }
+
+  // ── Stage 2: PENDING 분석 행 자동 등록 ─────────────────────────────────────
+
+  @Test
+  void newPosting_registeredWithPendingAnalysisRow() {
+    persist(posting("원티드", "https://example.com/analysis-new", "hashA1"), DATE_1);
+
+    JobPosting jp =
+        jobPostingRepository.findFirstByUrl("https://example.com/analysis-new").orElseThrow();
+    Optional<JobPostingAnalysis> analysis =
+        jobPostingAnalysisRepository.findByJobPostingId(jp.getId());
+
+    assertThat(analysis).isPresent();
+    assertThat(analysis.get().getClassificationStatus()).isEqualTo(ClassificationStatus.PENDING);
+    assertThat(analysis.get().getAnalysisInputHash()).isNotNull().hasSize(64);
+    assertThat(analysis.get().getClassifierVersion()).isEqualTo("1.0.0");
+    assertThat(analysis.get().getClaimToken()).isNull();
+  }
+
+  @Test
+  void sameSource_contentHashChanged_triggersAnalysisReset() {
+    String url = "https://example.com/analysis-update";
+    persist(posting("원티드", url, "hashB1"), DATE_1);
+
+    // 두 번째 수집: contentHash 변경 + 새 경력 정보 → analysisInputHash 변경 예상
+    CollectedJobPostingData second =
+        new CollectedJobPostingData(
+            "백엔드 개발자",
+            "네이버",
+            "원티드",
+            url,
+            "서울",
+            null,
+            "설명",
+            "[\"Backend\"]",
+            null,
+            "정규직",
+            "5년 이상",
+            "hashB2",
+            null,
+            null,
+            null,
+            null,
+            null);
+    candidatePoolService.upsertJobPostings(List.of(second), DATE_2);
+    em.flush();
+    em.clear();
+
+    JobPosting jp = jobPostingRepository.findFirstByUrl(url).orElseThrow();
+    Optional<JobPostingAnalysis> analysis =
+        jobPostingAnalysisRepository.findByJobPostingId(jp.getId());
+
+    assertThat(analysis).isPresent();
+    // hash 변경 → PENDING 상태 유지 (재분류 대상)
+    assertThat(analysis.get().getClassificationStatus()).isEqualTo(ClassificationStatus.PENDING);
+  }
+
+  @Test
+  void sameSource_contentHashUnchanged_noExtraAnalysisRow() {
+    String url = "https://example.com/analysis-same";
+    persist(posting("원티드", url, "hashC1"), DATE_1);
+
+    // 같은 contentHash로 재수집 (내용 동일)
+    persist(posting("원티드", url, "hashC1"), DATE_2);
+
+    // 분석 행이 1개뿐 (중복 생성 없음)
+    JobPosting jp = jobPostingRepository.findFirstByUrl(url).orElseThrow();
+    long count = jobPostingAnalysisRepository.findByJobPostingId(jp.getId()).stream().count();
+    assertThat(count).isEqualTo(1);
   }
 }

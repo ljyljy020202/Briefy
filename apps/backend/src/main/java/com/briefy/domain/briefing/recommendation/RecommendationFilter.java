@@ -1,5 +1,6 @@
 package com.briefy.domain.briefing.recommendation;
 
+import com.briefy.config.ClassificationMode;
 import com.briefy.domain.briefing.policy.ExperienceParser;
 import com.briefy.domain.briefing.policy.ExperiencePolicy;
 import com.briefy.domain.briefing.policy.JobRolePolicy;
@@ -65,6 +66,63 @@ public final class RecommendationFilter {
     }
 
     // 5. Employment type mismatch — only when BOTH sides are explicit
+    List<String> prefEmpTypes = extractList(preference, "employmentTypes");
+    String postingEmpType = posting.getEmploymentType();
+    if (!prefEmpTypes.isEmpty() && postingEmpType != null && !postingEmpType.isBlank()) {
+      boolean anyMatch = prefEmpTypes.stream().anyMatch(e -> e.equalsIgnoreCase(postingEmpType));
+      if (!anyMatch) {
+        return FilterResult.exclude(FilterReason.EMPLOYMENT_TYPE_MISMATCH);
+      }
+    }
+
+    return FilterResult.pass();
+  }
+
+  /**
+   * Classification-aware filter evaluation. In ENFORCE mode the classification result takes
+   * precedence over keyword-based role and experience rules. In OFF or SHADOW mode this delegates
+   * to the standard {@link #evaluate(JobPosting, Map, LocalDate)}.
+   *
+   * <p>Non-classification rules (expiry, missing fields, employment type) always apply regardless
+   * of mode.
+   */
+  public static FilterResult evaluateWithClassification(
+      JobPosting posting,
+      Map<String, Object> preference,
+      LocalDate referenceDate,
+      AnalysisEligibility eligibility,
+      ClassificationMode mode) {
+
+    if (mode != ClassificationMode.ENFORCE) {
+      return evaluate(posting, preference, referenceDate);
+    }
+
+    // Non-classification hard filters always apply
+    if (isMissingRequiredFields(posting)) {
+      return FilterResult.exclude(FilterReason.MISSING_REQUIRED_FIELDS);
+    }
+    if (posting.getDeadline() != null && posting.getDeadline().isBefore(referenceDate)) {
+      return FilterResult.exclude(FilterReason.EXPIRED);
+    }
+
+    // Classification-based role / experience gate
+    if (eligibility == null || eligibility.isDeferred()) {
+      return FilterResult.exclude(FilterReason.ANALYSIS_DEFERRED);
+    }
+    if (!eligibility.eligible()) {
+      if (eligibility.isNonItExclusion()) {
+        return FilterResult.exclude(FilterReason.ANALYSIS_NON_IT);
+      }
+      if (eligibility.roleMatch() == RoleMatchType.MISMATCH) {
+        return FilterResult.exclude(FilterReason.ANALYSIS_ROLE_MISMATCH);
+      }
+      if (eligibility.experienceMatch() == ExperienceMatchType.EXCLUDED) {
+        return FilterResult.exclude(FilterReason.EXPERIENCE_EXCLUDED);
+      }
+      return FilterResult.exclude(FilterReason.ANALYSIS_ROLE_MISMATCH);
+    }
+
+    // Employment type mismatch — only when BOTH sides are explicit
     List<String> prefEmpTypes = extractList(preference, "employmentTypes");
     String postingEmpType = posting.getEmploymentType();
     if (!prefEmpTypes.isEmpty() && postingEmpType != null && !postingEmpType.isBlank()) {

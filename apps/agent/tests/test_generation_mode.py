@@ -158,9 +158,7 @@ async def test_generation_mode_fallback_enrichment_fail(client):
     """Enrichment LLM fails → fallback → mode=FALLBACK, reason=enrichment_failed."""
     with patch("app.graph.user_briefing_graph.llm_client") as mock_llm:
         mock_llm.enabled = True
-        mock_llm.call_json = AsyncMock(
-            side_effect=LLMClientError("enrichment timeout")
-        )
+        mock_llm.call_json = AsyncMock(side_effect=LLMClientError("enrichment timeout"))
         response = await client.post("/briefings/generate", json=FULL_REQUEST)
 
     assert response.status_code == 200
@@ -314,9 +312,9 @@ async def test_backend_rank_preserved_in_fallback_mode(client):
     assert body["generationMode"] == "FALLBACK"
     articles = body["articles"]
     assert len(articles) == 3
-    assert "네이버" in articles[0]["title"]   # rank 1
-    assert "카카오" in articles[1]["title"]   # rank 2
-    assert "라인" in articles[2]["title"]     # rank 3
+    assert "네이버" in articles[0]["title"]  # rank 1
+    assert "카카오" in articles[1]["title"]  # rank 2
+    assert "라인" in articles[2]["title"]  # rank 3
 
 
 async def test_backend_rank_preserved_in_llm_mode(client):

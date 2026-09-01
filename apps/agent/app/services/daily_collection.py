@@ -16,6 +16,7 @@ Company and industry collection are not yet implemented (1.5 / 2nd MVP).
 """
 
 import asyncio
+import itertools
 import logging
 
 import app.adapters.official.ably_careers  # noqa: F401 — triggers ABLY_CAREERS registration
@@ -60,7 +61,7 @@ _JOB_POSTING_CATEGORY = "JOB_POSTING"
 # Per-adapter retry helpers
 # ---------------------------------------------------------------------------
 
-_RETRY_MAX_ATTEMPTS = 2   # total tries = 1 initial + 1 retry
+_RETRY_MAX_ATTEMPTS = 2  # total tries = 1 initial + 1 retry
 _RETRY_SLEEP_SECONDS = 2
 
 
@@ -244,12 +245,37 @@ def _score(posting: CollectedJobPosting, seed: SeedKeywords) -> float:
     return score
 
 
+def _interleave_by_source(
+    postings: list[CollectedJobPosting],
+) -> list[CollectedJobPosting]:
+    """seed 없이 점수가 모두 동일할 때 소스별 round-robin으로 budget 독점을 방지한다.
+
+    진입 순서(adapter 등록 순서)에 따른 소스 내부 순서를 유지하면서,
+    소스 간은 교대로 배치한다.
+    """
+    by_source: dict[str, list[CollectedJobPosting]] = {}
+    source_order: list[str] = []
+    for p in postings:
+        if p.source not in by_source:
+            by_source[p.source] = []
+            source_order.append(p.source)
+        by_source[p.source].append(p)
+
+    result: list[CollectedJobPosting] = []
+    for group in itertools.zip_longest(*[by_source[s] for s in source_order]):
+        result.extend(p for p in group if p is not None)
+    return result
+
+
 def _score_and_sort(
     postings: list[CollectedJobPosting],
     seed: SeedKeywords,
 ) -> list[CollectedJobPosting]:
-    if not postings or not (seed.roles or seed.companies or seed.skills):
+    if not postings:
         return postings
+    if not (seed.roles or seed.companies or seed.skills):
+        # seed가 없으면 점수가 모두 0 → 소스별 round-robin으로 budget 독점 방지
+        return _interleave_by_source(postings)
     return sorted(postings, key=lambda p: _score(p, seed), reverse=True)
 
 
@@ -362,13 +388,28 @@ class DailyCollectionService:
         # Stage 10: Budget selection
         selected, truncated = _select_budget(scored, request.options)
 
+        # 소스별 최종 생존 수 (budget 적용 후)
+        source_final_counts: dict[str, int] = {}
+        for p in selected:
+            source_final_counts[p.source] = source_final_counts.get(p.source, 0) + 1
+        source_budget_log = ", ".join(
+            f"{s}:{c}" for s, c in source_final_counts.items()
+        )
+
         log.info(
             "daily_collection: discovered=%d fetched=%d parsed=%d "
             "source_exact=%d cross_merged=%d expired=%d stale=%d "
-            "truncated=%d final=%d",
-            total_discovered, total_fetched, total_parsed,
-            source_exact, cross_merged, expired_count, stale_count,
-            truncated, len(selected),
+            "truncated=%d final=%d source_budget=[%s]",
+            total_discovered,
+            total_fetched,
+            total_parsed,
+            source_exact,
+            cross_merged,
+            expired_count,
+            stale_count,
+            truncated,
+            len(selected),
+            source_budget_log,
         )
 
         return DailyCollectResponse(

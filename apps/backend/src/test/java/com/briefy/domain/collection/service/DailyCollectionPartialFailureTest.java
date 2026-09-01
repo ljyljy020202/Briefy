@@ -152,7 +152,7 @@ class DailyCollectionPartialFailureTest {
                 new AgentSourceOutcome("jasoseol", false, 0, "timeout")));
     when(agentClient.triggerDailyCollection(any(), anyInt(), anyInt())).thenReturn(resp);
     when(candidatePoolPersistenceService.saveAtomically(any(), any()))
-        .thenReturn(new CandidatePoolUpsertResult(0, 3, 0));
+        .thenReturn(CandidatePoolUpsertResult.of(0, 3, 0));
 
     DailyCollectionResult result = svc.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
 
@@ -190,7 +190,7 @@ class DailyCollectionPartialFailureTest {
                 new AgentSourceOutcome("jasoseol", true, 5, null)));
     when(agentClient.triggerDailyCollection(any(), anyInt(), anyInt())).thenReturn(resp);
     when(candidatePoolPersistenceService.saveAtomically(any(), any()))
-        .thenReturn(new CandidatePoolUpsertResult(0, 15, 0));
+        .thenReturn(CandidatePoolUpsertResult.of(0, 15, 0));
 
     DailyCollectionResult result = svc.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
 
@@ -210,7 +210,7 @@ class DailyCollectionPartialFailureTest {
                 new AgentSourceOutcome("fixture", false, 0, "connection_error")));
     when(agentClient.triggerDailyCollection(any(), anyInt(), anyInt())).thenReturn(resp);
     when(candidatePoolPersistenceService.saveAtomically(any(), any()))
-        .thenReturn(new CandidatePoolUpsertResult(0, 7, 0));
+        .thenReturn(CandidatePoolUpsertResult.of(0, 7, 0));
 
     DailyCollectionResult result = svc.triggerDailyCollection(TEST_DATE, List.of("JOB_POSTING"));
 

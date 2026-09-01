@@ -474,7 +474,8 @@ public class DailyCollectionService {
                     parseDateTime(p.postedAt()),
                     p.sourceRecordKey(),
                     p.sourceExternalId(),
-                    p.canonicalFingerprint()))
+                    p.canonicalFingerprint(),
+                    p.descriptionTruncated()))
         .toList();
   }
 

@@ -39,6 +39,7 @@ from app.schemas.collection import (
 # HTML fixtures
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def _make_list_html(recruits: list[dict]) -> str:
     """Build minimal ably.team/recruit HTML with inline pageProps JSON."""
     payload = json.dumps({"props": {"pageProps": {"recruits": recruits}}})
@@ -47,21 +48,23 @@ def _make_list_html(recruits: list[dict]) -> str:
 
 def _make_detail_html(content: str = "<p>Job description</p>") -> str:
     """Build minimal recruit.ably.team detail page HTML."""
-    next_data = json.dumps({
-        "props": {
-            "pageProps": {
-                "recruitment": {},
-                "jobPosting": {
-                    "content": content,
-                    "content_english": "",
-                },
+    next_data = json.dumps(
+        {
+            "props": {
+                "pageProps": {
+                    "recruitment": {},
+                    "jobPosting": {
+                        "content": content,
+                        "content_english": "",
+                    },
+                }
             }
         }
-    })
+    )
     return (
-        f'<html><body>'
+        f"<html><body>"
         f'<script id="__NEXT_DATA__" type="application/json">{next_data}</script>'
-        f'</body></html>'
+        f"</body></html>"
     )
 
 
@@ -267,23 +270,17 @@ def test_parse_list_html_no_script_raises_value_error():
 
 
 def test_extract_address_key_ninehire_url():
-    key = _extract_address_key(
-        "https://tydtr0dj.ninehire.site/job_posting/1Ni2VkMj"
-    )
+    key = _extract_address_key("https://tydtr0dj.ninehire.site/job_posting/1Ni2VkMj")
     assert key == "1Ni2VkMj"
 
 
 def test_extract_address_key_recruit_ably_url():
-    key = _extract_address_key(
-        "https://recruit.ably.team/job_posting/YlcGUJLg"
-    )
+    key = _extract_address_key("https://recruit.ably.team/job_posting/YlcGUJLg")
     assert key == "YlcGUJLg"
 
 
 def test_extract_address_key_trailing_slash():
-    key = _extract_address_key(
-        "https://tydtr0dj.ninehire.site/job_posting/AbCdEfGh/"
-    )
+    key = _extract_address_key("https://tydtr0dj.ninehire.site/job_posting/AbCdEfGh/")
     assert key == "AbCdEfGh"
 
 
@@ -435,8 +432,7 @@ def test_extract_detail_content_no_next_data():
 def test_extract_detail_content_missing_job_posting():
     next_data = json.dumps({"props": {"pageProps": {"recruitment": {}}}})
     html = (
-        f'<script id="__NEXT_DATA__" type="application/json">'
-        f"{next_data}</script>"
+        f'<script id="__NEXT_DATA__" type="application/json">' f"{next_data}</script>"
     )
     assert _extract_detail_content(html) is None
 
@@ -474,9 +470,7 @@ def test_html_to_text_truncates_at_3000():
 
 
 def _profile() -> CompanyProfile:
-    return CompanyProfile(
-        id=15, canonical_name="에이블리", normalized_name="에이블리"
-    )
+    return CompanyProfile(id=15, canonical_name="에이블리", normalized_name="에이블리")
 
 
 def test_build_posting_engineering_backend():
@@ -488,9 +482,7 @@ def test_build_posting_engineering_backend():
     assert posting.location == "신논현"
     assert posting.deadline is None
     assert posting.source_external_id == "1Ni2VkMj"
-    assert posting.source_url == (
-        "https://recruit.ably.team/job_posting/1Ni2VkMj"
-    )
+    assert posting.source_url == ("https://recruit.ably.team/job_posting/1Ni2VkMj")
     assert posting.source == "ably_careers"
     assert posting.company_name == "에이블리"
 
@@ -745,9 +737,7 @@ async def test_fetch_respects_max_items(monkeypatch):
     )
 
     src = _source('{"parser_key":"ABLY_CAREERS","max_items":2}')
-    result = await AblyCareersParser().fetch(
-        src, _profile(), _options(), _COLLECT_DATE
-    )
+    result = await AblyCareersParser().fetch(src, _profile(), _options(), _COLLECT_DATE)
 
     assert result.source_stats.discovered == 3
     assert len(result.postings) == 2
@@ -797,6 +787,7 @@ async def test_fetch_company_name_from_profile(monkeypatch):
 
 def test_parser_registered():
     from app.adapters.official_company import _CUSTOM_REGISTRY_BY_KEY
+
     assert "ABLY_CAREERS" in _CUSTOM_REGISTRY_BY_KEY
     assert isinstance(_CUSTOM_REGISTRY_BY_KEY["ABLY_CAREERS"], AblyCareersParser)
 
@@ -852,15 +843,13 @@ async def test_ably_live_smoke():
             f" | id={p.source_external_id!r}"
         )
 
-    assert len(postings) > 0, (
-        f"No postings returned. Warnings: {result.warnings}"
-    )
+    assert len(postings) > 0, f"No postings returned. Warnings: {result.warnings}"
 
     for p in postings:
         assert p.title.strip(), "Empty title"
-        assert p.source_url.startswith("https://recruit.ably.team/"), (
-            f"Unexpected source_url: {p.source_url}"
-        )
+        assert p.source_url.startswith(
+            "https://recruit.ably.team/"
+        ), f"Unexpected source_url: {p.source_url}"
         assert p.roles, f"No roles for {p.title!r}"
         assert p.source_external_id, "Missing source_external_id"
 

@@ -244,16 +244,12 @@ class LgCnsCareersParser(CustomParser):
                 continue
 
             try:
-                async with httpx.AsyncClient(
-                    headers=_HEADERS, timeout=_TIMEOUT
-                ) as dc:
+                async with httpx.AsyncClient(headers=_HEADERS, timeout=_TIMEOUT) as dc:
                     dr = await dc.post(_DETAIL_EP, json={"jobNoticeId": job_id})
                     dr.raise_for_status()
                 fetched += 1
             except Exception as exc:
-                warnings.append(
-                    f"LG_CNS_CAREERS: detail failed for {job_id}: {exc}"
-                )
+                warnings.append(f"LG_CNS_CAREERS: detail failed for {job_id}: {exc}")
                 continue
 
             wrapper = dr.json().get("data", {}).get("jobNoticesDetail", {})
@@ -269,15 +265,11 @@ class LgCnsCareersParser(CustomParser):
 
             recs = _parse_rec_list(raw_recs)
             try:
-                posting = _build_posting(
-                    job_id, item, detail, recs, company_profile
-                )
+                posting = _build_posting(job_id, item, detail, recs, company_profile)
                 postings.append(posting)
                 parsed += 1
             except Exception as exc:
-                warnings.append(
-                    f"LG_CNS_CAREERS: parse failed for {job_id}: {exc}"
-                )
+                warnings.append(f"LG_CNS_CAREERS: parse failed for {job_id}: {exc}")
 
         return AdapterResult(
             postings=postings,
@@ -323,9 +315,7 @@ async def lg_cns_preflight(source: OfficialCompanySource) -> dict[str, Any]:
         return result
 
     result["reachable"] = True
-    jobs: list[dict[str, Any]] = (
-        r.json().get("data", {}).get("jobNoticeList", [])
-    )
+    jobs: list[dict[str, Any]] = r.json().get("data", {}).get("jobNoticeList", [])
     cns_jobs = [j for j in jobs if j.get("companyCode") == "CNS"]
     result["discovered_count"] = len(cns_jobs)
 

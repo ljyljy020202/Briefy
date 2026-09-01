@@ -1,6 +1,8 @@
 package com.briefy.domain.briefing.service;
 
 import com.briefy.config.BriefingProperties;
+import com.briefy.config.ClassificationMode;
+import com.briefy.config.ClassificationProperties;
 import com.briefy.domain.briefing.dto.BriefingDetailResponse;
 import com.briefy.domain.briefing.dto.BriefingListItem;
 import com.briefy.domain.briefing.dto.GenerateResult;
@@ -9,6 +11,9 @@ import com.briefy.domain.briefing.entity.BriefingJob;
 import com.briefy.domain.briefing.entity.BriefingJobStatus;
 import com.briefy.domain.briefing.entity.BriefingReport;
 import com.briefy.domain.briefing.entity.BriefingTriggerType;
+import com.briefy.domain.briefing.recommendation.AnalysisEligibility;
+import com.briefy.domain.briefing.recommendation.ClassificationAnalyzer;
+import com.briefy.domain.briefing.recommendation.FilterResult;
 import com.briefy.domain.briefing.recommendation.RecommendationCandidate;
 import com.briefy.domain.briefing.recommendation.RecommendationFilter;
 import com.briefy.domain.briefing.recommendation.RecommendationSelector;
@@ -18,6 +23,8 @@ import com.briefy.domain.briefing.repository.BriefingArticleRepository;
 import com.briefy.domain.briefing.repository.BriefingJobRepository;
 import com.briefy.domain.briefing.repository.BriefingReportRepository;
 import com.briefy.domain.candidatepool.entity.JobPosting;
+import com.briefy.domain.candidatepool.entity.JobPostingAnalysis;
+import com.briefy.domain.candidatepool.repository.JobPostingAnalysisRepository;
 import com.briefy.domain.candidatepool.service.CandidatePoolService;
 import com.briefy.domain.preference.entity.BriefingCategoryCode;
 import com.briefy.domain.preference.entity.UserBriefingPreference;
@@ -65,6 +72,8 @@ public class BriefingService {
   private final UserRepository userRepository;
   private final BriefingJobPersistenceService briefingJobPersistenceService;
   private final BriefingProperties briefingProperties;
+  private final JobPostingAnalysisRepository jobPostingAnalysisRepository;
+  private final ClassificationProperties classificationProperties;
 
   public BriefingService(
       BriefingJobRepository briefingJobRepository,
@@ -75,7 +84,9 @@ public class BriefingService {
       CandidatePoolService candidatePoolService,
       UserRepository userRepository,
       BriefingJobPersistenceService briefingJobPersistenceService,
-      BriefingProperties briefingProperties) {
+      BriefingProperties briefingProperties,
+      JobPostingAnalysisRepository jobPostingAnalysisRepository,
+      ClassificationProperties classificationProperties) {
     this.briefingJobRepository = briefingJobRepository;
     this.briefingReportRepository = briefingReportRepository;
     this.briefingArticleRepository = briefingArticleRepository;
@@ -85,6 +96,8 @@ public class BriefingService {
     this.userRepository = userRepository;
     this.briefingJobPersistenceService = briefingJobPersistenceService;
     this.briefingProperties = briefingProperties;
+    this.jobPostingAnalysisRepository = jobPostingAnalysisRepository;
+    this.classificationProperties = classificationProperties;
   }
 
   /**
@@ -307,12 +320,63 @@ public class BriefingService {
     List<JobPosting> postings = candidatePoolService.findEligibleJobPostingsForBriefing(date);
     if (postings == null || postings.isEmpty()) return List.of();
 
+    // 분류 분석 일괄 조회 — N+1 방지
+    ClassificationMode mode = classificationProperties.mode();
+    Map<Long, JobPostingAnalysis> analysisMap = loadAnalysisMap(postings);
+
     List<RecommendationCandidate> candidates =
         postings.stream()
-            .filter(p -> RecommendationFilter.evaluate(p, preference, date).eligible())
-            .map(
+            .flatMap(
                 p -> {
-                  RelevanceScorer.ScoringResult scored = RelevanceScorer.score(p, preference);
+                  JobPostingAnalysis analysis = analysisMap.get(p.getId());
+                  AnalysisEligibility eligibility =
+                      ClassificationAnalyzer.derive(analysis, preference, mode);
+
+                  FilterResult filterResult;
+                  RelevanceScorer.ScoringResult scored;
+
+                  if (mode == ClassificationMode.SHADOW) {
+                    // SHADOW: 키워드 기반 결과 사용, 분류 결과를 로그로만 남김
+                    filterResult = RecommendationFilter.evaluate(p, preference, date);
+                    scored = RelevanceScorer.score(p, preference);
+
+                    FilterResult classFilter =
+                        RecommendationFilter.evaluateWithClassification(
+                            p, preference, date, eligibility, ClassificationMode.ENFORCE);
+                    RelevanceScorer.ScoringResult classScored =
+                        RelevanceScorer.score(p, preference, eligibility);
+
+                    if (filterResult.eligible() != classFilter.eligible()) {
+                      log.info(
+                          "SHADOW_FILTER_DIFF: posting={} keyword={} classification={}",
+                          p.getId(),
+                          filterResult.reason(),
+                          classFilter.reason());
+                    }
+                    if (filterResult.eligible()) {
+                      int kwRole = scored.breakdown().roleScore();
+                      int clRole = classScored.breakdown().roleScore();
+                      int kwExp = scored.breakdown().experienceScore();
+                      int clExp = classScored.breakdown().experienceScore();
+                      if (kwRole != clRole || kwExp != clExp) {
+                        log.info(
+                            "SHADOW_SCORE_DIFF: posting={} kwRole={} clRole={} kwExp={} clExp={}",
+                            p.getId(),
+                            kwRole,
+                            clRole,
+                            kwExp,
+                            clExp);
+                      }
+                    }
+                  } else {
+                    filterResult =
+                        RecommendationFilter.evaluateWithClassification(
+                            p, preference, date, eligibility, mode);
+                    scored = RelevanceScorer.score(p, preference, eligibility);
+                  }
+
+                  if (!filterResult.eligible()) return java.util.stream.Stream.empty();
+
                   int penalty =
                       RelevanceScorer.computeExposurePenalty(p.getUrl(), exposureMap, date);
                   ScoreBreakdown breakdown = scored.breakdown().withExposurePenalty(penalty);
@@ -322,8 +386,9 @@ public class BriefingService {
                   boolean isUrgent =
                       RecommendationCandidate.computeIsUrgent(
                           p, date, RecommendationSelector.URGENT_DAYS);
-                  return new RecommendationCandidate(
-                      p, isNew, isUrgent, breakdown, scored.evidence());
+                  return java.util.stream.Stream.of(
+                      new RecommendationCandidate(
+                          p, isNew, isUrgent, breakdown, scored.evidence()));
                 })
             .toList();
 
@@ -332,6 +397,21 @@ public class BriefingService {
     return IntStream.range(0, top7.size())
         .mapToObj(i -> toAgentCandidateJobPosting(top7.get(i), i + 1))
         .toList();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Analysis map (batch load to avoid N+1)
+  // ---------------------------------------------------------------------------
+
+  private Map<Long, JobPostingAnalysis> loadAnalysisMap(List<JobPosting> postings) {
+    if (postings.isEmpty()) return Map.of();
+    List<Long> ids = postings.stream().map(JobPosting::getId).toList();
+    List<JobPostingAnalysis> analyses = jobPostingAnalysisRepository.findAllByJobPostingIdIn(ids);
+    Map<Long, JobPostingAnalysis> map = new HashMap<>(analyses.size() * 2);
+    for (JobPostingAnalysis a : analyses) {
+      map.put(a.getJobPostingId(), a);
+    }
+    return map;
   }
 
   // ---------------------------------------------------------------------------

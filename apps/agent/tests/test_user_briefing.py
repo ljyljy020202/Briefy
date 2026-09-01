@@ -83,10 +83,16 @@ def _posting(id: int, rank: int, company: str, title: str, **extra) -> dict:
         "isNew": False,
         "isUrgent": False,
         "scoreBreakdown": {
-            "roleScore": 0, "companyScore": 0, "skillScore": 0,
-            "experienceScore": 0, "industryScore": 0, "locationScore": 0,
-            "employmentTypeScore": 0, "companySizeScore": 0,
-            "relevanceScore": 0, "exposurePenalty": 0,
+            "roleScore": 0,
+            "companyScore": 0,
+            "skillScore": 0,
+            "experienceScore": 0,
+            "industryScore": 0,
+            "locationScore": 0,
+            "employmentTypeScore": 0,
+            "companySizeScore": 0,
+            "relevanceScore": 0,
+            "exposurePenalty": 0,
             "adjustedScore": extra.pop("adjusted_score", 0),
         },
         "matchEvidence": {
@@ -181,9 +187,9 @@ async def test_contract_backend_rank_order_preserved_when_shuffled(client):
     assert response.status_code == 200
     articles = response.json()["articles"]
     assert len(articles) == 3
-    assert "네이버" in articles[0]["title"]   # rank 1
-    assert "카카오" in articles[1]["title"]   # rank 2
-    assert "라인" in articles[2]["title"]     # rank 3
+    assert "네이버" in articles[0]["title"]  # rank 1
+    assert "카카오" in articles[1]["title"]  # rank 2
+    assert "라인" in articles[2]["title"]  # rank 3
 
 
 async def test_contract_no_agent_reranking(client):
@@ -193,13 +199,15 @@ async def test_contract_no_agent_reranking(client):
     low_score_rank1 = dict(_POOL_POSTINGS[0])
     low_score_rank1["rank"] = 1
     low_score_rank1["scoreBreakdown"] = {
-        **low_score_rank1["scoreBreakdown"], "adjustedScore": 10
+        **low_score_rank1["scoreBreakdown"],
+        "adjustedScore": 10,
     }
 
     high_score_rank2 = dict(_POOL_POSTINGS[1])
     high_score_rank2["rank"] = 2
     high_score_rank2["scoreBreakdown"] = {
-        **high_score_rank2["scoreBreakdown"], "adjustedScore": 100
+        **high_score_rank2["scoreBreakdown"],
+        "adjustedScore": 100,
     }
 
     request = {
@@ -222,8 +230,7 @@ async def test_contract_no_agent_reranking(client):
 async def test_contract_7_postings_all_accepted(client):
     """Exactly 7 postings are all accepted and appear in articles."""
     seven_postings = [
-        _posting(i, i, f"회사{i}", f"백엔드 개발자 {i}")
-        for i in range(1, 8)
+        _posting(i, i, f"회사{i}", f"백엔드 개발자 {i}") for i in range(1, 8)
     ]
     request = {
         **FULL_REQUEST,
@@ -241,8 +248,7 @@ async def test_contract_7_postings_all_accepted(client):
 async def test_contract_excess_postings_truncated_to_7(client):
     """If Backend sends >7 postings (bug), Agent truncates to 7."""
     eight_postings = [
-        _posting(i, i, f"회사{i}", f"백엔드 개발자 {i}")
-        for i in range(1, 9)
+        _posting(i, i, f"회사{i}", f"백엔드 개발자 {i}") for i in range(1, 9)
     ]
     request = {
         **FULL_REQUEST,
@@ -288,9 +294,9 @@ async def test_match_evidence_used_in_why_it_matters(client):
     articles = response.json()["articles"]
     # FULL_REQUEST postings have matchEvidence with actual company/role/skill names
     assert any(
-        "네이버" in a.get("whyItMatters", "") or
-        "카카오" in a.get("whyItMatters", "") or
-        "라인" in a.get("whyItMatters", "")
+        "네이버" in a.get("whyItMatters", "")
+        or "카카오" in a.get("whyItMatters", "")
+        or "라인" in a.get("whyItMatters", "")
         for a in articles
     )
 
@@ -369,7 +375,7 @@ async def test_llm_success_accumulates_token_usage(client):
 
     assert response.status_code == 200
     token_usage = response.json()["tokenUsage"]
-    assert token_usage["inputTokens"] == 150   # 100 + 50
+    assert token_usage["inputTokens"] == 150  # 100 + 50
     assert token_usage["outputTokens"] == 300  # 200 + 100
 
 
@@ -423,8 +429,8 @@ async def test_llm_enrichment_receives_only_selected_postings_not_full_pool(clie
     assert response.status_code == 200
     assert len(captured) >= 1
     posting_count = len(re.findall(r'"id":\s*"\d+"', captured[0]))
-    assert posting_count <= 7    # _TOP_N
-    assert posting_count < 15   # definitely not the full pool
+    assert posting_count <= 7  # _TOP_N
+    assert posting_count < 15  # definitely not the full pool
 
 
 # ---------------------------------------------------------------------------
@@ -500,9 +506,9 @@ async def test_report_has_top_level_heading(client):
     """Deterministic fallback report starts with the top-level heading."""
     response = await client.post("/briefings/generate", json=FULL_REQUEST)
     content = response.json()["content"]
-    assert content.startswith("# 오늘의 채용 브리핑"), (
-        f"content does not start with top-level heading; got: {content[:80]!r}"
-    )
+    assert content.startswith(
+        "# 오늘의 채용 브리핑"
+    ), f"content does not start with top-level heading; got: {content[:80]!r}"
 
 
 async def test_required_sections_present_in_fallback_report(client):
@@ -533,8 +539,14 @@ async def test_empty_pool_report_also_has_required_sections(client):
     }
     response = await client.post("/briefings/generate", json=request)
     content = response.json()["content"]
-    for section in ["오늘의 핵심 요약", "추천 공고 TOP", "신규/마감 임박 공고",
-                    "오늘의 지원 추천 액션", "오늘의 키워드", "한 줄 정리"]:
+    for section in [
+        "오늘의 핵심 요약",
+        "추천 공고 TOP",
+        "신규/마감 임박 공고",
+        "오늘의 지원 추천 액션",
+        "오늘의 키워드",
+        "한 줄 정리",
+    ]:
         assert section in content, f"empty-state section missing: {section}"
 
 
@@ -558,9 +570,9 @@ async def test_matching_reason_excludes_vague_phrases(client):
     for article in articles:
         why = article.get("whyItMatters", "")
         for phrase in vague_phrases:
-            assert phrase not in why, (
-                f"vague phrase {phrase!r} found in whyItMatters: {why!r}"
-            )
+            assert (
+                phrase not in why
+            ), f"vague phrase {phrase!r} found in whyItMatters: {why!r}"
 
 
 async def test_matching_reason_includes_concrete_terms(client):
@@ -569,18 +581,24 @@ async def test_matching_reason_includes_concrete_terms(client):
     articles = response.json()["articles"]
     # Terms in FULL_REQUEST matchEvidence fields
     concrete_terms = {
-        "Spring Boot", "Java", "Kotlin",
-        "백엔드 개발자", "풀스택 개발자",
-        "네이버", "카카오", "라인",
-        "서울", "판교",
-        "신입", "3년 이상", "정규직",
+        "Spring Boot",
+        "Java",
+        "Kotlin",
+        "백엔드 개발자",
+        "풀스택 개발자",
+        "네이버",
+        "카카오",
+        "라인",
+        "서울",
+        "판교",
+        "신입",
+        "3년 이상",
+        "정규직",
     }
     for article in articles:
         why = article.get("whyItMatters", "")
         matched = [t for t in concrete_terms if t in why]
-        assert matched, (
-            f"no concrete preference terms found in whyItMatters: {why!r}"
-        )
+        assert matched, f"no concrete preference terms found in whyItMatters: {why!r}"
 
 
 # ---------------------------------------------------------------------------
@@ -599,9 +617,9 @@ async def test_no_acceptance_probability_in_fallback_content(client):
         "경쟁률이 낮",
     ]
     for phrase in hallucination_phrases:
-        assert phrase not in content, (
-            f"hallucination phrase {phrase!r} found in content"
-        )
+        assert (
+            phrase not in content
+        ), f"hallucination phrase {phrase!r} found in content"
 
 
 # ---------------------------------------------------------------------------
@@ -677,9 +695,9 @@ async def test_contract_fixture_accepted_by_agent_schema(client):
     payload = json.loads(fixture_path.read_text())
 
     response = await client.post("/briefings/generate", json=payload)
-    assert response.status_code == 200, (
-        f"contract fixture rejected: {response.status_code} {response.text}"
-    )
+    assert (
+        response.status_code == 200
+    ), f"contract fixture rejected: {response.status_code} {response.text}"
     body = response.json()
     for field in ("title", "summary", "content", "articles", "tokenUsage"):
         assert field in body, f"missing top-level field: {field}"
@@ -721,9 +739,9 @@ async def test_score_breakdown_fields_do_not_appear_in_response(client):
     response = await client.post("/briefings/generate", json=FULL_REQUEST)
     assert response.status_code == 200
     body_text = response.text
-    assert "scoreBreakdown" not in body_text, (
-        "scoreBreakdown must not appear in Agent response"
-    )
-    assert "adjustedScore" not in body_text, (
-        "adjustedScore must not appear in Agent response"
-    )
+    assert (
+        "scoreBreakdown" not in body_text
+    ), "scoreBreakdown must not appear in Agent response"
+    assert (
+        "adjustedScore" not in body_text
+    ), "adjustedScore must not appear in Agent response"
