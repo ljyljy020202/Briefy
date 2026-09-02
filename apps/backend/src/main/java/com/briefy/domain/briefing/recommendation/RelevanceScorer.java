@@ -28,9 +28,9 @@ import java.util.Map;
 public final class RelevanceScorer {
 
   // ── Preference weights ────────────────────────────────────────────────────
-  static final int SCORE_ROLE_MATCH = 30;
+  static final int SCORE_ROLE_MATCH = 20;
   static final int SCORE_ROLE_BROAD_IT_MATCH = 15;
-  static final int SCORE_TARGET_COMPANY = 25;
+  static final int SCORE_TARGET_COMPANY = 20;
   static final int SCORE_SKILL = 5;
   static final int SCORE_SKILLS_MAX = 25;
   static final int SCORE_EXPERIENCE = 15;
