@@ -75,7 +75,7 @@ briefy:
   classifier:
     version: ${CLASSIFIER_VERSION:1.0.0}
   classification:
-    mode: ${CLASSIFICATION_MODE:SHADOW}
+    mode: ${CLASSIFICATION_MODE:ENFORCE}
     classifier-version: ${CLASSIFIER_VERSION:1.0.0}
     worker:
       fixed-delay-ms: ${CLASSIFICATION_WORKER_FIXED_DELAY_MS:60000}
