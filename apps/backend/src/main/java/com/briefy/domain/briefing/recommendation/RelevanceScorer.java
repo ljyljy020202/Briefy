@@ -32,7 +32,7 @@ public final class RelevanceScorer {
   // ── Preference weights ────────────────────────────────────────────────────
   static final int SCORE_ROLE_MATCH = 25;
   static final int SCORE_ROLE_BROAD_IT_MATCH = 15;
-  static final int SCORE_TARGET_COMPANY = 20;
+  static final int SCORE_TARGET_COMPANY = 15;
   static final int SCORE_SKILL = 5;
   static final int SCORE_SKILLS_MAX = 25;
   static final int SCORE_EXPERIENCE = 15;
