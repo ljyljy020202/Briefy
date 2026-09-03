@@ -5,6 +5,8 @@ import com.briefy.domain.briefing.policy.ExperiencePolicy;
 import com.briefy.domain.briefing.policy.JobRolePolicy;
 import com.briefy.domain.briefing.policy.ParsedExperience;
 import com.briefy.domain.candidatepool.entity.JobPosting;
+import com.briefy.domain.candidatepool.entity.analysis.PostingScope;
+import com.briefy.domain.candidatepool.entity.analysis.RecruitmentType;
 import com.briefy.domain.company.entity.Company;
 import com.briefy.global.util.UrlUtils;
 import java.time.LocalDate;
@@ -28,7 +30,7 @@ import java.util.Map;
 public final class RelevanceScorer {
 
   // ── Preference weights ────────────────────────────────────────────────────
-  static final int SCORE_ROLE_MATCH = 20;
+  static final int SCORE_ROLE_MATCH = 25;
   static final int SCORE_ROLE_BROAD_IT_MATCH = 15;
   static final int SCORE_TARGET_COMPANY = 20;
   static final int SCORE_SKILL = 5;
@@ -38,6 +40,12 @@ public final class RelevanceScorer {
   static final int SCORE_LOCATION = 10;
   static final int SCORE_EMPLOYMENT_TYPE = 10;
   static final int SCORE_COMPANY_SIZE = 15;
+
+  // ── Classification-derived editorial bonus (대기업 공채) ──────────────────────
+  // 분류 경로(score with eligibility)에서만 적용. 순수 키워드 스코어에는 반영하지 않는다.
+  static final int SCORE_OPEN_RECRUITMENT = 10; // postingScope=OPEN_RECRUITMENT
+  static final int SCORE_NEW_GRAD_HIRE = 5; // recruitmentType=NEW_GRAD_HIRE + 신입 사용자
+  static final int SCORE_OPEN_RECRUITMENT_MAX = 12; // 두 가산점 합산 상한
 
   // ── Exposure penalty thresholds ───────────────────────────────────────────
   static final int EXPOSURE_PENALTY_YESTERDAY = 25; // exposed within 1 day
@@ -203,10 +211,15 @@ public final class RelevanceScorer {
    * are derived from the classification result rather than keyword matching:
    *
    * <ul>
-   *   <li>DIRECT_MATCH → roleScore = 30
-   *   <li>BROAD_IT_MATCH → roleScore = 15
-   *   <li>Experience FULL → experienceScore = 15; PARTIAL/EXCLUDED/UNKNOWN → 0
+   *   <li>DIRECT_MATCH → roleScore = SCORE_ROLE_MATCH (25)
+   *   <li>BROAD_IT_MATCH → roleScore = SCORE_ROLE_BROAD_IT_MATCH (15)
+   *   <li>Experience FULL → experienceScore = SCORE_EXPERIENCE (15); PARTIAL/EXCLUDED/UNKNOWN → 0
    * </ul>
+   *
+   * <p>Additionally applies a classification-derived editorial bonus for large-enterprise open
+   * recruitment (see {@link #computeOpenRecruitmentBonus}): OPEN_RECRUITMENT scope earns a flat
+   * bonus, and NEW_GRAD_HIRE earns an extra bonus <em>only when the user is a new-grad</em>
+   * (gating), capped at {@link #SCORE_OPEN_RECRUITMENT_MAX}.
    *
    * <p>All other dimensions (company, skills, industry, location, empType, companySize) retain the
    * keyword-based scores. Returns the same result as {@link #score(JobPosting, Map)} when
@@ -230,6 +243,8 @@ public final class RelevanceScorer {
     int classExpScore =
         eligibility.experienceMatch() == ExperienceMatchType.FULL ? SCORE_EXPERIENCE : 0;
 
+    int openRecruitmentScore = computeOpenRecruitmentBonus(preference, eligibility);
+
     ScoreBreakdown orig = keywordResult.breakdown();
     ScoreBreakdown updated =
         ScoreBreakdown.ofRelevance(
@@ -240,7 +255,8 @@ public final class RelevanceScorer {
             orig.industryScore(),
             orig.locationScore(),
             orig.employmentTypeScore(),
-            orig.companySizeScore());
+            orig.companySizeScore(),
+            openRecruitmentScore);
 
     MatchEvidence origEv = keywordResult.evidence();
     MatchEvidence updatedEv =
@@ -256,6 +272,30 @@ public final class RelevanceScorer {
             eligibility.roleMatch().name());
 
     return new ScoringResult(updated, updatedEv);
+  }
+
+  /**
+   * Computes the large-enterprise open-recruitment editorial bonus from the classification result.
+   *
+   * <ul>
+   *   <li>postingScope = OPEN_RECRUITMENT → +{@link #SCORE_OPEN_RECRUITMENT}
+   *   <li>recruitmentType = NEW_GRAD_HIRE <b>AND the user is a new-grad</b> → +{@link
+   *       #SCORE_NEW_GRAD_HIRE} (gated so experienced users are not pushed new-grad 공채)
+   * </ul>
+   *
+   * <p>The sum is capped at {@link #SCORE_OPEN_RECRUITMENT_MAX}.
+   */
+  static int computeOpenRecruitmentBonus(
+      Map<String, Object> preference, AnalysisEligibility eligibility) {
+    int bonus = 0;
+    if (eligibility.postingScope() == PostingScope.OPEN_RECRUITMENT) {
+      bonus += SCORE_OPEN_RECRUITMENT;
+    }
+    if (eligibility.recruitmentType() == RecruitmentType.NEW_GRAD_HIRE
+        && ExperiencePolicy.isNewGradUser(extractList(preference, "experienceLevels"))) {
+      bonus += SCORE_NEW_GRAD_HIRE;
+    }
+    return Math.min(bonus, SCORE_OPEN_RECRUITMENT_MAX);
   }
 
   /**

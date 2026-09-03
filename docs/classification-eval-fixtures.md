@@ -52,7 +52,7 @@ tracks (요약)  : 트랙별 role_groups + exp 요건 (MULTI_ROLE/OPEN_RECRUITME
 기대 eligibility: eligible=true, roleMatch=DIRECT_MATCH, expMatch=FULL
 판정 근거      : 경력직(JUNIOR/MID) → isNewGrad=false.
                  REQUIRED 경력 → FULL (경력직은 REQUIRED를 FULL로 처리).
-                 RelevanceScorer에서 roleScore +30, experienceScore +15.
+                 RelevanceScorer에서 roleScore +20(SCORE_ROLE_MATCH), experienceScore +15.
 ```
 
 ---
@@ -87,7 +87,7 @@ tracks (요약)  : 트랙별 role_groups + exp 요건 (MULTI_ROLE/OPEN_RECRUITME
 
 ---
 
-## CASE-05: GENERAL_IT 단일 직군 — BACKEND 사용자와 불일치
+## CASE-05: GENERAL_IT 단일 직군 — BACKEND 사용자에게 BROAD_IT_MATCH (제외 안 함)
 
 ```
 케이스명       : CASE-05
@@ -95,10 +95,11 @@ tracks (요약)  : 트랙별 role_groups + exp 요건 (MULTI_ROLE/OPEN_RECRUITME
                  job_domain=IT, scope=ROLE_SPECIFIC
                  role_groups=[GENERAL_IT]
 사용자 선호    : roles=["backend"], experienceLevels=["MID"]
-기대 eligibility: eligible=false, roleMatch=MISMATCH, expMatch=UNKNOWN
-판정 근거      : GENERAL_IT은 단일 직군 공고에서 BACKEND의 acceptableTags에 포함되지 않는다.
-                 BACKEND.compatiblePostingGroups()={BACKEND, FULLSTACK} 이므로 MISMATCH.
-                 ENFORCE 모드에서 ANALYSIS_ROLE_MISMATCH로 필터 제외.
+기대 eligibility: eligible=true, roleMatch=BROAD_IT_MATCH, expMatch=(경력 요건 따라)
+판정 근거      : 직무 기반 제외는 role_groups가 전부 NON_DEV일 때만 발생한다.
+                 GENERAL_IT은 비개발이 아니므로 BACKEND의 acceptableTags와 교집합이 없어도 제외하지 않는다.
+                 직접 일치는 아니므로 BROAD_IT_MATCH로 통과하고, RelevanceScorer에서 roleScore +15.
+                 (DIRECT_MATCH가 아니므로 backend 전용 +20 가산점은 받지 않는다.)
 ```
 
 ---
@@ -120,9 +121,16 @@ tracks (요약)  : 트랙별 role_groups + exp 요건 (MULTI_ROLE/OPEN_RECRUITME
 판정 근거      : scope=OPEN_RECRUITMENT. DATA 사용자 acceptableTags={DATA, AI_ML(compatible)}.
                  "IT개발" 트랙의 role_groups=[BACKEND, FULLSTACK] → DATA와 DIRECT_MATCH 없음.
                  hasAnyRoleMatchingTrack=false → BROAD_IT_MATCH 시도.
-                 "IT개발" 트랙이 IT_TAGS에 속하고, evidence 있고, exp NONE → FULL.
-                 → BROAD_IT_MATCH+FULL. RelevanceScorer +15 (role) +15 (exp).
+                 "IT개발" 트랙이 IT_TAGS에 속하고 exp NONE → FULL.
+                 → BROAD_IT_MATCH+FULL. RelevanceScorer +15 (role) +15 (exp)
+                 + 대기업 공채 가산점: scope=OPEN_RECRUITMENT +10, NEW_GRAD_HIRE+신입 사용자 +5 → 합산 상한 12.
 ```
+
+> **대기업 공채 가산점 (openRecruitmentScore)**: 분류 경로 스코어링에서만 적용되는 editorial 가산점.
+> - `postingScope=OPEN_RECRUITMENT` → +10 (`SCORE_OPEN_RECRUITMENT`, 사용자 무관)
+> - `recruitmentType=NEW_GRAD_HIRE` **AND 사용자가 신입** → +5 (`SCORE_NEW_GRAD_HIRE`, 게이팅)
+> - 두 가산점 합산 상한 12 (`SCORE_OPEN_RECRUITMENT_MAX`)
+> - 경력직 사용자에게는 NEW_GRAD_HIRE 가산점이 붙지 않는다.
 
 ---
 

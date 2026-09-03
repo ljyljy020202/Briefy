@@ -358,14 +358,17 @@ public class BriefingService {
                       int clRole = classScored.breakdown().roleScore();
                       int kwExp = scored.breakdown().experienceScore();
                       int clExp = classScored.breakdown().experienceScore();
-                      if (kwRole != clRole || kwExp != clExp) {
+                      int clOpenRecruit = classScored.breakdown().openRecruitmentScore();
+                      if (kwRole != clRole || kwExp != clExp || clOpenRecruit != 0) {
                         log.info(
-                            "SHADOW_SCORE_DIFF: posting={} kwRole={} clRole={} kwExp={} clExp={}",
+                            "SHADOW_SCORE_DIFF: posting={} kwRole={} clRole={} kwExp={} clExp={}"
+                                + " clOpenRecruit={}",
                             p.getId(),
                             kwRole,
                             clRole,
                             kwExp,
-                            clExp);
+                            clExp,
+                            clOpenRecruit);
                       }
                     }
                   } else {
