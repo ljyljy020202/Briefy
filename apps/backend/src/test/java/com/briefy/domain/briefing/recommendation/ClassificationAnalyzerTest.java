@@ -186,11 +186,11 @@ class ClassificationAnalyzerTest {
   }
 
   // ═══════════════════════════════════════════════════════════════════════
-  // 4. OTHER_IT를 Backend로 추천하지 않음
+  // 4. OTHER_IT는 제외하지 않고 넓은 IT 매칭으로 통과 (Backend 직접 일치는 아님)
   // ═══════════════════════════════════════════════════════════════════════
 
   @Test
-  void otherIt_notRecommendedForBackendUser() {
+  void otherIt_broadMatchForBackendUser() {
     JobPostingAnalysis a =
         analysis(
             JobDomain.IT,
@@ -205,8 +205,9 @@ class ClassificationAnalyzerTest {
     AnalysisEligibility result =
         ClassificationAnalyzer.derive(a, backendPref(), ClassificationMode.ENFORCE);
 
-    assertThat(result.eligible()).isFalse();
-    assertThat(result.roleMatch()).isEqualTo(RoleMatchType.MISMATCH);
+    // OTHER_IT은 비개발이 아니므로 제외 대상이 아니다. 직접 일치는 아니므로 BROAD_IT_MATCH.
+    assertThat(result.eligible()).isTrue();
+    assertThat(result.roleMatch()).isEqualTo(RoleMatchType.BROAD_IT_MATCH);
     assertThat(result.isNonItExclusion()).isFalse();
   }
 
@@ -497,11 +498,11 @@ class ClassificationAnalyzerTest {
   }
 
   // ═══════════════════════════════════════════════════════════════════════
-  // 14. GENERAL_IT 단일 직무 공고 → Backend 사용자 MISMATCH
+  // 14. GENERAL_IT 단일 직무 공고 → Backend 사용자에게 BROAD_IT_MATCH (제외하지 않음)
   // ═══════════════════════════════════════════════════════════════════════
 
   @Test
-  void generalIt_singleRole_mismatchForBackendUser() {
+  void generalIt_singleRole_broadMatchForBackendUser() {
     JobPostingAnalysis a =
         analysis(
             JobDomain.IT,
@@ -516,9 +517,58 @@ class ClassificationAnalyzerTest {
     AnalysisEligibility result =
         ClassificationAnalyzer.derive(a, backendPref(), ClassificationMode.ENFORCE);
 
+    // GENERAL_IT은 비개발이 아니므로 교집합이 없어도 제외하지 않는다 → BROAD_IT_MATCH.
+    assertThat(result.eligible()).isTrue();
+    assertThat(result.roleMatch()).isEqualTo(RoleMatchType.BROAD_IT_MATCH);
+    assertThat(result.isNonItExclusion()).isFalse();
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // 14b. NON_DEV 단일 직무 공고 → 직무 기반 제외 (유일한 제외 조건)
+  // ═══════════════════════════════════════════════════════════════════════
+
+  @Test
+  void nonDevOnly_singleRole_excludedForBackendUser() {
+    JobPostingAnalysis a =
+        analysis(
+            JobDomain.MIXED,
+            PostingScope.ROLE_SPECIFIC,
+            List.of(RoleGroupTag.NON_DEV),
+            null,
+            null,
+            ExperienceRequirementType.NONE,
+            RecruitmentType.EXPERIENCED_HIRE,
+            List.of());
+
+    AnalysisEligibility result =
+        ClassificationAnalyzer.derive(a, backendPref(), ClassificationMode.ENFORCE);
+
     assertThat(result.eligible()).isFalse();
     assertThat(result.roleMatch()).isEqualTo(RoleMatchType.MISMATCH);
-    assertThat(result.isNonItExclusion()).isFalse();
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // 14c. IT + NON_DEV 혼합 단일 공고 → IT 신호가 있으므로 제외하지 않음
+  // ═══════════════════════════════════════════════════════════════════════
+
+  @Test
+  void mixedItAndNonDev_singleRole_broadMatchForBackendUser() {
+    JobPostingAnalysis a =
+        analysis(
+            JobDomain.MIXED,
+            PostingScope.ROLE_SPECIFIC,
+            List.of(RoleGroupTag.OTHER_IT, RoleGroupTag.NON_DEV),
+            null,
+            null,
+            ExperienceRequirementType.NONE,
+            RecruitmentType.EXPERIENCED_HIRE,
+            List.of());
+
+    AnalysisEligibility result =
+        ClassificationAnalyzer.derive(a, backendPref(), ClassificationMode.ENFORCE);
+
+    assertThat(result.eligible()).isTrue();
+    assertThat(result.roleMatch()).isEqualTo(RoleMatchType.BROAD_IT_MATCH);
   }
 
   // ═══════════════════════════════════════════════════════════════════════

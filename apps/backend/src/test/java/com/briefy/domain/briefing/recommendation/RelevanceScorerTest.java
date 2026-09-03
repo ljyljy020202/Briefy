@@ -3,6 +3,8 @@ package com.briefy.domain.briefing.recommendation;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.briefy.domain.candidatepool.entity.JobPosting;
+import com.briefy.domain.candidatepool.entity.analysis.PostingScope;
+import com.briefy.domain.candidatepool.entity.analysis.RecruitmentType;
 import com.briefy.domain.company.entity.Company;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -313,6 +315,126 @@ class RelevanceScorerTest {
   // ---------------------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------------------
+
+  // ---------------------------------------------------------------------------
+  // 대기업 공채 가산점 (openRecruitmentScore) — 분류 경로 전용, 신입 게이팅
+  // ---------------------------------------------------------------------------
+
+  @Test
+  void keywordOnlyScore_hasZeroOpenRecruitmentBonus() {
+    JobPosting p = posting("개발자", "회사A", "https://e.com/1", null, null, TODAY);
+    RelevanceScorer.ScoringResult result = RelevanceScorer.score(p, Map.of());
+    assertThat(result.breakdown().openRecruitmentScore()).isEqualTo(0);
+  }
+
+  @Test
+  void openRecruitmentScope_getsBonus_forAnyUser() {
+    JobPosting p = posting("개발자", "회사A", "https://e.com/1", null, null, TODAY);
+    AnalysisEligibility e =
+        eligibility(
+            RoleMatchType.BROAD_IT_MATCH,
+            ExperienceMatchType.FULL,
+            PostingScope.OPEN_RECRUITMENT,
+            RecruitmentType.OPEN_HIRE);
+
+    RelevanceScorer.ScoringResult result = RelevanceScorer.score(p, Map.of(), e);
+
+    assertThat(result.breakdown().openRecruitmentScore())
+        .isEqualTo(RelevanceScorer.SCORE_OPEN_RECRUITMENT);
+  }
+
+  @Test
+  void newGradHire_getsBonus_onlyForNewGradUser() {
+    JobPosting p = posting("개발자", "회사A", "https://e.com/1", null, null, TODAY);
+    AnalysisEligibility e =
+        eligibility(
+            RoleMatchType.BROAD_IT_MATCH,
+            ExperienceMatchType.FULL,
+            PostingScope.ROLE_SPECIFIC,
+            RecruitmentType.NEW_GRAD_HIRE);
+
+    Map<String, Object> newGradPref = Map.of("experienceLevels", List.of("신입"));
+    RelevanceScorer.ScoringResult result = RelevanceScorer.score(p, newGradPref, e);
+
+    assertThat(result.breakdown().openRecruitmentScore())
+        .isEqualTo(RelevanceScorer.SCORE_NEW_GRAD_HIRE);
+  }
+
+  @Test
+  void newGradHire_noBonus_forExperiencedUser() {
+    JobPosting p = posting("개발자", "회사A", "https://e.com/1", null, null, TODAY);
+    AnalysisEligibility e =
+        eligibility(
+            RoleMatchType.BROAD_IT_MATCH,
+            ExperienceMatchType.FULL,
+            PostingScope.ROLE_SPECIFIC,
+            RecruitmentType.NEW_GRAD_HIRE);
+
+    Map<String, Object> experiencedPref = Map.of("experienceLevels", List.of("경력"));
+    RelevanceScorer.ScoringResult result = RelevanceScorer.score(p, experiencedPref, e);
+
+    assertThat(result.breakdown().openRecruitmentScore()).isEqualTo(0);
+  }
+
+  @Test
+  void openRecruitmentAndNewGradHire_newGradUser_isCapped() {
+    JobPosting p = posting("개발자", "회사A", "https://e.com/1", null, null, TODAY);
+    AnalysisEligibility e =
+        eligibility(
+            RoleMatchType.BROAD_IT_MATCH,
+            ExperienceMatchType.FULL,
+            PostingScope.OPEN_RECRUITMENT,
+            RecruitmentType.NEW_GRAD_HIRE);
+
+    Map<String, Object> newGradPref = Map.of("experienceLevels", List.of("신입"));
+    RelevanceScorer.ScoringResult result = RelevanceScorer.score(p, newGradPref, e);
+
+    // 10 + 5 = 15 → capped to 12
+    assertThat(result.breakdown().openRecruitmentScore())
+        .isEqualTo(RelevanceScorer.SCORE_OPEN_RECRUITMENT_MAX);
+  }
+
+  @Test
+  void roleSpecificExperiencedHire_hasNoBonus() {
+    JobPosting p = posting("개발자", "회사A", "https://e.com/1", null, null, TODAY);
+    AnalysisEligibility e =
+        eligibility(
+            RoleMatchType.DIRECT_MATCH,
+            ExperienceMatchType.FULL,
+            PostingScope.ROLE_SPECIFIC,
+            RecruitmentType.EXPERIENCED_HIRE);
+
+    RelevanceScorer.ScoringResult result = RelevanceScorer.score(p, Map.of(), e);
+
+    assertThat(result.breakdown().openRecruitmentScore()).isEqualTo(0);
+  }
+
+  @Test
+  void openRecruitmentBonus_isIncludedInRelevanceScore() {
+    JobPosting p = posting("개발자", "회사A", "https://e.com/1", null, null, TODAY);
+    AnalysisEligibility e =
+        eligibility(
+            RoleMatchType.BROAD_IT_MATCH,
+            ExperienceMatchType.UNKNOWN,
+            PostingScope.OPEN_RECRUITMENT,
+            RecruitmentType.OPEN_HIRE);
+
+    RelevanceScorer.ScoringResult result = RelevanceScorer.score(p, Map.of(), e);
+    ScoreBreakdown b = result.breakdown();
+
+    // relevanceScore = roleScore(15) + openRecruitmentScore(10) (다른 항목 0)
+    assertThat(b.openRecruitmentScore()).isEqualTo(RelevanceScorer.SCORE_OPEN_RECRUITMENT);
+    assertThat(b.relevanceScore()).isEqualTo(b.roleScore() + b.openRecruitmentScore());
+  }
+
+  private static AnalysisEligibility eligibility(
+      RoleMatchType role,
+      ExperienceMatchType exp,
+      PostingScope scope,
+      RecruitmentType recruitmentType) {
+    return new AnalysisEligibility(
+        true, role, exp, null, List.of("test"), "evidence", "hash", "1.0", scope, recruitmentType);
+  }
 
   private static JobPosting posting(
       String title,
