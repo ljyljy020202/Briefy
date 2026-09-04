@@ -4,14 +4,21 @@ package com.briefy.domain.briefing.recommendation;
  * Typed breakdown of how a posting's score was computed.
  *
  * <p>{@code relevanceScore} = sum of the preference-based components plus {@code
- * openRecruitmentScore}. {@code adjustedScore} = relevanceScore − exposurePenalty (always an exact
- * subtraction — no other adjustments here).
+ * openRecruitmentScore} and {@code sourceScore}. {@code adjustedScore} = relevanceScore −
+ * exposurePenalty (always an exact subtraction — no other adjustments here).
  *
  * <p>Time-based signals (recency bonus, urgency bonus) are intentionally absent — those are
- * computed downstream in the selector layer and must never be added here. {@code
- * openRecruitmentScore} is a classification-derived editorial bonus for large-enterprise open
- * recruitment; it is populated only via the classification-aware scoring path in {@link
- * RelevanceScorer} and is 0 for keyword-only scoring.
+ * computed downstream in the selector layer and must never be added here.
+ *
+ * <p>Editorial bonuses:
+ *
+ * <ul>
+ *   <li>{@code openRecruitmentScore} — classification-derived bonus for large-enterprise open
+ *       recruitment; populated only via the classification-aware scoring path in {@link
+ *       RelevanceScorer} and is 0 for keyword-only scoring.
+ *   <li>{@code sourceScore} — bonus for postings collected from an official company career site
+ *       (i.e. not an aggregator such as jasoseol/saramin); applied in all scoring paths.
+ * </ul>
  */
 public record ScoreBreakdown(
     int roleScore,
@@ -23,6 +30,7 @@ public record ScoreBreakdown(
     int employmentTypeScore,
     int companySizeScore,
     int openRecruitmentScore,
+    int sourceScore,
     int relevanceScore,
     int exposurePenalty,
     int adjustedScore) {
@@ -49,10 +57,11 @@ public record ScoreBreakdown(
         locationScore,
         employmentTypeScore,
         companySizeScore,
+        0,
         0);
   }
 
-  /** Creates a breakdown including the classification-derived open-recruitment bonus. */
+  /** Creates a breakdown including the open-recruitment and official-source editorial bonuses. */
   public static ScoreBreakdown ofRelevance(
       int roleScore,
       int companyScore,
@@ -62,7 +71,8 @@ public record ScoreBreakdown(
       int locationScore,
       int employmentTypeScore,
       int companySizeScore,
-      int openRecruitmentScore) {
+      int openRecruitmentScore,
+      int sourceScore) {
     int relevance =
         roleScore
             + companyScore
@@ -72,7 +82,8 @@ public record ScoreBreakdown(
             + locationScore
             + employmentTypeScore
             + companySizeScore
-            + openRecruitmentScore;
+            + openRecruitmentScore
+            + sourceScore;
     return new ScoreBreakdown(
         roleScore,
         companyScore,
@@ -83,6 +94,7 @@ public record ScoreBreakdown(
         employmentTypeScore,
         companySizeScore,
         openRecruitmentScore,
+        sourceScore,
         relevance,
         0,
         relevance);
@@ -100,6 +112,7 @@ public record ScoreBreakdown(
         employmentTypeScore,
         companySizeScore,
         openRecruitmentScore,
+        sourceScore,
         relevanceScore,
         penalty,
         relevanceScore - penalty);

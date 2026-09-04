@@ -37,9 +37,12 @@ export type MockReport = {
 export const JOB_KEYWORD_SUGGESTIONS: Record<string, string[]> = {
   roles: [
     '백엔드 개발자',
+    '프론트엔드 개발자',
     '풀스택 개발자',
     '데이터 엔지니어',
+    'AI 엔지니어',
     'DevOps 엔지니어',
+    '인프라 엔지니어',
     'iOS 개발자',
     'Android 개발자',
   ],
@@ -53,8 +56,16 @@ export const JOB_KEYWORD_SUGGESTIONS: Record<string, string[]> = {
     '배달의민족',
     '크래프톤',
   ],
-  companySizes: ['스타트업', '중소기업', '중견기업', '대기업', '외국계'],
-  industries: ['IT/소프트웨어', '게임', '핀테크', '이커머스', '의료/헬스케어', '교육'],
+  companySizes: ['스타트업', '중소기업', '중견기업', '대기업', '공기업/공공기관', '외국계'],
+  industries: [
+    'IT/소프트웨어',
+    '게임',
+    '핀테크',
+    '은행/증권사',
+    '이커머스',
+    '의료/헬스케어',
+    '교육',
+  ],
   skills: [
     'Spring Boot',
     'Python',

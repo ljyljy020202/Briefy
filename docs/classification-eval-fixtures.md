@@ -96,10 +96,11 @@ tracks (요약)  : 트랙별 role_groups + exp 요건 (MULTI_ROLE/OPEN_RECRUITME
                  role_groups=[GENERAL_IT]
 사용자 선호    : roles=["backend"], experienceLevels=["MID"]
 기대 eligibility: eligible=true, roleMatch=BROAD_IT_MATCH, expMatch=(경력 요건 따라)
-판정 근거      : 직무 기반 제외는 role_groups가 전부 NON_DEV일 때만 발생한다.
-                 GENERAL_IT은 비개발이 아니므로 BACKEND의 acceptableTags와 교집합이 없어도 제외하지 않는다.
-                 직접 일치는 아니므로 BROAD_IT_MATCH로 통과하고, RelevanceScorer에서 roleScore +15.
-                 (DIRECT_MATCH가 아니므로 backend 전용 +20 가산점은 받지 않는다.)
+판정 근거      : 직무 필터는 교집합 기준(role_groups ∩ acceptableTags)으로 동작한다.
+                 단, GENERAL_IT(세부 직무 불명확한 IT)은 예외로 교집합이 없어도 항상 포함한다.
+                 role_groups=[GENERAL_IT] → 직접 일치는 없지만 GENERAL_IT 규칙으로 BROAD_IT_MATCH.
+                 RelevanceScorer에서 roleScore +15 (DIRECT_MATCH의 backend 전용 +25는 미부여).
+                 참고: OTHER_IT 등 GENERAL_IT이 아닌 IT 직군은 교집합이 없으면 MISMATCH로 제외된다.
 ```
 
 ---

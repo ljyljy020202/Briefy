@@ -11,6 +11,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.briefy.config.AppProperties;
 import com.briefy.domain.briefing.entity.BriefingReport;
 import com.briefy.domain.briefing.repository.BriefingReportRepository;
 import com.briefy.domain.delivery.entity.DeliveryLog;
@@ -57,7 +58,11 @@ class EmailDeliveryRetryTest {
   void setUp() {
     emailDeliveryService =
         new EmailDeliveryService(
-            deliveryLogPersistenceService, briefingReportRepository, userRepository, emailSender);
+            deliveryLogPersistenceService,
+            briefingReportRepository,
+            userRepository,
+            emailSender,
+            new AppProperties("http://localhost:3000"));
     // 재시도 대기시간 0으로 설정 (테스트 속도 향상)
     ReflectionTestUtils.setField(emailDeliveryService, "emailRetryBackoffMs", 0L);
 

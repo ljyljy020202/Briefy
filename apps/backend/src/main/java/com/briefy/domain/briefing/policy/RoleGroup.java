@@ -33,10 +33,12 @@ public enum RoleGroup {
   AI_ML(
       List.of(
           "ai engineer",
+          "ai 엔지니어",
           "ml engineer",
           "machine learning",
           "머신러닝",
           "인공지능",
+          "인공지능 엔지니어",
           "deep learning",
           "딥러닝",
           "nlp engineer")),
