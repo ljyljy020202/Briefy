@@ -47,6 +47,13 @@ public final class RelevanceScorer {
   static final int SCORE_NEW_GRAD_HIRE = 5; // recruitmentType=NEW_GRAD_HIRE + 신입 사용자
   static final int SCORE_OPEN_RECRUITMENT_MAX = 12; // 두 가산점 합산 상한
 
+  // ── Official source bonus ─────────────────────────────────────────────────
+  // 공식 채용 사이트(애그리게이터 jasoseol/saramin·fixture 제외) 공고에 소폭 가산.
+  // 모든 스코어 경로(SHADOW/ENFORCE)에 동일하게 적용된다.
+  static final int SCORE_OFFICIAL_SOURCE = 5;
+  private static final java.util.Set<String> AGGREGATOR_SOURCES =
+      java.util.Set.of("jasoseol", "saramin", "fixture");
+
   // ── Exposure penalty thresholds ───────────────────────────────────────────
   static final int EXPOSURE_PENALTY_YESTERDAY = 25; // exposed within 1 day
   static final int EXPOSURE_PENALTY_RECENT = 15; // 2–3 days ago
@@ -179,6 +186,9 @@ public final class RelevanceScorer {
       }
     }
 
+    // ── 9. Official source bonus ─────────────────────────────────────────────
+    int sourceScore = isOfficialSource(posting.getSource()) ? SCORE_OFFICIAL_SOURCE : 0;
+
     ScoreBreakdown breakdown =
         ScoreBreakdown.ofRelevance(
             roleScore,
@@ -188,7 +198,9 @@ public final class RelevanceScorer {
             industryScore,
             locationScore,
             empTypeScore,
-            companySizeScore);
+            companySizeScore,
+            0,
+            sourceScore);
 
     MatchEvidence evidence =
         MatchEvidence.of(
@@ -256,7 +268,8 @@ public final class RelevanceScorer {
             orig.locationScore(),
             orig.employmentTypeScore(),
             orig.companySizeScore(),
-            openRecruitmentScore);
+            openRecruitmentScore,
+            orig.sourceScore());
 
     MatchEvidence origEv = keywordResult.evidence();
     MatchEvidence updatedEv =
@@ -296,6 +309,17 @@ public final class RelevanceScorer {
       bonus += SCORE_NEW_GRAD_HIRE;
     }
     return Math.min(bonus, SCORE_OPEN_RECRUITMENT_MAX);
+  }
+
+  /**
+   * True when the posting comes from an official company career site.
+   *
+   * <p>Aggregators (jasoseol, saramin) and test fixtures are excluded; every other non-blank source
+   * (e.g. {@code naver_careers}, {@code toss_careers}, {@code company_*}) is treated as official.
+   */
+  static boolean isOfficialSource(String source) {
+    if (source == null || source.isBlank()) return false;
+    return !AGGREGATOR_SOURCES.contains(source.toLowerCase());
   }
 
   /**
