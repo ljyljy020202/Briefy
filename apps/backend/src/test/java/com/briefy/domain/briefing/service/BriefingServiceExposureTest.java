@@ -174,12 +174,12 @@ class BriefingServiceExposureTest {
     // Both should canonicalize to the same key.
     JobPosting exposed = posting("회사Q", "개발자", baseUrl, null, null, null);
     when(briefingArticleRepository.findRecentExposuresByUserId(any(), any()))
-        .thenReturn(List.of(exposure(withQuery, TODAY.minusDays(1)))); // YESTERDAY penalty 25
+        .thenReturn(List.of(exposure(withQuery, TODAY.minusDays(1)))); // YESTERDAY penalty 30
 
     List<AgentCandidateJobPosting> exposedCandidates = candidatesFor(Map.of(), List.of(exposed));
 
     // Verify penalty was applied (not zero)
-    assertThat(exposedCandidates.get(0).scoreBreakdown().exposurePenalty()).isEqualTo(25);
+    assertThat(exposedCandidates.get(0).scoreBreakdown().exposurePenalty()).isEqualTo(30);
 
     // Fresh posting with no exposure should score higher
     JobPosting fresh = posting("회사F", "개발자", "https://example.com/jobs/999", null, null, null);

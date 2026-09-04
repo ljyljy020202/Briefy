@@ -275,17 +275,19 @@ class RelevanceScorerTest {
   // ---------------------------------------------------------------------------
 
   @Test
-  void exposurePenalty_exposedYesterday_returns25() {
+  void exposurePenalty_exposedYesterday_returnsYesterdayPenalty() {
     String url = "https://e.com/1";
     Map<String, LocalDate> map = Map.of("https://e.com/1", TODAY.minusDays(1));
-    assertThat(RelevanceScorer.computeExposurePenalty(url, map, TODAY)).isEqualTo(25);
+    assertThat(RelevanceScorer.computeExposurePenalty(url, map, TODAY))
+        .isEqualTo(RelevanceScorer.EXPOSURE_PENALTY_YESTERDAY);
   }
 
   @Test
-  void exposurePenalty_exposedThreeDaysAgo_returns15() {
+  void exposurePenalty_exposedThreeDaysAgo_returnsRecentPenalty() {
     String url = "https://e.com/2";
     Map<String, LocalDate> map = Map.of("https://e.com/2", TODAY.minusDays(3));
-    assertThat(RelevanceScorer.computeExposurePenalty(url, map, TODAY)).isEqualTo(15);
+    assertThat(RelevanceScorer.computeExposurePenalty(url, map, TODAY))
+        .isEqualTo(RelevanceScorer.EXPOSURE_PENALTY_RECENT);
   }
 
   @Test
@@ -311,7 +313,7 @@ class RelevanceScorerTest {
     assertThat(
             RelevanceScorer.computeExposurePenalty(
                 "https://e.com/jobs/42?ref=email#top", map, TODAY))
-        .isEqualTo(15);
+        .isEqualTo(RelevanceScorer.EXPOSURE_PENALTY_RECENT);
   }
 
   // ---------------------------------------------------------------------------

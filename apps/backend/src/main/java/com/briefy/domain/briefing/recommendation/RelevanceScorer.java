@@ -43,9 +43,9 @@ public final class RelevanceScorer {
 
   // ── Classification-derived editorial bonus (대기업 공채) ──────────────────────
   // 분류 경로(score with eligibility)에서만 적용. 순수 키워드 스코어에는 반영하지 않는다.
-  static final int SCORE_OPEN_RECRUITMENT = 10; // postingScope=OPEN_RECRUITMENT
+  static final int SCORE_OPEN_RECRUITMENT = 8; // postingScope=OPEN_RECRUITMENT
   static final int SCORE_NEW_GRAD_HIRE = 5; // recruitmentType=NEW_GRAD_HIRE + 신입 사용자
-  static final int SCORE_OPEN_RECRUITMENT_MAX = 12; // 두 가산점 합산 상한
+  static final int SCORE_OPEN_RECRUITMENT_MAX = 10; // 두 가산점 합산 상한
 
   // ── Official source bonus ─────────────────────────────────────────────────
   // 공식 채용 사이트(애그리게이터 jasoseol/saramin·fixture 제외) 공고에 소폭 가산.
@@ -55,8 +55,8 @@ public final class RelevanceScorer {
       java.util.Set.of("jasoseol", "saramin", "fixture");
 
   // ── Exposure penalty thresholds ───────────────────────────────────────────
-  static final int EXPOSURE_PENALTY_YESTERDAY = 25; // exposed within 1 day
-  static final int EXPOSURE_PENALTY_RECENT = 15; // 2–3 days ago
+  static final int EXPOSURE_PENALTY_YESTERDAY = 30; // exposed within 1 day
+  static final int EXPOSURE_PENALTY_RECENT = 20; // 2–3 days ago
   static final int EXPOSURE_PENALTY_STALE = 10; // 4–6 days ago
 
   private RelevanceScorer() {}
