@@ -10,6 +10,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.briefy.config.AppProperties;
 import com.briefy.domain.briefing.entity.BriefingReport;
 import com.briefy.domain.briefing.repository.BriefingReportRepository;
 import com.briefy.domain.delivery.entity.DeliveryLog;
@@ -50,7 +51,11 @@ class EmailDeliveryServiceTest {
   void setUp() {
     emailDeliveryService =
         new EmailDeliveryService(
-            deliveryLogPersistenceService, briefingReportRepository, userRepository, emailSender);
+            deliveryLogPersistenceService,
+            briefingReportRepository,
+            userRepository,
+            emailSender,
+            new AppProperties("http://localhost:3000"));
 
     report = mock(BriefingReport.class);
     when(report.getId()).thenReturn(REPORT_ID);
