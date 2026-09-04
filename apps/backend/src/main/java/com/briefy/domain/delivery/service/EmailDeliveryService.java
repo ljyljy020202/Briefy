@@ -1,5 +1,6 @@
 package com.briefy.domain.delivery.service;
 
+import com.briefy.config.AppProperties;
 import com.briefy.domain.briefing.entity.BriefingReport;
 import com.briefy.domain.briefing.repository.BriefingReportRepository;
 import com.briefy.domain.delivery.entity.DeliveryLog;
@@ -59,16 +60,19 @@ public class EmailDeliveryService {
   private final BriefingReportRepository briefingReportRepository;
   private final UserRepository userRepository;
   private final EmailSender emailSender;
+  private final AppProperties appProperties;
 
   public EmailDeliveryService(
       DeliveryLogPersistenceService deliveryLogPersistenceService,
       BriefingReportRepository briefingReportRepository,
       UserRepository userRepository,
-      EmailSender emailSender) {
+      EmailSender emailSender,
+      AppProperties appProperties) {
     this.deliveryLogPersistenceService = deliveryLogPersistenceService;
     this.briefingReportRepository = briefingReportRepository;
     this.userRepository = userRepository;
     this.emailSender = emailSender;
+    this.appProperties = appProperties;
   }
 
   /**
@@ -168,7 +172,8 @@ public class EmailDeliveryService {
 
     String toEmail = deliveryLog.getToEmail();
     try {
-      String htmlContent = MarkdownToHtmlConverter.convert(report.getContent());
+      String htmlContent =
+          MarkdownToHtmlConverter.convert(report.getContent(), appProperties.frontendBaseUrl());
       EmailMessage message = new EmailMessage(toEmail, report.getTitle(), htmlContent);
 
       // TX 없이 이메일 발송 (재시도 포함)
