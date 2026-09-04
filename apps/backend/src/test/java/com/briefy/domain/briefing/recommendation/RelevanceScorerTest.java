@@ -105,7 +105,9 @@ class RelevanceScorerTest {
             + bd.industryScore()
             + bd.locationScore()
             + bd.employmentTypeScore()
-            + bd.companySizeScore();
+            + bd.companySizeScore()
+            + bd.openRecruitmentScore()
+            + bd.sourceScore();
 
     assertThat(bd.relevanceScore()).isEqualTo(sum);
   }
@@ -422,9 +424,48 @@ class RelevanceScorerTest {
     RelevanceScorer.ScoringResult result = RelevanceScorer.score(p, Map.of(), e);
     ScoreBreakdown b = result.breakdown();
 
-    // relevanceScore = roleScore(15) + openRecruitmentScore(10) (다른 항목 0)
+    // relevanceScore = roleScore(15) + openRecruitmentScore(10) + sourceScore (다른 항목 0)
     assertThat(b.openRecruitmentScore()).isEqualTo(RelevanceScorer.SCORE_OPEN_RECRUITMENT);
-    assertThat(b.relevanceScore()).isEqualTo(b.roleScore() + b.openRecruitmentScore());
+    assertThat(b.relevanceScore())
+        .isEqualTo(b.roleScore() + b.openRecruitmentScore() + b.sourceScore());
+  }
+
+  // ---------------------------------------------------------------------------
+  // 공식 채용 사이트 소스 가산점 (sourceScore)
+  // ---------------------------------------------------------------------------
+
+  @Test
+  void officialSource_getsSourceBonus() {
+    // posting(...) 헬퍼는 source="원티드" — 애그리게이터가 아니므로 공식으로 취급
+    JobPosting p = posting("개발자", "회사A", "https://e.com/1", null, null, TODAY);
+    RelevanceScorer.ScoringResult result = RelevanceScorer.score(p, Map.of());
+    assertThat(result.breakdown().sourceScore()).isEqualTo(RelevanceScorer.SCORE_OFFICIAL_SOURCE);
+  }
+
+  @Test
+  void aggregatorSource_getsNoSourceBonus() {
+    JobPosting jaso = postingWithSource("jasoseol");
+    JobPosting saramin = postingWithSource("saramin");
+    assertThat(RelevanceScorer.score(jaso, Map.of()).breakdown().sourceScore()).isEqualTo(0);
+    assertThat(RelevanceScorer.score(saramin, Map.of()).breakdown().sourceScore()).isEqualTo(0);
+  }
+
+  @Test
+  void officialCareerSource_getsSourceBonus() {
+    JobPosting naver = postingWithSource("naver_careers");
+    assertThat(RelevanceScorer.score(naver, Map.of()).breakdown().sourceScore())
+        .isEqualTo(RelevanceScorer.SCORE_OFFICIAL_SOURCE);
+  }
+
+  @Test
+  void isOfficialSource_classifiesSources() {
+    assertThat(RelevanceScorer.isOfficialSource("jasoseol")).isFalse();
+    assertThat(RelevanceScorer.isOfficialSource("saramin")).isFalse();
+    assertThat(RelevanceScorer.isOfficialSource("fixture")).isFalse();
+    assertThat(RelevanceScorer.isOfficialSource(null)).isFalse();
+    assertThat(RelevanceScorer.isOfficialSource("")).isFalse();
+    assertThat(RelevanceScorer.isOfficialSource("toss_careers")).isTrue();
+    assertThat(RelevanceScorer.isOfficialSource("company_5_greenhouse")).isTrue();
   }
 
   private static AnalysisEligibility eligibility(
@@ -458,6 +499,24 @@ class RelevanceScorerTest {
         "hash",
         collectedDate != null ? collectedDate : TODAY,
         publishedAt);
+  }
+
+  private static JobPosting postingWithSource(String source) {
+    return JobPosting.create(
+        "개발자",
+        "회사A",
+        source,
+        "https://e.com/" + source,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        "hash",
+        TODAY,
+        null);
   }
 
   private static JobPosting postingWithRoles(String title, String rolesJson) {

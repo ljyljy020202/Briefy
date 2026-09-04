@@ -118,23 +118,12 @@ public final class ClassificationAnalyzer {
     }
 
     List<RoleGroupTag> roleGroups = analysis.getRoleGroups();
-
-    // 비개발(NON_DEV) 직군만 있는 공고 → 유일한 직무 기반 제외 대상
-    if (isOnlyNonDev(roleGroups)) {
-      return new AnalysisEligibility(
-          false,
-          RoleMatchType.MISMATCH,
-          ExperienceMatchType.UNKNOWN,
-          null,
-          List.of("비개발 직군"),
-          evidence,
-          hash,
-          version);
+    if (roleGroups == null || roleGroups.isEmpty()) {
+      return AnalysisEligibility.deferred("역할 그룹 미확인");
     }
 
-    // 선호 직무와 직접 일치 → DIRECT_MATCH
-    boolean hasRoleMatch =
-        roleGroups != null && roleGroups.stream().anyMatch(acceptableTags::contains);
+    // 선호 직무와 직접 일치 (교집합) → DIRECT_MATCH
+    boolean hasRoleMatch = roleGroups.stream().anyMatch(acceptableTags::contains);
     if (hasRoleMatch) {
       ExperienceMatchType expMatch = evaluateExperienceFromPosting(analysis, isNewGrad);
       boolean eligible = expMatch != ExperienceMatchType.EXCLUDED;
@@ -143,34 +132,28 @@ public final class ClassificationAnalyzer {
           eligible, RoleMatchType.DIRECT_MATCH, expMatch, null, reasons, evidence, hash, version);
     }
 
-    // 역할 그룹 신호가 전혀 없음: NON_IT은 이미 제외됨 → IT/MIXED면 넓은 IT 매칭, 그 외에는 보류
-    if (roleGroups == null || roleGroups.isEmpty()) {
-      JobDomain domain = analysis.getJobDomain();
-      if (domain == JobDomain.IT || domain == JobDomain.MIXED) {
-        ExperienceMatchType expMatch = evaluateExperienceFromPosting(analysis, isNewGrad);
-        boolean eligible = expMatch != ExperienceMatchType.EXCLUDED;
-        return new AnalysisEligibility(
-            eligible,
-            RoleMatchType.BROAD_IT_MATCH,
-            expMatch,
-            null,
-            List.of("IT 도메인, 역할 그룹 미상"),
-            evidence,
-            hash,
-            version);
-      }
-      return AnalysisEligibility.deferred("역할 그룹 미확인");
+    // GENERAL_IT은 세부 직무가 불명확한 IT 직무 → 교집합이 없어도 항상 포함 (BROAD_IT_MATCH)
+    if (roleGroups.contains(RoleGroupTag.GENERAL_IT)) {
+      ExperienceMatchType expMatch = evaluateExperienceFromPosting(analysis, isNewGrad);
+      boolean eligible = expMatch != ExperienceMatchType.EXCLUDED;
+      return new AnalysisEligibility(
+          eligible,
+          RoleMatchType.BROAD_IT_MATCH,
+          expMatch,
+          null,
+          List.of("GENERAL_IT 포함"),
+          evidence,
+          hash,
+          version);
     }
 
-    // 선호 직무와 직접 일치하지는 않지만 IT 직군 신호가 있음 → 제외하지 않고 넓은 IT 매칭
-    ExperienceMatchType expMatch = evaluateExperienceFromPosting(analysis, isNewGrad);
-    boolean eligible = expMatch != ExperienceMatchType.EXCLUDED;
+    // 그 외(교집합 없음 + GENERAL_IT 없음) → 직무 불일치로 제외
     return new AnalysisEligibility(
-        eligible,
-        RoleMatchType.BROAD_IT_MATCH,
-        expMatch,
+        false,
+        RoleMatchType.MISMATCH,
+        ExperienceMatchType.UNKNOWN,
         null,
-        List.of("IT 직군, 세부 직무는 선호와 다름"),
+        List.of("직무 불일치"),
         evidence,
         hash,
         version);
@@ -263,15 +246,16 @@ public final class ClassificationAnalyzer {
           version);
     }
 
-    // BROAD_IT_MATCH: 선호 직무와 직접 일치하는 트랙은 없지만 IT 트랙이 있으면 넓게 허용.
-    // 직무 일치를 빡빡하게 요구하지 않고, 경력만 적합하면 통과시킨다 (evidence·scope 요건 없음).
-    PostingTrack firstItTrackExpExcluded = null;
+    // BROAD_IT_MATCH: 직접 일치 트랙은 없지만 GENERAL_IT 트랙이 있으면 항상 포함.
+    // (GENERAL_IT은 세부 직무 불명확한 IT → 교집합이 없어도 제외하지 않는다)
+    PostingTrack firstGeneralItExpExcluded = null;
     for (PostingTrack track : tracks) {
       if (track.unknown()) continue;
-      if (!isItTrack(track)) continue;
+      List<RoleGroupTag> trackRoles = track.roleGroups();
+      if (trackRoles == null || !trackRoles.contains(RoleGroupTag.GENERAL_IT)) continue;
       ExperienceMatchType expMatch = evaluateExperienceFromTrack(track, isNewGrad);
       if (expMatch == ExperienceMatchType.EXCLUDED) {
-        if (firstItTrackExpExcluded == null) firstItTrackExpExcluded = track;
+        if (firstGeneralItExpExcluded == null) firstGeneralItExpExcluded = track;
         continue;
       }
       return new AnalysisEligibility(
@@ -279,32 +263,32 @@ public final class ClassificationAnalyzer {
           RoleMatchType.BROAD_IT_MATCH,
           expMatch,
           track,
-          List.of("IT 트랙 포함"),
+          List.of("GENERAL_IT 트랙 포함"),
           track.evidence(),
           hash,
           version);
     }
 
-    // IT 트랙은 있으나 경력 조건이 모두 제외됨 → 경력 제외로 처리 (직무 불일치 아님)
-    if (firstItTrackExpExcluded != null) {
+    // GENERAL_IT 트랙은 있으나 경력 조건이 모두 제외됨 → 경력 제외로 처리 (직무 불일치 아님)
+    if (firstGeneralItExpExcluded != null) {
       return new AnalysisEligibility(
           false,
           RoleMatchType.BROAD_IT_MATCH,
           ExperienceMatchType.EXCLUDED,
-          firstItTrackExpExcluded,
-          List.of("IT 트랙 있음, 경력 조건 제외"),
-          firstItTrackExpExcluded.evidence(),
+          firstGeneralItExpExcluded,
+          List.of("GENERAL_IT 트랙 있음, 경력 조건 제외"),
+          firstGeneralItExpExcluded.evidence(),
           hash,
           version);
     }
 
-    // IT 트랙이 하나도 없음 (모든 트랙이 비개발/불명확) → 제외
+    // 직접 일치 트랙도, GENERAL_IT 트랙도 없음 → 제외
     return new AnalysisEligibility(
         false,
         RoleMatchType.MISMATCH,
         ExperienceMatchType.UNKNOWN,
         null,
-        List.of("IT 트랙 없음"),
+        List.of("매칭 트랙 없음"),
         analysis.getEvidence(),
         hash,
         version);
@@ -405,13 +389,6 @@ public final class ClassificationAnalyzer {
     List<RoleGroupTag> groups = track.roleGroups();
     if (groups == null || groups.isEmpty()) return false;
     return groups.stream().anyMatch(IT_TAGS::contains);
-  }
-
-  /** 역할 그룹이 존재하고 그 전부가 비개발(NON_DEV)일 때만 true. 직무 기반 제외의 유일한 조건. */
-  private static boolean isOnlyNonDev(List<RoleGroupTag> roleGroups) {
-    return roleGroups != null
-        && !roleGroups.isEmpty()
-        && roleGroups.stream().allMatch(t -> t == RoleGroupTag.NON_DEV);
   }
 
   private static String label(PostingTrack track) {
