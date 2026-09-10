@@ -32,7 +32,7 @@ public final class RelevanceScorer {
   // ── Preference weights ────────────────────────────────────────────────────
   static final int SCORE_ROLE_MATCH = 25;
   static final int SCORE_ROLE_BROAD_IT_MATCH = 15;
-  static final int SCORE_TARGET_COMPANY = 15;
+  static final int SCORE_TARGET_COMPANY = 10;
   static final int SCORE_SKILL = 5;
   static final int SCORE_SKILLS_MAX = 25;
   static final int SCORE_EXPERIENCE = 15;
@@ -56,7 +56,7 @@ public final class RelevanceScorer {
 
   // ── Exposure penalty thresholds ───────────────────────────────────────────
   static final int EXPOSURE_PENALTY_YESTERDAY = 30; // exposed within 1 day
-  static final int EXPOSURE_PENALTY_RECENT = 20; // 2–3 days ago
+  static final int EXPOSURE_PENALTY_RECENT = 25; // 2–3 days ago
   static final int EXPOSURE_PENALTY_STALE = 10; // 4–6 days ago
 
   private RelevanceScorer() {}
