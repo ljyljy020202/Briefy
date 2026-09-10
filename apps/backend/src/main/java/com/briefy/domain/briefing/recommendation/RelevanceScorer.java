@@ -56,7 +56,7 @@ public final class RelevanceScorer {
 
   // ── Exposure penalty thresholds ───────────────────────────────────────────
   static final int EXPOSURE_PENALTY_YESTERDAY = 30; // exposed within 1 day
-  static final int EXPOSURE_PENALTY_RECENT = 20; // 2–3 days ago
+  static final int EXPOSURE_PENALTY_RECENT = 25; // 2–3 days ago
   static final int EXPOSURE_PENALTY_STALE = 10; // 4–6 days ago
 
   private RelevanceScorer() {}
